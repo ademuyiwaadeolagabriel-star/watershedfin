@@ -1,0 +1,315 @@
+====================================================================================================
+FULL DUMP: FINANCIAL ANALYSIS SHEET (239 rows x 15 cols)
+====================================================================================================
+R  2 | INVENTORY: |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R  3 | Item |  | Quantity |  | Value |  | Selling price |  | Cost price |  | Profit | Margin% | Weighted margin% |  | 
+R  4 | HISENSE TVS 55 INC |  | 100 |  | F:=C4*I4 |  | 500000 |  | 350000 |  | F:=G4-I4 | F:=IFERROR((G4-I4)/G4,"") | F:=IFERROR(E4/$E$19*L4,"") |  | 
+R  5 | AIRCONDITIONES |  | 50 |  | F:=C5*I5 |  | 350000 |  | 210000 |  | F:=G5-I5 | F:=IFERROR((G5-I5)/G5,"") | F:=IFERROR(E5/$E$19*L5,"") |  | 
+R  6 | WASHI8NG MACHINE |  | 50 |  | F:=C6*I6 |  | 250000 |  | 200000 |  | F:=G6-I6 | F:=IFERROR((G6-I6)/G6,"") | F:=IFERROR(E6/$E$19*L6,"") |  | 
+R  7 | BLENDER |  | 40 |  | F:=C7*I7 |  | 120000 |  | 80000 |  | F:=G7-I7 | F:=IFERROR((G7-I7)/G7,"") | F:=IFERROR(E7/$E$19*L7,"") |  | 
+R  8 | GENERATORS |  | 100 |  | F:=C8*I8 |  | 400000 |  | 330000 |  | F:=G8-I8 | F:=IFERROR((G8-I8)/G8,"") | F:=IFERROR(E8/$E$19*L8,"") |  | 
+R  9 | FAN |  | 50 |  | F:=C9*I9 |  | 45000 |  | 30000 |  | F:=G9-I9 | F:=IFERROR((G9-I9)/G9,"") | F:=IFERROR(E9/$E$19*L9,"") |  | 
+R 10 | FRIDGE |  | 50 |  | F:=C10*I10 |  | 300000 |  | 240000 |  | F:=G10-I10 | F:=IFERROR((G10-I10)/G10,"") | F:=IFERROR(E10/$E$19*L10,"") |  | 
+R 11 | MICRO WAVE |  | 800 |  | F:=C11*I11 |  | 150000 |  | 100000 |  | F:=G11-I11 | F:=IFERROR((G11-I11)/G11,"") | F:=IFERROR(E11/$E$19*L11,"") |  | 
+R 12 |  |  |  |  | F:=C12*I12 |  |  |  |  |  | F:=G12-I12 | F:=IFERROR((G12-I12)/G12,"") | F:=IFERROR(E12/$E$19*L12,"") |  | 
+R 13 |  |  |  |  | F:=C13*I13 |  |  |  |  |  | F:=G13-I13 | F:=IFERROR((G13-I13)/G13,"") | F:=IFERROR(E13/$E$19*L13,"") |  | 
+R 14 |  |  |  |  | F:=C14*I14 |  |  |  |  |  | F:=G14-I14 | F:=IFERROR((G14-I14)/G14,"") | F:=IFERROR(E14/$E$19*L14,"") |  | 
+R 15 |  |  |  |  | F:=C15*I15 |  |  |  |  |  | F:=G15-I15 | F:=IFERROR((G15-I15)/G15,"") | F:=IFERROR(E15/$E$19*L15,"") |  | 
+R 16 |  |  |  |  | F:=C16*I16 |  |  |  |  |  | F:=G16-I16 | F:=IFERROR((G16-I16)/G16,"") | F:=IFERROR(E16/$E$19*L16,"") |  | 
+R 17 |  |  |  |  | F:=C17*I17 |  |  |  |  |  | F:=G17-I17 | F:=IFERROR((G17-I17)/G17,"") | F:=IFERROR(E17/$E$19*L17,"") |  | 
+R 18 |  |  |  |  | F:=C18*I18 |  |  |  |  |  | F:=G18-I18 | F:=IFERROR((G18-I18)/G18,"") | F:=IFERROR(E18/$E$19*L18,"") |  | 
+R 19 | TOTAL: |  | F:=SUM(C4:C18) |  | F:=SUM(E4:F18) |  | F:=SUM(G4:G18) |  | F:=SUM(I4:I18) |  | F:=SUM(K4:K18) | F:=IFERROR(AVERAGEIF(L4:L18,"<>0"),"") | F:=SUM(M4:M18) |  | 
+R 20 | %Average margin: |  |  |  |  |  | F:=L19 |  |  |  |  |  |  |  | 
+R 21 | % Weighted margin: |  |  |  |  |  | F:=+IF(M19<L19,M19,L19) |  |  |  |  |  |  |  | 
+R 23 | BUSINESS SECTOR |  |  |  | Sales of Electronics |  |  |  | BECHMARKED MARGIN |  |  | F:=IFERROR(VLOOKUP(E23,Sheet1!I2:J111,2,FA |  |  | 
+R 26 | Margin Summary Base |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R 27 | DETAIL |  |  | % |  |  |  |  |  |  |  |  |  |  | 
+R 28 | F:=A20 |  |  | F:=G20 |  |  |  |  |  |  |  |  |  |  | 
+R 29 | F:=A21 |  |  | F:=G21 |  |  |  |  |  |  |  |  |  |  | 
+R 30 | F:=I23 |  |  | F:=L23 |  |  |  |  |  |  |  |  |  |  | 
+R 32 | Margin used:(Least figure) |  |  | F:=IFERROR(SMALL(D28:D30,COUNTIF(D28:D30,0 |  |  |  |  |  |  |  |  |  |  | 
+R 35 | BANK/Other IMF BALANCES |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R 36 | S/N | BANK NAME |  | ACCOUNT NAME |  |  |  | ACCOUNT NUMBER |  |  | BALANCE |  |  |  | 
+R 37 | 1 | ACCESS BANK |  | ONYEKA CALISTUS UDEMMADU |  |  |  | 775445804 |  |  | 3034919.8 |  |  |  | 
+R 38 | 2 | moniepoint |  | BLESSED ONYEKACHI ELCTRONICS |  |  |  | 64078800004 |  |  | 4807392.43 |  |  |  | 
+R 39 | 3 |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R 40 | 4 |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R 41 | 5 |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R 42 | 6 |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R 44 | BALANCE SHEET |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R 45 | MAIN BUSINESS |  |  |  | AMOUNT |  |  | % |  | AMOUNT |  | % |  |  | 
+R 46 | SHORT-TERM ASSET: |  |  |  | CURRENT |  |  |  |  | PREVIOUS |  |  | DIFFERENCE |  | 
+R 47 |  |  | DATE: |  | 2025-10-25 00:00:00 |  |  |  |  | DATE: | 2024-12-01 00:00:00 |  |  |  | 
+R 48 | Cash at hand |  |  |  | 4000000 |  |  | F:=IFERROR(E48/$E$69,"") |  |  |  | F:=IFERROR(J48/$J$69,"") | F:=E48-J48 |  | 
+R 49 | WFL |  |  |  |  |  |  | F:=IFERROR(E49/$E$69,"") |  |  |  | F:=IFERROR(J49/$J$69,"") | F:=E49-J49 |  | 
+R 50 | Balances in other Banks  |  |  |  | F:=SUM(K37:L41) |  |  | F:=IFERROR(E50/$E$69,"") |  |  |  | F:=IFERROR(J50/$J$69,"") | F:=E50-J50 |  | 
+R 51 | TOTAL TREASURY: |  |  |  | F:=SUM(E48:G50) |  |  | F:=IFERROR(E51/$E$69,"") |  | F:=SUM(J48:K50) |  | F:=IFERROR(J51/$J$69,"") | F:=E51-J51 |  | 
+R 52 | Receivables (Credit sales) |  |  |  |  |  |  | F:=IFERROR(E52/$E$69,"") |  |  |  | F:=IFERROR(J52/$J$69,"") | F:=E52-J52 |  | 
+R 53 | Advance paid to suppliers |  |  |  |  |  |  | F:=IFERROR(E53/$E$69,"") |  |  |  | F:=IFERROR(J53/$J$69,"") | F:=E53-J53 |  | 
+R 54 | TOTAL RECEIVABLES |  |  |  | F:=SUM(E52:G53) |  |  | F:=IFERROR(E54/$E$69,"") |  |  |  | F:=IFERROR(J54/$J$69,"") | F:=E54-J54 |  | 
+R 55 | TOTAL STOCK |  |  |  | F:=E19 |  |  | F:=IFERROR(E55/$E$69,"") |  |  |  | F:=IFERROR(J55/$J$69,"") | F:=E55-J55 |  | 
+R 56 | TOTAL SHORT-TERM ASSETS: |  |  |  | F:=SUM(E51,E54,E55) |  |  | F:=IFERROR(E56/$E$69,"") |  | F:=SUM(J51,J54:K55) |  | F:=IFERROR(J56/$J$69,"") | F:=E56-J56 |  | 
+R 57 | FIXED ASSETS: |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R 58 | BUSINESS |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R 59 | Equipment and furniture |  |  |  | F:='BUSINESS EXP.'!C28 |  |  | F:=IFERROR(E59/$E$69,"") |  |  |  | F:=IFERROR(J59/$J$69,"") | F:=E59-J59 |  | 
+R 60 | Vehicles |  |  |  | F:='BUSINESS EXP.'!C34 |  |  | F:=IFERROR(E60/$E$69,"") |  |  |  | F:=IFERROR(J60/$J$69,"") | F:=E60-J60 |  | 
+R 61 | Land and House |  |  |  | F:='BUSINESS EXP.'!C39 |  |  | F:=IFERROR(E61/$E$69,"") |  |  |  | F:=IFERROR(J61/$J$69,"") | F:=E61-J61 |  | 
+R 62 | TOTAL BUSINESS FIXED ASSETS: |  |  |  | F:=SUM(E59:G61) |  |  | F:=IFERROR(E62/$E$69,"") |  | F:=SUM(J59:K61) |  | F:=IFERROR(J62/$J$69,"") | F:=E62-J62 |  | 
+R 63 | FAMILY |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R 64 | Equipment and furniture |  |  |  | F:='FAMILY EXP.'!C32 |  |  | F:=IFERROR(E64/$E$69,"") |  |  |  | F:=IFERROR(J64/$J$69,"") | F:=E64-J64 |  | 
+R 65 | Vehicles |  |  |  | F:='FAMILY EXP.'!C38 |  |  | F:=IFERROR(E65/$E$69,"") |  |  |  | F:=IFERROR(J65/$J$69,"") | F:=E65-J65 |  | 
+R 66 | Land and House |  |  |  | F:='FAMILY EXP.'!C42 |  |  | F:=IFERROR(E66/$E$69,"") |  |  |  | F:=IFERROR(J66/$J$69,"") | F:=E66-J66 |  | 
+R 67 | TOTAL FAMILY FIXED ASSETS: |  |  |  | F:=SUM(E64:G66) |  |  | F:=IFERROR(E67/$E$69,"") |  | F:=SUM(J64:K66) |  | F:=IFERROR(J67/$J$69,"") | F:=E67-J67 |  | 
+R 68 | TOTAL FIXED ASSETS: |  |  |  | F:=SUM(E62,E67) |  |  | F:=IFERROR(E68/$E$69,"") |  | F:=SUM(J62,J67) |  | F:=IFERROR(J68/$J$69,"") | F:=E68-J68 |  | 
+R 69 | TOTAL ASSETS: |  |  |  | F:=SUM(E56,E68) |  |  | F:=IFERROR(E69/$E$69,"") |  | F:=SUM(J56,J68) |  | F:=IFERROR(J69/$J$69,"") | F:=E69-J69 |  | 
+R 71 | SHORT-TERM LIABILITIES: |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R 72 | Advance received from customers |  |  |  |  |  |  | F:=IFERROR(E72/$E$69,"") |  |  |  | F:=IFERROR(J72/$J$69,"") | F:=E72-J72 |  | 
+R 73 | Payables (Credit supplies) |  |  |  |  |  |  | F:=IFERROR(E73/$E$69,"") |  |  |  | F:=IFERROR(J73/$J$69,"") | F:=E73-J73 |  | 
+R 74 | WFL loan |  |  |  | F:='CLIENT''S INFORMATION'!F55 |  |  | F:=IFERROR(E74/$E$69,"") |  |  |  | F:=IFERROR(J74/$J$69,"") | F:=E74-J74 |  | 
+R 75 | Other banks loan(Outstanding loa... |  |  |  | F:='CLIENT''S INFORMATION'!J84 |  |  | F:=IFERROR(E75/$E$69,"") |  |  |  | F:=IFERROR(J75/$J$69,"") | F:=E75-J75 |  | 
+R 76 | TOTAL SHORT-TERM LIABILITIES: |  |  |  | F:=SUM(E72:G75) |  |  | F:=IFERROR(E76/$E$69,"") |  | F:=SUM(J72:K75) |  | F:=IFERROR(J76/$J$69,"") | F:=E76-J76 |  | 
+R 77 | LONG-TERM LIABILITIES: |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R 78 | WFL long-term loan |  |  |  |  |  |  | F:=IFERROR(E78/$E$69,"") |  |  |  | F:=IFERROR(J78/$J$69,"") | F:=E78-J78 |  | 
+R 79 | Other banks long-term loans |  |  |  |  |  |  | F:=IFERROR(E79/$E$69,"") |  |  |  | F:=IFERROR(J79/$J$69,"") | F:=E79-J79 |  | 
+R 80 | TOTAL LONG-TERM LIABILITIES: |  |  |  | F:=SUM(E78:G79) |  |  | F:=IFERROR(E80/$E$69,"") |  | F:=SUM(J78:K79) |  | F:=IFERROR(J80/$J$69,"") | F:=E80-J80 |  | 
+R 81 | TOTAL  LIABILITIES: |  |  |  | F:=SUM(E76,E80) |  |  | F:=IFERROR(E81/$E$69,"") |  | F:=SUM(J76,J80) |  | F:=IFERROR(J81/$J$69,"") | F:=E81-J81 |  | 
+R 82 | TOTAL EQUITY ( TOTAL ASSETS- LIA... |  |  |  | F:=E69-E81 |  |  | F:=IFERROR(E82/$E$69,"") |  | F:=J69-J81 |  | F:=IFERROR(J82/$J$69,"") | F:=E82-J82 |  | 
+R 83 | TOTAL EQUITY + LIABILITIES: |  |  |  | F:=SUM(E81,E82) |  |  | F:=IFERROR(E83/$E$69,"") |  | F:=SUM(J81:K82) |  | F:=IFERROR(J83/$J$69,"") | F:=E83-J83 |  | 
+R 86 | MONTHLY SALES |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R 87 | SALES |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R 88 | 1.   SALES ACCORDING CLIENT’S ES... |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R 89 | WEEKLY |  | Monday |  | Tuesday |  | Wednesday |  | Thursday |  |  |  |  |  | 
+R 90 | Good day |  |  |  |  |  | 20000000 |  |  |  |  |  |  |  | 
+R 91 | Average Day |  | 15000000 |  | 18000000 |  |  |  |  |  |  |  |  |  | 
+R 92 | Bad day |  |  |  |  |  |  |  | 5000000 |  |  |  |  |  | 
+R 94 | WEEKLY |  | Friday |  | Saturday |  | Sunday |  | Total |  |  |  |  |  | 
+R 95 | Good day |  | 20000000 |  | 20000000 |  |  |  | F:=SUM(C90:J90,C95:H95) |  |  |  |  |  | 
+R 96 | Average Day |  |  |  |  |  |  |  | F:=SUM(C91:J91,C96:H96) |  |  |  |  |  | 
+R 97 | Bad day |  |  |  |  |  |  |  | F:=SUM(C92:J92,C97:H97) |  |  |  |  |  | 
+R 99 | TOTAL MONTHLY SALES = TOTAL WEEK... |  |  |  |  |  |  |  | F:=SUM(I95:K97)*4 |  |  |  |  |  | 
+R101 | 2.   MONTHLY SALES ACCORDING TO ... |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R102 | Sales for the last 3 days |  |  |  | Cash Sales |  |  | Total |  |  |  |  |  |  | 
+R103 | First day |  |  |  | 20000000 |  |  | F:=SUM(D103:F103) |  |  |  |  |  |  | 
+R104 | Second day |  |  |  | 18000000 |  |  | F:=SUM(D104:F104) |  |  |  |  |  |  | 
+R105 | Third Day |  |  |  | 17000000 |  |  | F:=SUM(D105:F105) |  |  |  |  |  |  | 
+R106 | Total: |  |  |  | F:=SUM(E103:E105) |  |  | F:=SUM(H103:H105) |  |  |  |  |  |  | 
+R107 | 25601 |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R108 | TOTAL MONTHLY SALES= TOTAL FOR L... |  |  |  |  |  | F:=H106*8 |  |  |  |  |  |  |  | 
+R110 | 3.   MONTHLY SALES FROM ACCOUNT ... |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R111 | Credit side of bank account stat... |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R112 | Month1 |  | Month2 |  | Month3 |  | Month4 |  |  |  |  |  |  |  | 
+R113 | 139093269.85 |  | 223380551.52 |  | 191141268.09 |  | 188976318.09 |  |  |  |  |  |  |  | 
+R114 | Month5 |  | Month6 |  | Month7 |  | Month8 |  |  |  |  |  |  |  | 
+R115 | 187200083.09 |  | 155582768.09 |  | 202571068.09 |  | 158475573.09 |  |  |  |  |  |  |  | 
+R116 | Month9 |  | Month10 |  | Month11 |  | Month12 |  |  |  |  |  |  |  | 
+R117 | 164774168.09 |  | 192605668.09 |  | 233865168.09 |  | 168292268.09 |  |  |  |  |  |  |  | 
+R118 | Sub Total |  |  |  | Average Inflow |  |  |  |  |  |  |  |  |  | 
+R119 | F:=SUM(A113:H113,A115:H115,A117:H117) |  |  |  | F:=IFERROR(AVERAGE(A113:H113,A115:H115,A11 |  |  |  |  |  |  |  |  |  | 
+R121 | 4.   MONTHLY SALES FROM SALES RE... |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R122 | Month1 |  | Month2 |  | Month3 |  | Month4 |  |  |  |  |  |  |  | 
+R124 | Month5 |  | Month6 |  | Average Total |  |  |  |  |  |  |  |  |  | 
+R125 |  |  |  |  | F:=SUM(A123:H123,A125:D125)/6 |  |  |  |  |  |  |  |  |  | 
+R128 | Sales Summary Base |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R129 | DETAIL |  |  |  |  | AMOUNT |  |  | ADDITIONAL INFORMATION |  |  |  |  |  | 
+R130 | On Client Estimation |  |  |  |  | F:=I99 |  |  |  |  |  |  |  |  | 
+R131 | On the last Days sales |  |  |  |  | F:=G108 |  |  |  |  |  |  |  |  | 
+R132 | On Sales Records / Invoice |  |  |  |  | F:=E125 |  |  |  |  |  |  |  |  | 
+R133 | Account Statement |  |  |  |  | F:=E119 |  |  |  |  |  |  |  |  | 
+R135 | Sales used:(Least figure) |  |  |  |  |  |  |  | F:=IFERROR(SMALL(F130:H133,COUNTIF(F130:H1 |  |  |  |  |  | 
+R138 | PURCHASE |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R139 | 1. PURCHASE ACCORDING TO CLIENT ... |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R140 | Supplier |  | Location / Town / Country |  |  | Frequency |  | Amount |  |  |  |  |  |  | 
+R144 | TOTAL:  |  |  |  |  |  |  | F:=SUM(H141:J143) |  |  |  |  |  |  | 
+R146 | 2. PURCHASE ACCORDING TO ACCOUNT... |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R147 | Debit side of bank account state... |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R148 | Month1 |  | Month2 |  | Month3 |  | Month4 |  |  |  |  |  |  |  | 
+R149 | 133097294.82 |  | 225656523.95 |  | 202234107.85 |  | 213151975.04 |  |  |  |  |  |  |  | 
+R150 | Month5 |  | Month6 |  | Month7 |  | Month8 |  |  |  |  |  |  |  | 
+R151 | 182906396.84 |  | 144114533.64 |  | 203313609.72 |  | 164909296.98 |  |  |  |  |  |  |  | 
+R152 | Month9 |  | Month10 |  | Month11 |  | Month12 |  |  |  |  |  |  |  | 
+R153 | 181142943.04 |  | 193124335.29 |  | 233211003.54 |  | 167135007.54 |  |  |  |  |  |  |  | 
+R154 | Sub Total |  |  |  | Average Outflow |  |  |  |  |  |  |  |  |  | 
+R155 | F:=SUM(A149:H149,A151:H151,A153:H153) |  |  |  | F:=IFERROR(AVERAGE(A149:H149,A151:H151,A15 |  |  |  |  |  |  |  |  |  | 
+R157 | 3. PURCHASE FROM PURCHASE RECEIP... |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R158 | Month1 |  | Month2 |  | Month3 |  | Month4 |  |  |  |  |  |  |  | 
+R160 | Month5 |  | Month6 |  | Average Total |  |  |  |  |  |  |  |  |  | 
+R161 |  |  |  |  | F:=SUM(A159:H159,A161:D161)/6 |  |  |  |  |  |  |  |  |  | 
+R164 | 4. PURCHASE VERIFICATION FROM MA... |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R165 | P= S * (1-gwm)  |  |  |  |  | F:=IFERROR(I135*(1-D32),"") |  |  |  |  |  |  |  |  | 
+R167 | Purchase Summary Base |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R168 | DETAIL |  |  |  |  | AMOUNT |  |  | ADDITIONAL INFORMATION |  |  |  |  |  | 
+R169 | On Client Estimation |  |  |  |  | F:=H144 |  |  |  |  |  |  |  |  | 
+R170 | Debit side of the Bank statement |  |  |  |  | F:=E155 |  |  |  |  |  |  |  |  | 
+R171 | On Purchases Invoice |  |  |  |  | F:=E161 |  |  |  |  |  |  |  |  | 
+R172 | Purchases from margin |  |  |  |  | F:=F165 |  |  |  |  |  |  |  |  | 
+R175 | RECOMMENDED TERM |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R176 | DETAIL |  |  |  | AMOUNT |  |  | PRODUCT |  |  |  |  |  |  | 
+R177 | Loan Amount |  |  |  | 20000000 |  |  |  |  |  |  |  |  |  | 
+R178 | Duration |  |  |  | 9 |  |  | REDUCING |  |  |  |  |  |  | 
+R179 | CCD % |  |  |  | 0.05 |  |  |  |  |  |  |  |  |  | 
+R180 | Interest Rate % |  |  |  | 0.045 |  |  | EXCEPTION |  |  |  |  |  |  | 
+R181 |  |  |  |  | F:=IF(H180="micro",G184,IF(H180="sme",G185 |  |  |  |  |  |  |  |  |  | 
+R182 | Upfront fee % |  |  |  | 0.032 |  |  |  |  |  |  |  |  |  | 
+R184 |  |  |  |  |  |  | F:=IF(AND('CLIENT''S INFORMATION'!L41="A") |  |  |  |  |  |  |  | 
+R185 |  |  |  |  |  |  | F:=IF(AND('CLIENT''S INFORMATION'!L41="A") |  |  |  |  |  |  |  | 
+R186 |  |  |  |  |  |  | F:=IF(AND('CLIENT''S INFORMATION'!L41="A") |  |  |  |  |  |  |  | 
+R187 |  |  |  |  |  |  | F:=E180 |  |  |  |  |  |  |  | 
+R190 | REPAYMENT STRUCTURE |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R191 | DETAIL |  |  |  | AMOUNT |  |  |  |  |  |  |  |  |  | 
+R192 | Weekly |  |  |  | F:=IFERROR(E193/4,"") |  |  |  |  |  |  |  |  |  | 
+R193 | Monthly |  |  |  | F:=IFERROR(IF(H178="flat",'FLAT REPAYMENT' |  |  |  |  |  |  |  |  |  | 
+R197 | CASH FLOW ANALYSIS (PROFIT AND L... |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R199 |  |  |  |  | CURRENT |  |  |  | PREVIOUS |  |  | DIFFERENCE |  |  | 
+R200 |  |  |  | DATE: | 19/10/2025 |  |  | DATE: | 2025-09-15 00:00:00 |  |  |  |  |  | 
+R201 | ITEM |  |  |  | AMOUNT |  |  |  | AMOUNT |  |  | AMOUNT |  |  | 
+R202 | Total cash sales |  |  |  | F:=I135 |  |  |  |  |  |  | F:=E202-I202 |  |  | 
+R203 | Total credit sales |  |  |  | F:=E52 |  |  |  |  |  |  | F:=E203-I203 |  |  | 
+R204 | Total Purchases |  |  |  | F:=F172 |  |  |  |  |  |  | F:=E204-I204 |  |  | 
+R205 | Gross margin  |  |  |  | F:=IFERROR((E202+E203)-E204,"") |  |  |  | F:=IFERROR((I202+I203)-I204,"") |  |  | F:=E205-I205 |  |  | 
+R206 | Business expenses |  |  |  | F:='BUSINESS EXP.'!B17 |  |  |  |  |  |  | F:=E206-I206 |  |  | 
+R207 |  |  |  |  | F:=IFERROR(E205-E206,"") |  |  |  | F:=IFERROR(I205-I206,"") |  |  | F:=E207-I207 |  |  | 
+R208 | Family expenses |  |  |  | F:='FAMILY EXP.'!C24 |  |  |  |  |  |  | F:=E208-I208 |  |  | 
+R209 | Net profit |  |  |  | F:=IFERROR(E207-E208,"") |  |  |  | F:=IFERROR(I207-I208,"") |  |  | F:=E209-I209 |  |  | 
+R210 | Instalment (all other Bank loans) |  |  |  | F:='CLIENT''S INFORMATION'!I84 |  |  |  |  |  |  | F:=E210-I210 |  |  | 
+R211 | Repayment Capacity |  |  |  | F:=IFERROR(E209-E210,"") |  |  |  | F:=IFERROR(I209-I210,"") |  |  | F:=E211-I211 |  |  | 
+R212 | Instalment proposed |  |  |  | F:=IFERROR(E193,"") |  |  |  |  |  |  | F:=E212-I212 |  |  | 
+R213 | Debt Service Ratio (DSR) |  |  |  | F:=IFERROR(E212/E211*1,"") |  |  |  | F:=IFERROR(I212/I211*1,"") |  |  | F:=E213-I213 |  |  | 
+R214 | Note: (DSR above 45% (high) disq... |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R216 | FINANCIAL LEVERAGE LEVEL |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R217 | DETAIL |  |  |  |  | AMOUNT |  |  |  |  |  |  |  |  | 
+R218 | Equity Capital |  |  |  |  | F:=E82 |  |  |  |  |  |  |  |  | 
+R219 | Total debts |  |  |  |  | F:=E81 |  |  |  |  |  |  |  |  | 
+R220 | Gearing Ratio % |  |  |  |  | F:=IFERROR(F219/F218,"") |  |  |  |  |  |  |  |  | 
+R221 | Note: Gearing ratio above 35% is... |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R223 | TURNOVER TO LOAN  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R224 | DETAIL |  |  |  |  | AMOUNT |  |  |  |  |  |  |  |  | 
+R225 | Principal loan amount |  |  |  |  | F:=E177 |  |  |  |  |  |  |  |  | 
+R226 | Inflow analysis |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R227 | Annual Inflow |  |  |  |  | F:=A119 |  |  |  |  |  |  |  |  | 
+R228 | Average monthly inflow |  |  |  |  | F:=E119 |  |  |  |  |  |  |  |  | 
+R229 | % turnover to the loan principal |  |  |  |  | F:=IFERROR(F228/F225,"") |  |  |  |  |  |  |  |  | 
+R231 | EARNINGS ON RECOMMENDED LOAN |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R232 | DETAIL |  |  |  |  |  | AMOUNT |  |  |  |  |  |  |  | 
+R233 | Interest on the proposed loan |  |  |  |  |  | F:=IFERROR(IF(H178="flat",'FLAT REPAYMENT' |  |  |  |  |  |  |  | 
+R234 | Processing & Mgt. fee one-off |  |  |  |  |  | F:=E177*E182 |  |  |  |  |  |  |  | 
+R235 | Income from the cash deposit con... |  |  |  |  |  | F:='Sheet1 (2)'!H45 |  |  |  |  |  |  |  | 
+R236 |  |  |  |  |  |  | F:=SUM(G233:J235) |  |  |  |  |  |  |  | 
+R237 | Less: Cost of fund (30% PA) |  |  |  |  |  | F:='Sheet1 (2)'!H29 |  |  |  |  |  |  |  | 
+R238 | Less: Administrative cost (5% PA) |  |  |  |  |  | F:='Sheet1 (2)'!D23 |  |  |  |  |  |  |  | 
+R239 | Net yield |  |  |  |  |  | F:=IFERROR(G236-G237-G238,"") |  |  |  |  |  |  |  | 
+
+====================================================================================================
+SHEET: LO VISITATION REPORT
+====================================================================================================
+R  2 |  | This must be completed by... |  |  |  |  |  |  |  |  |  |  | 
+R  5 | 1 | BUSINESS DYNAMICS |  |  | The customer is into busi... |  |  |  |  |  |  |  | 
+R  6 |  | Write a report on the;
+a.... |  |  |  |  |  |  |  |  |  |  | 
+R 13 | 2 | LOCATION |  |  | From CMD Magodo, drive to... |  |  |  |  |  |  | LOCATION COORDINATE | 
+R 14 |  | Write a report on;
+a.	How... |  |  |  |  |  |  |  |  |  |  | 
+R 20 | 3 | CAPACITY |  |  | The customer business wor... |  |  |  |  |  |  |  | 
+R 21 |  | Write a report on;
+a.	The... |  |  |  |  |  |  |  |  |  |  | 
+R 26 | 4 | CHARACTER |  |  | The customer was very fri... |  |  |  |  |  |  |  | 
+R 27 |  | Write a report on;
+a.	The... |  |  |  |  |  |  |  |  |  |  | 
+R 33 | 5 | OWNERSHIP |  |  | The business is an enterp... |  |  |  |  |  |  |  | 
+R 34 |  | Write a report on;
+a.	Own... |  |  |  |  |  |  |  |  |  |  | 
+R 40 | 6 | COLLATERAL |  |  | The customer is pledging ... |  |  |  |  |  |  | LOCATION COORDINATE | 
+R 41 |  | Write a report on;
+a.	The... |  |  |  |  |  |  |  |  |  |  | 
+R 49 | 7 | GUARANTORS |  |  |  The guarantor is an elec... |  |  |  |  |  |  | LOCATION COORDINATE (1ST G) | 
+R 50 |  | Write a report on;
+a.	The... |  |  |  |  |  |  |  |  |  |  | 
+R 53 |  |  |  |  |  |  |  |  |  |  |  | LOCATION COORDINATE (2ND G) | 
+
+====================================================================================================
+SHEET: BM VISITATION REPORT
+====================================================================================================
+R  2 |  | This must be completed by... |  |  |  |  |  |  |  |  |  |  | 
+R  5 | 1 | BUSINESS DYNAMICS |  |  | The Customer is into the ... |  |  |  |  |  |  |  | 
+R  6 |  | Write a report on the;
+a.... |  |  |  |  |  |  |  |  |  |  | 
+R 13 | 2 | LOCATION |  |  | From Magodo, make your wa... |  |  |  |  |  |  | LOCATION COORDINATE | 
+R 14 |  | Write a report on;
+a.	How... |  |  |  |  |  |  |  |  |  |  | 
+R 20 | 3 | CAPACITY |  |  | The Customer gave an esti... |  |  |  |  |  |  |  | 
+R 21 |  | Write a report on;
+a.	The... |  |  |  |  |  |  |  |  |  |  | 
+R 26 | 4 | CHARACTER |  |  | The customer gave us a ve... |  |  |  |  |  |  |  | 
+R 27 |  | Write a report on;
+a.	The... |  |  |  |  |  |  |  |  |  |  | 
+R 33 | 5 | OWNERSHIP |  |  | The business is a sole pr... |  |  |  |  |  |  |  | 
+R 34 |  | Write a report on;
+a.	Own... |  |  |  |  |  |  |  |  |  |  | 
+R 40 | 6 | COLLATERAL |  |  | A landed property has bee... |  |  |  |  |  |  | LOCATION COORDINATE | 
+R 41 |  | Write a report on;
+a.	The... |  |  |  |  |  |  |  |  |  |  | 
+R 49 | 7 | GUARANTORS |  |  | The guarantors provided h... |  |  |  |  |  |  | LOCATION COORDINATE (1ST G) | 
+R 50 |  | Write a report on;
+a.	The... |  |  |  |  |  |  |  |  |  |  | 
+R 53 |  |  |  |  |  |  |  |  |  |  |  | LOCATION COORDINATE (2ND G) | 
+
+====================================================================================================
+SHEET: COLLATERAL PLEDGE
+====================================================================================================
+R  2 | COLLATERAL PLEGDED |  |  |  |  |  |  |  |  |  |  | 
+R  5 | S/N | DESCRIPTION | VALUE |  |  |  |  |  |  |  |  | 
+R  6 | 1 | LOAN AMOUNT (PRINCIPAL) | F:=IFERROR('FINANCIAL ANALYSIS'! |  |  |  |  |  |  |  |  | 
+R  7 | 2 | CASH COLLATERAL | F:=C6*'CLIENT''S INFORMATION'!L5 |  |  |  |  |  |  |  |  | 
+R  8 | 3 | STOCK OF GOODS | F:='CLIENT''S INFORMATION'!F28 |  |  |  |  |  |  |  |  | 
+R  9 | MOVABLE |  |  |  | % DEPRECIATION |  | 0.2 |  |  |  |  | 
+R 10 | S/N | COLLATERAL NAME | BRIEF DESCRIPTION |  | YEAR | ESTIMATED CURRENT MARKET ... | FORCED SALE VALUE | % COVERAGE | COLLATERAL TITLE(S) (Proo... |  | VEHICLE CHASSIS NUMBER | OWNERSHIP(BORROWER/GUARAN...
+R 11 |  |  |  |  |  |  |  |  | DOCUMENT TYPE | EXPIRY DATE |  | 
+R 12 | 1 |  |  |  |  |  | F:=F12-($G$9*F12) | F:=IFERROR(G12/$C$6,"") |  |  |  | 
+R 13 | 2 |  |  |  |  |  | F:=F13-($G$9*F13) | F:=IFERROR(G13/$C$6,"") |  |  |  | 
+R 14 | 3 |  |  |  |  |  | F:=F14-($G$9*F14) | F:=IFERROR(G14/$C$6,"") |  |  |  | 
+R 15 | 4 |  |  |  |  | 0 | F:=F15-($G$9*F15) | F:=IFERROR(G15/$C$6,"") |  |  |  | 
+R 16 |  |  |  |  | TOTAL: | F:=SUM(F12:F15) | F:=SUM(G12:G15) | F:=IFERROR(G16/$C$6,"") |  |  |  | 
+R 18 | IMMOVABLE |  |  |  | % DEPRECIATION |  | 0.4 |  |  |  |  | 
+R 19 | S/N | COLLATERAL TYPE | BRIEF DESCRIPTION | ADDRESS  |  | ESTIMATED CURRENT MARKET ... | FORCED SALE VALUE | % COVERAGE | COLLATERAL TITLE(S) (C of... |  | LAND MEASUREMENT | OWNERSHIP(BORROWER/GUARAN...
+R 20 | 1 | A Bongalow Structure  | A one storey uncompleted ... | along bankole oduse stree... |  | 45000000 | F:=F20-($G$18*F20) | F:=IFERROR(G20/$C$6,"") | Deed of Assignment, Surve... |  | 345.734 sq metres% | Chief Promoter
+R 21 | 2 |  |  |  |  |  | F:=F21-($G$18*F21) | F:=IFERROR(G21/$C$6,"") |  |  |  | 
+R 22 | 3 |  |  |  |  | 0 | F:=F22-($G$18*F22) | F:=IFERROR(G22/$C$6,"") |  |  |  | 
+R 23 |  |  |  |  | TOTAL: | F:=SUM(F20:F22) | F:=SUM(G20:G22) | F:=IFERROR(G23/$C$6,"") |  |  |  | 
+R 25 | COLLATERAL MIX |  |  |  |  |  |  |  |  |  |  | 
+R 28 | S/N | TYPE | TOTAL VALUE | %MIX |  |  |  |  |  |  |  | 
+R 29 | 1 | F:=A9 | F:=G16 | F:=IFERROR(C29/C6,"") |  |  |  |  |  |  |  | 
+R 30 | 2 | F:=A18 | F:=G23 | F:=IFERROR(C30/C6,"") |  |  |  |  |  |  |  | 
+R 31 | 3 | F:=B7 | F:=C7 | F:=IFERROR(C31/C6,"") |  |  |  |  |  |  |  | 
+R 32 | 4 | F:=B8 | F:=C8*0.1 | F:=IFERROR(C32/C6,"") |  |  |  |  |  |  |  | 
+R 33 |  |  | F:=SUM(C29:C32) | F:=SUM(D29:D32) |  |  |  |  |  |  |  | 
+R 35 | % COLLATERAL COVERAGE |  | F:=IFERROR(C33/C6,"") |  |  |  |  |  |  |  |  | 
+
+====================================================================================================
+SHEET: COMMITTEE'S DECISION
+====================================================================================================
+R  2 |  |  | APPROVAL COMMITTEE'S DECI... |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R  5 | S/N | NAME |  |  | DESIGNATION |  |  | APPROVAL |  |  |  |  |  |  |  |  | 
+R  6 |  |  |  |  |  |  |  | AMOUNT | DURATION | CCD% | UPFRONT FEE % | INTEREST RATE % | OTHER COMMENT |  |  | DATE | SIGNATURE
+R  7 | 1 | GODWIN OKPE |  |  | LO |  |  | 50000000 | 6 | 0.05 | 0.032 | 0.045 | A SUM OF 50,000,000 IS RE... |  |  | 2025-10-20 00:00:00 | 
+R  8 | 2 | BRIGHT UDOH |  |  | CA |  |  | 30000000 | 6 | 0.05 | 0.032 | 0.045 | Record shows that client ... |  |  | 2025-10-24 00:00:00 | 
+R  9 | 3 | CHARLES ADEPOJU |  |  | HOC |  |  | 20000000 | 6 | 0.05 | 0.032 | 0.045 | Customer is exposed. 20mi... |  |  | 2025-10-29 00:00:00 | 
+R 10 | 4 | BAKO VICTOR |  |  | CRO |  |  | 20000000 | 6 | 0.05 | 0.032 | 0.045 | client and Guarantor to p... |  |  | 2025-11-04 00:00:00 | 
+R 11 | 5 | EBERE OBI-AKINWOLE |  |  | LEGAL |  |  | 15000000 | 6 | 0.05 | 0.032 | 0.045 | N15M is recommended for a... |  |  | 2025-11-04 00:00:00 | 
+R 12 | 6 | DAPO ADESANYA |  |  | GCFO |  |  | 20000000 | 6 | 0.05 | 0.032 | 0.045 | N20M recommended for appr... |  |  | 2025-11-04 00:00:00 | 
+R 13 | 7 | DR. OLUMUYIWA OLANREWAJU |  |  | MD/CEO |  |  | 20000000 | 6 | 0.05 | 0.032 | 0.045 | N20M loan is approved sub... |  |  | 2025-11-04 00:00:00 | 
+R 14 | 8 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R 15 | 9 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R 17 |  | LOAN CHECK-LIST (Please T... |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R 19 | VEHICLE PAPERS PROVIDED |  |  |  |  |  |  | Tick | LEGAL MORTGAGE PROVIDED |  |  |  |  |  |  | Tick | 
+R 21 | a) Vehicle license |  |  |  |  |  |  |  | a) Deed of Assignment |  |  |  |  |  |  |  | 
+R 23 | b) Proof of Ownership |  |  |  |  |  |  |  | b) Certificate of Occupan... |  |  |  |  |  |  | SATIS | 
+R 25 | c) Insurance |  |  |  |  |  |  |  | c) Survey plan/Purchase r... |  |  |  |  |  |  |  | 
+R 27 | d) Road worthiness |  |  |  |  |  |  |  | d) Valuation report |  |  |  |  |  |  |  | 
+R 29 | LOAN SUPPORT DOCUMENT |  |  |  |  |  |  | Tick | LOAN SUPPORT DOCUMENT |  |  |  |  |  |  | Tick | 
+R 31 | a) Offer Letter |  |  |  |  |  |  |  | h) Visitation Report |  |  |  |  |  |  |  | 
+R 33 | b) Repayment schedule |  |  |  |  |  |  |  | i) Vehicle tracking |  |  |  |  |  |  |  | 
+R 35 | c) CAC document |  |  |  |  |  |  |  | j) Pledged Deed |  |  |  |  |  |  |  | 
+R 37 | d) Client's Cheque leaves |  |  |  |  |  |  |  | k) Deed of Conveyance |  |  |  |  |  |  |  | 
+R 39 | e) Guarantor(s)'s Cheque ... |  |  |  |  |  |  |  | l) Consent Letter |  |  |  |  |  |  |  | 
+R 41 | f)  Bank account statement |  |  |  |  |  |  |  | m) Sworn Affidavit |  |  |  |  |  |  |  | 
+R 43 | g) Coloured picture of th... |  |  |  |  |  |  |  | n) Security agreement |  |  |  |  |  |  |  | 
+R 45 |  |  |  |  |  |  |  |  |  |  |  |  | CREDIT CERTIFIED STAMP |  |  |  | 

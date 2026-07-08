@@ -1,0 +1,500 @@
+================================================================================
+FILE: /home/z/my-project/upload/BLESSED ONYEKACHI ELECTRONICS - Final Approval.xlsx
+TOTAL SHEETS: 18
+================================================================================
+
+SHEET NAMES (in order):
+   1. "CLIENT'S INFORMATION"  (84 rows x 16384 cols)
+   2. 'Sheet1'  (111 rows x 14 cols)
+   3. 'FAMILY EXP.'  (44 rows x 16382 cols)
+   4. 'BUSINESS EXP.'  (1048576 rows x 3 cols)
+   5. 'Sheet1 (2)'  (45 rows x 24 cols)
+   6. 'FINANCIAL ANALYSIS'  (239 rows x 15 cols)
+   7. 'SALES & PURCHSES CROSS CHECKS'  (67 rows x 16384 cols)
+   8. 'MONTHLY CASHFLOW TEST'  (27 rows x 16 cols)
+   9. 'REFERENCE'  (48 rows x 12 cols)
+  10. "GUARANTORS' INFO"  (48 rows x 14 cols)
+  11. 'PICTORIAL EVIDENCE'  (39 rows x 18 cols)
+  12. "GUARANTORS' BIZ VERIFICATION"  (1048576 rows x 18 cols)
+  13. 'COLLATERAL PLEDGE'  (35 rows x 12 cols)
+  14. 'LO VISITATION REPORT'  (56 rows x 13 cols)
+  15. 'BM VISITATION REPORT'  (56 rows x 13 cols)
+  16. 'FLAT REPAYMENT'  (962 rows x 26 cols)
+  17. 'REDUCING REPAYMENT'  (961 rows x 26 cols)
+  18. "COMMITTEE'S DECISION"  (50 rows x 17 cols)
+
+================================================================================
+SHEET-BY-SHEET DUMP (first 60 rows, first 12 cols)
+================================================================================
+
+################################################################################
+### SHEET: "CLIENT'S INFORMATION"  (84r x 16384c)
+################################################################################
+  R  6 |  |  |  |  | CREDIT APPRAISAL MEMORANDUM |  |  |  |  |  |  | 
+  R  7 | APPLICANT |  |  |  |  |  |  |  |  |  |  | 
+  R  8 | ATTACH PHOTO |  |  |  |  |  |  |  |  |  |  | DATE:
+  R 10 |  |  |  |  | CUSTOMER'S (BVN) |  |  |  | 22216112540 |  |  | PHONE NUMBER
+  R 11 |  |  |  |  | CUSTOMER NAME |  |  |  | ONYEKACHI UDEMMADU CALISTUS |  |  | 
+  R 12 |  |  |  |  | BUSINESS NAME |  |  |  | BLESSED ONYEKACHI ELECTRONICS |  |  | 
+  R 13 |  |  |  |  | BRIEF DESCRIPTION OF THE BU... |  |  |  | ELECTRONIC DEALER |  |  | 
+  R 14 |  |  |  |  | BUSINESS ADDRESS |  |  |  | 14 phase 2 PLAZAIJEGUN Road... |  |  | 
+  R 15 |  |  |  |  | HOW DID THE CUSTOMER KNOW W... |  |  |  | Through Marketing/Prospection |  |  | LANDMARK
+  R 17 | BUSINESS OWNER'S NAME |  |  |  | ONYEKACHI UDEMMADU CALISTUS |  |  |  |  |  |  | SEX
+  R 18 | RESIDENCE ADDRESS |  |  |  | NO 20 GOODLUCK AVENUE ABARA... |  |  |  |  |  |  | 
+  R 19 | HOUSE OWNERSHIP STATUS |  |  | OWNED |  |  | FAMILY |  |  | RENTED |  | NO. OF STAY IN THE HOUSE
+  R 20 | BRIEF DESCRIPTION OF THE HOUSE |  |  |  | A 2 STOREY BUILDING PAINTED... |  |  |  |  |  |  | 
+  R 22 | MARITAL STAUS |  |  |  | SINGLE |  |  |  | MARRIED | M | DIVORCED | 
+  R 23 | RELIGION |  |  |  | CHRISTIANITY |  |  |  |  |  | NATIONALITY | 
+  R 24 | CHURCH/MOSQUE NAME |  |  |  | THE RESSURECTION CATHOLIC C... |  |  |  |  |  |  | 
+  R 25 | ADDRESS |  |  |  | ABARANJE IKOTUN LAGOS |  |  |  |  |  |  | 
+  R 26 |  |  |  |  |  |  |  |  |  |  |  | LANDMARK
+  R 28 | BUSINESS WORTH(STOCK) |  |  |  |  | ='FINANCIAL ANALYSIS'!E19 |  |  | LOAN PURPOSE |  | Business Expansion | 
+  R 29 | LOAN CYCLE NO. |  |  |  |  | 9 | PREVIOUS LOAN AMOUNT |  |  |  |  | AMOUNT REQUEST
+  R 30 | ANY DEFAULT ON PREVIOUS LOA... |  |  |  |  |  |  | If yes why? |  |  |  | 
+  R 32 | IS THE CLIENT ON A RUNNING ... |  |  |  |  |  |  |  | DISBURSEMENT DATE |  |  | 
+  R 33 | LOAN AMOUNT  |  |  |  |  |  |  |  | DURATION |  |  | MONTHLY INSTALMENT AMOUNT
+  R 34 | NUMBER OF INSTALMENT PAID |  |  |  |  |  LOAN BALANCE |  |  |  |  |  | 
+  R 36 | IS THE CLIENT A GUARANTOR? |  |  | No | BRANCH |  |  |  | NAME OF THE CUSTOMER |  |  | 
+  R 37 | LOAN AMOUNT GUARANTEED |  |  |  |  |  |  |  | DURATION |  |  | MONTHLY INSTALMENT AMOUNT
+  R 38 | NUMBER OF DAYS IN OVERDUE |  |  |  |  | NUMBER OF INSTALMENT PAID |  |  |  |  |  LOAN BALANCE | 
+  R 40 | 3 | 5 | 7 | 0 |  |  |  |  |  |  |  | 
+  R 41 | RATING SYSTEM |  |  |  | Total no. of instalments in... |  |  |  | Cumulative days in overdue |  | Grade | =IF(AND(H41=D40,J29=0),"NEW",IF(AND(J41<=12,J29>0),"A",IF(AND(J41>12,J41<=20),"B",IF(AND(J41>20,J41<=28),"C",IF(AND(J41>28),"D","B")))))
+  R 44 | LOAN OFFICER NAME |  |  |  |  |  | GODWIN OKPE |  |  |  |  | BRANCH
+  R 46 | The box on the right hand s... |  |  |  |  |  | 1 | My branch can do the busine... |  |  |  | 
+  R 47 |  |  |  |  |  |  | 2 | The supervisor decides base... |  |  |  | 
+  R 48 |  |  |  |  |  |  | 3 | The business should be refe... |  |  |  | 
+  R 50 |  |  |  |  |  |  |  |  |  | =IFERROR(IF(AND(M44=M50),"Approve","Decline"),IF(AND(N50=0),"Neutral","Decline")) |  | =IF(AND(J50="Decline",F55>10000000),"Approve",IF(AND(J50="Approve"),"Approve",IF(AND(J50="Neutral"),"Neutral","Decline")))
+  R 51 | LOCATION OF THE CLIENT'S BU... |  |  |  |  | LAGOS ISLAND |  |  | ZONIFICATION CHECK |  |  | 
+  R 53 | LOAN PROPOSAL |  |  |  |  | Loan amount(Principal) |  |  | Interest rate% | Upfront fee% | DURATION | CCD %
+  R 55 |  |  |  |  |  | ='FINANCIAL ANALYSIS'!E177 |  |  | ='FINANCIAL ANALYSIS'!E181 | ='FINANCIAL ANALYSIS'!E182 | ='FINANCIAL ANALYSIS'!E178 | ='FINANCIAL ANALYSIS'!E179
+  R 57 | The box on the left hand si... |  |  |  |  |  | 1 | The customer can get anothe... |  |  |  | 
+  R 58 |  |  |  |  |  |  | 2 | The supervisor decides base... |  |  |  | 
+  R 59 |  |  |  |  |  |  | 3 | The customer cannot get ano... |  |  |  | 
+  R 61 | CAN THE CUSTOMER GET ANOTHE... |  | DETAILS ON THE RUNNING LOAN... |  |  | S/N | LOAN AMOUNT |  | DATE DISBURSED | TOTAL REPAYMENT AMOUNT(Incl... | DURATION | LOAN BALANCE (Principal)
+  R 62 |  |  |  |  |  | 1 |  |  |  |  |  | 
+  R 63 | =IF(N64<=45%,"NO",IF(N64>=55%,"YES","MAYBE")) |  |  |  |  | 2 |  |  |  | 0 |  | 
+  R 64 |  |  |  |  |  | TOTAL | =SUM(G62:H63) |  |  | =SUM(J62:J63) |  | =SUM(L62:L63)
+  R 66 | CRC & XDS CREDIT BUREAU REP... |  |  |  |  |  |  |  |  |  |  | 
+  R 68 | S/N | INSTITUTION |  |  | LOAN AMOUNT |  | REPORTED DATE ON CRC/XDS  |  | INSTALMENT AMOUNT | CURRENT BALANCE | LOAN TENURE | LOAN STATUS
+  R 69 | 1 | AB MFB |  |  | j |  | 20/04/2025 |  |  | 0 | 6momths | PERFORMING
+  R 70 | 2 | ADVAN LAFAYETTE |  |  | 30949335.05 |  | 30/08/2025 |  | 3355376.01 | 28924780.45 | 9momths | PERFORMING
+  R 71 | 3 | BLUECREDIT INV |  |  | 30000000 |  | 27/06/2025 |  | 6800000 | 20400000 | 6momths | PERFORMING
+  R 72 | 4 | MONIEPOINT |  |  | 35000000 |  | 2025-10-07 00:00:00 |  | 3698666.72 | 18726106.33 | 6momths | PERFORMING
+  R 73 | 5 | UNILAG MFB |  |  | 5000000 |  | 30-09-25 |  | 787500 | 4375000 | 9months | PERFORMING
+  R 74 | 6 |  |  |  |  |  |  |  | 0 | 0 |  | 
+  R 75 | 7 |  |  |  |  |  |  |  | 0 | 0 |  | 
+  R 76 | 8 |  |  |  |  |  |  |  | 0 | 0 |  | 
+  R 77 | 9 |  |  |  |  |  |  |  | 0 | 0 |  | 
+  R 78 | 10 |  |  |  |  |  |  |  | 0 | 0 |  | 
+  R 79 | 11 |  |  |  |  |  |  |  | 0 | 0 |  | 
+  R 80 | 12 |  |  |  |  |  |  |  | 0 | 0 |  | 
+
+################################################################################
+### SHEET: 'Sheet1'  (111r x 14c)
+################################################################################
+  R  2 |  | Customer source | LOCATION | Rating |  | NUM | Branch |  | BUSINESS NATURE | % MARGIN | 0.0211 | 
+  R  3 |  | REFERRED BY ABL CUSTOMER | YABA | 3 |  | 3 | YABA |  | Sales of hair extention/acc... | =$K$2+K3 | 0.2041 | 
+  R  4 |  | THROUGH MARKETING/PROMOTION | TEJUOSHO | 3 |  | 2 | IBADAN |  | Cosmetics | =$K$2+K4 | 0.19 | 
+  R  5 |  | THROUGH ABL WEBSITE/SOCIAL ... | OJUELEGBA | 3 |  | 1 | ABEOKUTA |  | Sales of wood | =$K$2+K5 | 0.2272 | 
+  R  6 |  | A WALK-IN CUSTOMER | SURULERE | 3 |  | 4 | IKORODU |  | Sales of Phone accessories | =$K$2+K6 | 0.1965 | 
+  R  7 |  | PAOCHED FROM ANOTHER MFB | EBUTE-METTA | 3 |  | 5 | ABUJA |  | Sales of Tyres(General  Aut... | =$K$2+K7 | 0.1831 | 
+  R  8 |  |  | OYINGBO | 3 |  | 6 | TRADE-FAIR |  | Sales of Trucks spare parts | =$K$2+K8 | 0.25 | 
+  R  9 |  |  | LAGOS ISLAND | 3 |  | 7 | IKEJA |  | Sales Agro-allied products | =$K$2+K9 | 0.1922 | 
+  R 10 |  |  | LEKKI | 3 |  | 8 | BENIN |  | Sales of Baby Item | =$K$2+K10 | 0.18 | 
+  R 11 |  |  | AJAH | 3 |  | 9 | OSHOGBO |  | Aluminium profiles and acce... | =$K$2+K11 | 0.1462 | 
+  R 12 |  | INTEREST TYPE | VICTORIAL ISLAND | 3 |  |  |  |  | Fabrication and sale of alu... | =$K$2+K12 | 0.25 | 
+  R 13 |  | FLAT | OBALENDE | 3 |  |  | INSTALMENT |  | Sales of Suspended Ceiling | =$K$2+K13 | 0.159 | 
+  R 14 |  | REDUCING | APAPA ROAD | 3 |  |  | 0 |  | Sales of POP | =$K$2+K14 | 0.2236 | 
+  R 15 |  |  | APAPA WHARF | 3 |  |  | 1 |  | Sales of Plank | =$K$2+K15 | 0.1862 | 
+  R 16 |  |  | MUSHIN | 3 |  |  | 2 |  | Sales of provision and groc... | =$K$2+K16 | 0.1105 | 
+  R 17 |  | PRODUCT | JIBOWU | 3 |  |  | 3 |  | Sales of Auto-paints | =$K$2+K17 | 0.2046 | 
+  R 18 |  | SME | OBANIKORO | 3 |  |  | 4 |  | Sales of Iphone and accesso... | =$K$2+K18 | 0.1893 | 
+  R 19 |  | SME PLUS | IBADAN | 2 |  |  | 5 |  | Sales of Pharmaceutical pro... | =$K$2+K19 | 0.2262 | 
+  R 20 |  | EXCEPTION | SAKI | 2 |  |  | 6 |  | Sales of Cellotape | =$K$2+K20 | 0.25 | 
+  R 21 |  |  | IGBOHO | 2 |  |  | 7 |  | Sales of fabric and textile... | =$K$2+K21 | 0.1928 | 
+  R 22 |  |  | OYO TOWN | 2 |  |  | 8 |  | Sales of Palm Oil | =$K$2+K22 | 0.15 | 
+  R 23 |  | Loan Status | ABEOKUTA | 1 |  |  | 9 |  | Sale of alcoholic drinks | =$K$2+K23 | 0.1001 | 
+  R 24 |  | PERFORMING | ILARO | 1 |  |  | 10 |  | Sale of non-alcoholic drinks | =$K$2+K24 | 0.0813 | 
+  R 25 |  | PASS&WATCH | IFO | 1 |  |  | 11 |  | Sales of assorted wines | =$K$2+K25 | 0.2044 | 
+  R 26 |  | SUBSTANDARD | IKORODU | 4 |  |  | 12 |  | Iron and steel rods | =$K$2+K26 | 0.1135 | 
+  R 27 |  | DOUBLTFUL | KETU | 4 |  |  |  |  | Water production/beverage d... | =$K$2+K27 | 0.25 | 
+  R 28 |  | LOST | OJOTA | 4 |  |  | DAYS |  | Sales of footwears | =$K$2+K28 | 0.1132 | 
+  R 29 |  | WATCHLIST | SAGAMU-SABO | 4 |  |  | 0 |  | Haulage/Logistics | =$K$2+K29 | 0.7789 | 
+  R 30 |  | WRITE OFF | OGIJO | 4 |  |  | 1 |  | Cooking Gas/home accessories | =$K$2+K30 | 0.11 | 
+  R 31 |  | OVERDRAFT | IGBOGBO | 4 |  |  | 2 |  | Food chemicals | =$K$2+K31 | 0.0719 | 
+  R 32 |  |  | AGRIC-ISAWO | 4 |  |  | 3 |  | Production of paints | =$K$2+K32 | 0.25 | 
+  R 33 |  |  | ABUJA | 5 |  |  | 4 |  | Production and sale of poly... | =$K$2+K33 | 0.25 | 
+  R 34 |  |  | TRADE-FAIR | 6 |  |  | 5 |  | Building materials ( roofin... | =$K$2+K34 | 0.1655 | 
+  R 35 |  |  | MILE- 2 | 6 |  |  | 6 |  | Food chemicals | =$K$2+K35 | 0.18 | 
+  R 36 |  |  | OJO | 6 |  |  | 7 |  | Hospital | =$K$2+K36 | 0.25 | 
+  R 37 |  |  | IKOTUN | 6 |  |  | 8 |  | School labouratory equipment | =$K$2+K37 | 0.23 | 
+  R 38 |  |  | IGANDO | 6 |  |  | 9 |  | Automobile spare-parts | =$K$2+K38 | 0.25 | 
+  R 39 |  |  | EGBEDA | 6 |  |  | 10 |  | Building block production/i... | =$K$2+K39 | 0.2 | 
+  R 40 |  |  | IYANA-IPAJA | 6 |  |  | 11 |  | Bakery/Confectionaries | =$K$2+K40 | 0.15 | 
+  R 41 |  |  | AYOBO | 6 |  |  | 12 |  | Sale of PVC water pipes and... | =$K$2+K41 | 0.1972 | 
+  R 42 |  |  | ORILE | 6 |  |  | 13 |  | Sales of Mobile phones | =$K$2+K42 | 0.21 | 
+  R 43 |  |  | ODUNADE | 6 |  |  | 14 |  | Butchers/sale of meat | =$K$2+K43 | 0.2136 | 
+  R 44 |  |  | IGBO-ELERIN | 6 |  |  | 15 |  | Welding Service (Metal/Tank... | =$K$2+K44 | 0.22 | 
+  R 45 |  |  | AGBARA | 6 |  |  | 16 |  | Electrical home accessories | =$K$2+K45 | 0.1514 | 
+  R 46 |  |  | ALABA | 6 |  |  | 17 |  | Printing Materials and prin... | =$K$2+K46 | 0.25 | 
+  R 47 |  |  | IKEJA | 7 |  |  | 18 |  | Sales of clothings and bout... | =$K$2+K47 | 0.1561 | 
+  R 48 |  |  | OREGUN-OJOTA | 7 |  |  | 19 |  | Sale of industrial papers | =$K$2+K48 | 0.1937 | 
+  R 49 |  |  | OJODU-BERGER | 7 |  |  | 20 |  | Sales of Alubond sheet | =$K$2+K49 | 0.2135 | 
+  R 50 |  |  | SECRETARIAT | 7 |  |  | 21 |  | General building matrials | =$K$2+K50 | 0.1855 | 
+  R 51 |  |  | OSHODI-ARENA | 7 |  |  | 22 |  | Sales of cars | =$K$2+K51 | 0.2276 | 
+  R 52 |  |  | ABULE-EGBA | 7 |  |  | 23 |  | Sales of Laminated Wood/HDF... | =$K$2+K52 | 0.2019 | 
+  R 53 |  |  | MERAN | 7 |  |  | 24 |  | Sales of Metal Scrap | =$K$2+K53 | 0.2231 | 
+  R 54 |  |  | IJAYE | 7 |  |  | 25 |  | Animal feeds | =$K$2+K54 | 0.1019 | 
+  R 55 |  |  | AGEGE | 7 |  |  | 26 |  | Sales of Iron and building ... | =$K$2+K55 | 0.1345 | 
+  R 56 |  |  | IJU-ISHAGA | 7 |  |  | 27 |  | Sales of electronics and Co... | =$K$2+K56 | 0.1729 | 
+  R 57 |  |  | OGBA | 7 |  |  | 28 |  | Sales of Car engine | =$K$2+K57 | 0.1696 | 
+  R 58 |  |  | SANGO | 7 |  |  | 29 |  | Sales of Electronics | =$K$2+K58 | 0.2013 | 
+  R 59 |  |  | BENIN | 8 |  |  | 30 |  | Sales of frozen food | =$K$2+K59 | 0.107 | 
+  R 60 |  |  | OSHOGBO | 9 |  |  | 31 |  | Mattress and pillow | =$K$2+K60 | 0.1487 | 
+  R 61 |  |  | FREE ZONE | 0 |  |  |  |  | Sales of electrical material | =$K$2+K61 | 0.24 | 
+  R 62 |  |  |  |  |  |  |  |  | Sales of PMS ( Petroleum Pr... | =$K$2+K62 | 0.0978 | 
+  R 63 |  |  |  |  |  |  |  |  | Sales recharge cards | =$K$2+K63 | 0.0799 | 
+  R 64 |  |  |  |  |  |  |  |  | Sales of rechargable and st... | =$K$2+K64 | 0.1853 | 
+  R 65 |  |  |  |  |  |  |  |  | Sales of truck head and spa... | =$K$2+K65 | 0.14 | 
+  R 66 |  |  |  |  |  |  |  |  | Poultry farming/sale of egg... | =$K$2+K66 | 0.168 | 
+  R 67 |  |  |  |  |  |  |  |  | Sales of industrial electri... | =$K$2+K67 | 0.21 | 
+  R 68 |  |  |  |  |  |  |  |  | Fabrication and sale of fur... | =$K$2+K68 | 0.25 | 
+  R 69 |  |  |  |  |  |  |  |  | Sales of sesame seeds, cash... | =$K$2+K69 | 0.1269 | 
+  R 70 |  |  |  |  |  |  |  |  | Sales of foodstufs( garri, ... | =$K$2+K70 | 0.1369 | 
+  R 71 |  |  |  |  |  |  |  |  | Sales of building doors (im... | =$K$2+K71 | 0.2235 | 
+  R 72 |  |  |  |  |  |  |  |  | General  industrial chemicals | =$K$2+K72 | 0.2265 | 
+  R 73 |  |  |  |  |  |  |  |  | Tailoring materials | =$K$2+K73 | 0.1925 | 
+  R 74 |  |  |  |  |  |  |  |  | Hotel/hospitality | =$K$2+K74 | 0.7789 | 
+  R 75 |  |  |  |  |  |  |  |  | Production of tissue paper/... | =$K$2+K75 | 0.23 | 
+  R 76 |  |  |  |  |  |  |  |  | Ladies clothes | =$K$2+K76 | 0.18 | 
+  R 77 |  |  |  |  |  |  |  |  | Medical & scientific equipment | =$K$2+K77 | 0.2262 | 
+  R 78 |  |  |  |  |  |  |  |  | Sales of bags | =$K$2+K78 | 0.2195 | 
+  R 79 |  |  |  |  |  |  |  |  | Sales of furniture | =$K$2+K79 | 0.1916 | 
+  R 80 |  |  |  |  |  |  |  |  | Production of furntures | =$K$2+K80 | 0.25 | 
+
+################################################################################
+### SHEET: 'FAMILY EXP.'  (44r x 16382c)
+################################################################################
+  R  1 | FAMILY EXPENSES AND ASSETS |  |  |  |  |  |  |  |  |  |  | 
+  R  3 | 1.   FAMILY EXPENSES |  |  |  |  |  |  |  |  |  |  | 
+  R  4 | Regular expenses | Amount | Details |  |  |  |  |  |  |  |  | 
+  R  5 | Feeding | 100000 |  |  |  |  |  |  |  |  |  | 
+  R  6 | Rent | 100000 |  |  |  |  |  |  |  |  |  | 
+  R  7 | School Fee | 50000 |  |  |  |  |  |  |  |  |  | 
+  R  8 | Water, electricity, gas, etc | 50000 |  |  |  |  |  |  |  |  |  | 
+  R  9 | Phone expenses | 20000 |  |  |  |  |  |  |  |  |  | 
+  R 10 | Maid, Janitor, Laundry expe... | 20000 |  |  |  |  |  |  |  |  |  | 
+  R 11 | Vehicle maintenance | 100000 |  |  |  |  |  |  |  |  |  | 
+  R 12 | Transportation and other tr... | 0 |  |  |  |  |  |  |  |  |  | 
+  R 13 | Others | 0 |  |  |  |  |  |  |  |  |  | 
+  R 14 | TOTAL: (1) | =SUM(B5:B13) |  |  |  |  |  |  |  |  |  | 
+  R 15 | Unforeseen 20% of the (1) :... | =B14*0.2 |  |  |  |  |  |  |  |  |  | 
+  R 16 | Irregular Expenses | 50000 |  |  |  |  |  |  |  |  |  | 
+  R 17 | Dressing, hygiène, coiffure... | 100000 |  |  |  |  |  |  |  |  |  | 
+  R 18 | Health expenses | 30000 |  |  |  |  |  |  |  |  |  | 
+  R 19 | Allowance | 0 |  |  |  |  |  |  |  |  |  | 
+  R 20 | Contribution |  |  |  |  |  |  |  |  |  |  | 
+  R 21 | Others | 0 |  |  |  |  |  |  |  |  |  | 
+  R 22 | TOTAL:(3) | =SUM(B16:B21) |  |  |  |  |  |  |  |  |  | 
+  R 24 | TOTAL: (1)+(2)+(3) |  | =SUM(B14,B15,B22) |  |  |  |  |  |  |  |  | 
+  R 26 | 1.   FAMILY ASSETS |  |  |  |  |  |  |  |  |  |  | 
+  R 27 | Equipment and Furniture | Condition | Market Value (naira) |  |  |  |  |  |  |  |  | 
+  R 28 | FRIDGE ANDDEP FRIDGER | Very Good | 2000000 |  |  |  |  |  |  |  |  | 
+  R 29 | Chairs over  | Very Good | 3000000 |  |  |  |  |  |  |  |  | 
+  R 30 | TV  | Very Good | 500000 |  |  |  |  |  |  |  |  | 
+  R 31 | AIR CONDITIONER | Very Good | 610000 |  |  |  |  |  |  |  |  | 
+  R 32 | TOTAL: (1) |  | =SUM(C28:C31) |  |  |  |  |  |  |  |  | 
+  R 34 | Vehicles | License Plate(Number) | Market Value (naira) |  |  |  |  |  |  |  |  | 
+  R 35 | LEXUS RX 350 | KSF80GP | 30000000 |  |  |  |  |  |  |  |  | 
+  R 36 | LEXUS RX 350 | JJJ837HU | 30000000 |  |  |  |  |  |  |  |  | 
+  R 38 | TOTAL: (2) |  | =SUM(C35:C37) |  |  |  |  |  |  |  |  | 
+  R 40 | House/Land | Location | Market Value |  |  |  |  |  |  |  |  | 
+  R 41 | AN UNCOMPLETED BUILDING | ABARANJE | 45000000 |  |  |  |  |  |  |  |  | 
+  R 42 | TOTAL:(3) |  | =SUM(C41) |  |  |  |  |  |  |  |  | 
+  R 44 | TOTAL: (1)+(2)+(3) |  | =SUM(C32,C38,C42) |  |  |  |  |  |  |  |  | 
+
+################################################################################
+### SHEET: 'BUSINESS EXP.'  (1048576r x 3c)
+################################################################################
+  R  1 | BUSINESS EXPENSES AND ASSETS |  | 
+  R  2 | 1.   BUSINESS EXPENSES |  | 
+  R  3 | Business Expenses | Amount | Description
+  R  4 | Salary and fee | 50000 | 
+  R  5 | Rent | 200000 | 
+  R  6 | Transportation | 50000 | 
+  R  7 | Feeding | 100000 | 
+  R  8 | Maintenance fees | 20000 | 
+  R  9 | Travel Expenses | 100000 | 
+  R 10 | Custom Expenses | 0 | 
+  R 11 | Administrative expenses (ut... |  | 
+  R 12 | Tax |  | 
+  R 13 | Overdraft Charges | Nil | 
+  R 14 | Other Expenses | 0 | 
+  R 15 | SUB TOTAL: | =SUM(B4:B14) | 
+  R 16 | Unforeseen expenses(20% of ... | =B15*0.2 | 
+  R 17 | TOTAL BUSINESS EXPENSES | =SUM(B15,B16) | 
+  R 19 | 1.   BUSINESS ASSETS |  | 
+  R 20 | Equipment and Furniture | Condition | Estimated current value
+  R 21 | AIR CONDITIONERS | OK | 250000
+  R 22 | SMART TVS | OK | 500000
+  R 23 |  | OK | 
+  R 24 |  | OK | 
+  R 28 | TOTAL:(1) |  | =SUM(C21:C27)
+  R 30 | Vehincles | License Number | Estimated current value
+  R 34 | TOTAL:(2) |  | =SUM(C31:C33)
+  R 36 | House/Land | Location | Market value (naira)
+  R 39 | TOTAL:(3) |  | =SUM(C37:C38)
+  R 41 | GRAND TOTAL(1+2+3) |  | =SUM(C28,C34,C39)
+
+################################################################################
+### SHEET: 'Sheet1 (2)'  (45r x 24c)
+################################################################################
+  R  1 |  |  |  |  |  |  | Instalment | Interest | Principal | Balance |  | 
+  R  2 |  |  |  |  | 1 | =D3 | =IF(F2="","",-PMT($C$4/12,$C$5,$D$3)) | =IFERROR($C$4*F2/12,"") | =IFERROR(G2-H2,"") | =IFERROR(F2-I2,"") |  | 
+  R  3 |  |  |  | ='FINANCIAL ANALYSIS'!E177 | =SUM(E2+1) | =IF(J2<1,"",J2) | =IF(F3="","",-PMT($C$4/12,$C$5,$D$3)) | =IFERROR($C$4*F3/12,"") | =IFERROR(G3-H3,"") | =IFERROR(F3-I3,"") |  | 
+  R  4 |  | Interest | ='FINANCIAL ANALYSIS'!E181*12 |  | =SUM(E3+1) | =IF(J3<1,"",J3) | =IF(F4="","",-PMT($C$4/12,$C$5,$D$3)) | =IFERROR($C$4*F4/12,"") | =IFERROR(G4-H4,"") | =IFERROR(F4-I4,"") |  | 
+  R  5 |  | Tenure | ='FINANCIAL ANALYSIS'!E178 |  | =SUM(E4+1) | =IF(J4<1,"",J4) | =IF(F5="","",-PMT($C$4/12,$C$5,$D$3)) | =IFERROR($C$4*F5/12,"") | =IFERROR(G5-H5,"") | =IFERROR(F5-I5,"") |  | 
+  R  6 |  |  |  |  | =SUM(E5+1) | =IF(J5<1,"",J5) | =IF(F6="","",-PMT($C$4/12,$C$5,$D$3)) | =IFERROR($C$4*F6/12,"") | =IFERROR(G6-H6,"") | =IFERROR(F6-I6,"") |  | 
+  R  7 |  |  |  |  | =SUM(E6+1) | =IF(J6<1,"",J6) | =IF(F7="","",-PMT($C$4/12,$C$5,$D$3)) | =IFERROR($C$4*F7/12,"") | =IFERROR(G7-H7,"") | =IFERROR(F7-I7,"") |  | 
+  R  8 |  |  |  |  | =SUM(E7+1) | =IF(J7<1,"",J7) | =IF(F8="","",-PMT($C$4/12,$C$5,$D$3)) | =IFERROR($C$4*F8/12,"") | =IFERROR(G8-H8,"") | =IFERROR(F8-I8,"") |  | 
+  R  9 |  |  |  |  | =SUM(E8+1) | =IF(J8<1,"",J8) | =IF(F9="","",-PMT($C$4/12,$C$5,$D$3)) | =IFERROR($C$4*F9/12,"") | =IFERROR(G9-H9,"") | =IFERROR(F9-I9,"") |  | 
+  R 10 |  |  |  |  | =SUM(E9+1) | =IF(J9<1,"",J9) | =IF(F10="","",-PMT($C$4/12,$C$5,$D$3)) | =IFERROR($C$4*F10/12,"") | =IFERROR(G10-H10,"") | =IFERROR(F10-I10,"") |  | 
+  R 11 |  |  |  |  | =SUM(E10+1) | =IF(J10<1,"",J10) | =IF(F11="","",-PMT($C$4/12,$C$5,$D$3)) | =IFERROR($C$4*F11/12,"") | =IFERROR(G11-H11,"") | =IFERROR(F11-I11,"") |  | 
+  R 12 |  |  |  |  | =SUM(E11+1) | =IF(J11<1,"",J11) | =IF(F12="","",-PMT($C$4/12,$C$5,$D$3)) | =IFERROR($C$4*F12/12,"") | =IFERROR(G12-H12,"") | =IFERROR(F12-I12,"") |  | 
+  R 13 |  |  |  |  | =SUM(E12+1) | =IF(J12<1,"",J12) | =IF(F13="","",-PMT($C$4/12,$C$5,$D$3)) | =IFERROR($C$4*F13/12,"") | =IFERROR(G13-H13,"") | =IFERROR(F13-I13,"") |  | 
+  R 14 |  |  |  |  |  |  | =SUM(G2:G13) | =SUM(H2:H13) | =SUM(I2:I13) |  |  | 
+  R 16 |  | cost of fund |  |  |  |  |  |  |  |  |  | 
+  R 17 |  |  |  |  | 1 | =D18 | =IF(F17="","",-PMT($C$19/12,$C$20,$D$18)) | =IFERROR($C$19*F17/12,"") | =IFERROR(G17-H17,"") | =IFERROR(F17-I17,"") |  | 
+  R 18 |  |  |  | =D3 | =SUM(E17+1) | =IF(J17<1,"",J17) | =IF(F18="","",-PMT($C$19/12,$C$20,$D$18)) | =IFERROR($C$19*F18/12,"") | =IFERROR(G18-H18,"") | =IFERROR(F18-I18,"") |  | 
+  R 19 |  | cost of fund | 0.3 |  | =SUM(E18+1) | =IF(J18<1,"",J18) | =IF(F19="","",-PMT($C$19/12,$C$20,$D$18)) | =IFERROR($C$19*F19/12,"") | =IFERROR(G19-H19,"") | =IFERROR(F19-I19,"") |  | 
+  R 20 |  | Tenure | =C5 |  | =SUM(E19+1) | =IF(J19<1,"",J19) | =IF(F20="","",-PMT($C$19/12,$C$20,$D$18)) | =IFERROR($C$19*F20/12,"") | =IFERROR(G20-H20,"") | =IFERROR(F20-I20,"") |  | 
+  R 21 |  | upfront | ='FINANCIAL ANALYSIS'!E182 |  | =SUM(E20+1) | =IF(J20<1,"",J20) | =IF(F21="","",-PMT($C$19/12,$C$20,$D$18)) | =IFERROR($C$19*F21/12,"") | =IFERROR(G21-H21,"") | =IFERROR(F21-I21,"") |  | 
+  R 22 |  | CCD | ='CLIENT''S INFORMATION'!L55 | =D18*C22 | =SUM(E21+1) | =IF(J21<1,"",J21) | =IF(F22="","",-PMT($C$19/12,$C$20,$D$18)) | =IFERROR($C$19*F22/12,"") | =IFERROR(G22-H22,"") | =IFERROR(F22-I22,"") |  | 
+  R 23 |  | Admin cost | 0.05 | =((C23*D18)/12)*C20 | =SUM(E22+1) | =IF(J22<1,"",J22) | =IF(F23="","",-PMT($C$19/12,$C$20,$D$18)) | =IFERROR($C$19*F23/12,"") | =IFERROR(G23-H23,"") | =IFERROR(F23-I23,"") |  | 
+  R 24 |  |  |  |  | =SUM(E23+1) | =IF(J23<1,"",J23) | =IF(F24="","",-PMT($C$19/12,$C$20,$D$18)) | =IFERROR($C$19*F24/12,"") | =IFERROR(G24-H24,"") | =IFERROR(F24-I24,"") |  | 
+  R 25 |  |  |  |  | =SUM(E24+1) | =IF(J24<1,"",J24) | =IF(F25="","",-PMT($C$19/12,$C$20,$D$18)) | =IFERROR($C$19*F25/12,"") | =IFERROR(G25-H25,"") | =IFERROR(F25-I25,"") |  | 
+  R 26 |  |  |  |  | =SUM(E25+1) | =IF(J25<1,"",J25) | =IF(F26="","",-PMT($C$19/12,$C$20,$D$18)) | =IFERROR($C$19*F26/12,"") | =IFERROR(G26-H26,"") | =IFERROR(F26-I26,"") |  | 
+  R 27 |  |  |  |  | =SUM(E26+1) | =IF(J26<1,"",J26) | =IF(F27="","",-PMT($C$19/12,$C$20,$D$18)) | =IFERROR($C$19*F27/12,"") | =IFERROR(G27-H27,"") | =IFERROR(F27-I27,"") |  | 
+  R 28 |  |  |  |  | =SUM(E27+1) | =IF(J27<1,"",J27) | =IF(F28="","",-PMT($C$19/12,$C$20,$D$18)) | =IFERROR($C$19*F28/12,"") | =IFERROR(G28-H28,"") | =IFERROR(F28-I28,"") |  | 
+  R 29 |  |  |  |  |  |  | =SUM(G17:G28) | =SUM(H17:H28) | =SUM(I17:I28) |  |  | 
+  R 31 |  | convert to loan |  |  |  |  |  |  |  |  |  | 
+  R 33 |  |  |  | =D22 | 1 | =D33 | =IF(F33="","",-PMT($C$34/12,$C$35,$D$33)) | =IFERROR($C$34*F33/12,"") | =IFERROR(G33-H33,"") | =IFERROR(F33-I33,"") |  | 
+  R 34 |  | Interest | =C4 |  | =SUM(E33+1) | =IF(J33<1,"",J33) | =IF(F34="","",-PMT($C$34/12,$C$35,$D$33)) | =IFERROR($C$34*F34/12,"") | =IFERROR(G34-H34,"") | =IFERROR(F34-I34,"") |  | 
+  R 35 |  | Tenure | =C5 |  | =SUM(E34+1) | =IF(J34<1,"",J34) | =IF(F35="","",-PMT($C$34/12,$C$35,$D$33)) | =IFERROR($C$34*F35/12,"") | =IFERROR(G35-H35,"") | =IFERROR(F35-I35,"") |  | 
+  R 36 |  |  |  |  | =SUM(E35+1) | =IF(J35<1,"",J35) | =IF(F36="","",-PMT($C$34/12,$C$35,$D$33)) | =IFERROR($C$34*F36/12,"") | =IFERROR(G36-H36,"") | =IFERROR(F36-I36,"") |  | 
+  R 37 |  |  |  |  | =SUM(E36+1) | =IF(J36<1,"",J36) | =IF(F37="","",-PMT($C$34/12,$C$35,$D$33)) | =IFERROR($C$34*F37/12,"") | =IFERROR(G37-H37,"") | =IFERROR(F37-I37,"") |  | 
+  R 38 |  |  |  |  | =SUM(E37+1) | =IF(J37<1,"",J37) | =IF(F38="","",-PMT($C$34/12,$C$35,$D$33)) | =IFERROR($C$34*F38/12,"") | =IFERROR(G38-H38,"") | =IFERROR(F38-I38,"") |  | 
+  R 39 |  |  |  |  | =SUM(E38+1) | =IF(J38<1,"",J38) | =IF(F39="","",-PMT($C$34/12,$C$35,$D$33)) | =IFERROR($C$34*F39/12,"") | =IFERROR(G39-H39,"") | =IFERROR(F39-I39,"") |  | 
+  R 40 |  |  |  |  | =SUM(E39+1) | =IF(J39<1,"",J39) | =IF(F40="","",-PMT($C$34/12,$C$35,$D$33)) | =IFERROR($C$34*F40/12,"") | =IFERROR(G40-H40,"") | =IFERROR(F40-I40,"") |  | 
+  R 41 |  |  |  |  | =SUM(E40+1) | =IF(J40<1,"",J40) | =IF(F41="","",-PMT($C$34/12,$C$35,$D$33)) | =IFERROR($C$34*F41/12,"") | =IFERROR(G41-H41,"") | =IFERROR(F41-I41,"") |  | 
+  R 42 |  |  |  |  | =SUM(E41+1) | =IF(J41<1,"",J41) | =IF(F42="","",-PMT($C$34/12,$C$35,$D$33)) | =IFERROR($C$34*F42/12,"") | =IFERROR(G42-H42,"") | =IFERROR(F42-I42,"") |  | 
+  R 43 |  |  |  |  | =SUM(E42+1) | =IF(J42<1,"",J42) | =IF(F43="","",-PMT($C$34/12,$C$35,$D$33)) | =IFERROR($C$34*F43/12,"") | =IFERROR(G43-H43,"") | =IFERROR(F43-I43,"") |  | 
+  R 44 |  |  |  |  | =SUM(E43+1) | =IF(J43<1,"",J43) | =IF(F44="","",-PMT($C$34/12,$C$35,$D$33)) | =IFERROR($C$34*F44/12,"") | =IFERROR(G44-H44,"") | =IFERROR(F44-I44,"") |  | 
+  R 45 |  |  |  |  |  |  | =SUM(G33:G44) | =SUM(H33:H44) | =SUM(I33:I44) |  |  | 
+
+################################################################################
+### SHEET: 'FINANCIAL ANALYSIS'  (239r x 15c)
+################################################################################
+  R  2 | INVENTORY: |  |  |  |  |  |  |  |  |  |  | 
+  R  3 | Item |  | Quantity |  | Value |  | Selling price |  | Cost price |  | Profit | Margin%
+  R  4 | HISENSE TVS 55 INC |  | 100 |  | =C4*I4 |  | 500000 |  | 350000 |  | =G4-I4 | =IFERROR((G4-I4)/G4,"")
+  R  5 | AIRCONDITIONES |  | 50 |  | =C5*I5 |  | 350000 |  | 210000 |  | =G5-I5 | =IFERROR((G5-I5)/G5,"")
+  R  6 | WASHI8NG MACHINE |  | 50 |  | =C6*I6 |  | 250000 |  | 200000 |  | =G6-I6 | =IFERROR((G6-I6)/G6,"")
+  R  7 | BLENDER |  | 40 |  | =C7*I7 |  | 120000 |  | 80000 |  | =G7-I7 | =IFERROR((G7-I7)/G7,"")
+  R  8 | GENERATORS |  | 100 |  | =C8*I8 |  | 400000 |  | 330000 |  | =G8-I8 | =IFERROR((G8-I8)/G8,"")
+  R  9 | FAN |  | 50 |  | =C9*I9 |  | 45000 |  | 30000 |  | =G9-I9 | =IFERROR((G9-I9)/G9,"")
+  R 10 | FRIDGE |  | 50 |  | =C10*I10 |  | 300000 |  | 240000 |  | =G10-I10 | =IFERROR((G10-I10)/G10,"")
+  R 11 | MICRO WAVE |  | 800 |  | =C11*I11 |  | 150000 |  | 100000 |  | =G11-I11 | =IFERROR((G11-I11)/G11,"")
+  R 12 |  |  |  |  | =C12*I12 |  |  |  |  |  | =G12-I12 | =IFERROR((G12-I12)/G12,"")
+  R 13 |  |  |  |  | =C13*I13 |  |  |  |  |  | =G13-I13 | =IFERROR((G13-I13)/G13,"")
+  R 14 |  |  |  |  | =C14*I14 |  |  |  |  |  | =G14-I14 | =IFERROR((G14-I14)/G14,"")
+  R 15 |  |  |  |  | =C15*I15 |  |  |  |  |  | =G15-I15 | =IFERROR((G15-I15)/G15,"")
+  R 16 |  |  |  |  | =C16*I16 |  |  |  |  |  | =G16-I16 | =IFERROR((G16-I16)/G16,"")
+  R 17 |  |  |  |  | =C17*I17 |  |  |  |  |  | =G17-I17 | =IFERROR((G17-I17)/G17,"")
+  R 18 |  |  |  |  | =C18*I18 |  |  |  |  |  | =G18-I18 | =IFERROR((G18-I18)/G18,"")
+  R 19 | TOTAL: |  | =SUM(C4:C18) |  | =SUM(E4:F18) |  | =SUM(G4:G18) |  | =SUM(I4:I18) |  | =SUM(K4:K18) | =IFERROR(AVERAGEIF(L4:L18,"<>0"),"")
+  R 20 | %Average margin: |  |  |  |  |  | =L19 |  |  |  |  | 
+  R 21 | % Weighted margin: |  |  |  |  |  | =+IF(M19<L19,M19,L19) |  |  |  |  | 
+  R 23 | BUSINESS SECTOR |  |  |  | Sales of Electronics |  |  |  | BECHMARKED MARGIN |  |  | =IFERROR(VLOOKUP(E23,Sheet1!I2:J111,2,FALSE),"")
+  R 26 | Margin Summary Base |  |  |  |  |  |  |  |  |  |  | 
+  R 27 | DETAIL |  |  | % |  |  |  |  |  |  |  | 
+  R 28 | =A20 |  |  | =G20 |  |  |  |  |  |  |  | 
+  R 29 | =A21 |  |  | =G21 |  |  |  |  |  |  |  | 
+  R 30 | =I23 |  |  | =L23 |  |  |  |  |  |  |  | 
+  R 32 | Margin used:(Least figure) |  |  | =IFERROR(SMALL(D28:D30,COUNTIF(D28:D30,0)+1),"") |  |  |  |  |  |  |  | 
+  R 35 | BANK/Other IMF BALANCES |  |  |  |  |  |  |  |  |  |  | 
+  R 36 | S/N | BANK NAME |  | ACCOUNT NAME |  |  |  | ACCOUNT NUMBER |  |  | BALANCE | 
+  R 37 | 1 | ACCESS BANK |  | ONYEKA CALISTUS UDEMMADU |  |  |  | 775445804 |  |  | 3034919.8 | 
+  R 38 | 2 | moniepoint |  | BLESSED ONYEKACHI ELCTRONICS |  |  |  | 64078800004 |  |  | 4807392.43 | 
+  R 39 | 3 |  |  |  |  |  |  |  |  |  |  | 
+  R 40 | 4 |  |  |  |  |  |  |  |  |  |  | 
+  R 41 | 5 |  |  |  |  |  |  |  |  |  |  | 
+  R 42 | 6 |  |  |  |  |  |  |  |  |  |  | 
+  R 44 | BALANCE SHEET |  |  |  |  |  |  |  |  |  |  | 
+  R 45 | MAIN BUSINESS |  |  |  | AMOUNT |  |  | % |  | AMOUNT |  | %
+  R 46 | SHORT-TERM ASSET: |  |  |  | CURRENT |  |  |  |  | PREVIOUS |  | 
+  R 47 |  |  | DATE: |  | 2025-10-25 00:00:00 |  |  |  |  | DATE: | 2024-12-01 00:00:00 | 
+  R 48 | Cash at hand |  |  |  | 4000000 |  |  | =IFERROR(E48/$E$69,"") |  |  |  | =IFERROR(J48/$J$69,"")
+  R 49 | WFL |  |  |  |  |  |  | =IFERROR(E49/$E$69,"") |  |  |  | =IFERROR(J49/$J$69,"")
+  R 50 | Balances in other Banks  |  |  |  | =SUM(K37:L41) |  |  | =IFERROR(E50/$E$69,"") |  |  |  | =IFERROR(J50/$J$69,"")
+  R 51 | TOTAL TREASURY: |  |  |  | =SUM(E48:G50) |  |  | =IFERROR(E51/$E$69,"") |  | =SUM(J48:K50) |  | =IFERROR(J51/$J$69,"")
+  R 52 | Receivables (Credit sales) |  |  |  |  |  |  | =IFERROR(E52/$E$69,"") |  |  |  | =IFERROR(J52/$J$69,"")
+  R 53 | Advance paid to suppliers |  |  |  |  |  |  | =IFERROR(E53/$E$69,"") |  |  |  | =IFERROR(J53/$J$69,"")
+  R 54 | TOTAL RECEIVABLES |  |  |  | =SUM(E52:G53) |  |  | =IFERROR(E54/$E$69,"") |  |  |  | =IFERROR(J54/$J$69,"")
+  R 55 | TOTAL STOCK |  |  |  | =E19 |  |  | =IFERROR(E55/$E$69,"") |  |  |  | =IFERROR(J55/$J$69,"")
+  R 56 | TOTAL SHORT-TERM ASSETS: |  |  |  | =SUM(E51,E54,E55) |  |  | =IFERROR(E56/$E$69,"") |  | =SUM(J51,J54:K55) |  | =IFERROR(J56/$J$69,"")
+  R 57 | FIXED ASSETS: |  |  |  |  |  |  |  |  |  |  | 
+  R 58 | BUSINESS |  |  |  |  |  |  |  |  |  |  | 
+  R 59 | Equipment and furniture |  |  |  | ='BUSINESS EXP.'!C28 |  |  | =IFERROR(E59/$E$69,"") |  |  |  | =IFERROR(J59/$J$69,"")
+  R 60 | Vehicles |  |  |  | ='BUSINESS EXP.'!C34 |  |  | =IFERROR(E60/$E$69,"") |  |  |  | =IFERROR(J60/$J$69,"")
+  R 61 | Land and House |  |  |  | ='BUSINESS EXP.'!C39 |  |  | =IFERROR(E61/$E$69,"") |  |  |  | =IFERROR(J61/$J$69,"")
+  R 62 | TOTAL BUSINESS FIXED ASSETS: |  |  |  | =SUM(E59:G61) |  |  | =IFERROR(E62/$E$69,"") |  | =SUM(J59:K61) |  | =IFERROR(J62/$J$69,"")
+  R 63 | FAMILY |  |  |  |  |  |  |  |  |  |  | 
+  R 64 | Equipment and furniture |  |  |  | ='FAMILY EXP.'!C32 |  |  | =IFERROR(E64/$E$69,"") |  |  |  | =IFERROR(J64/$J$69,"")
+  R 65 | Vehicles |  |  |  | ='FAMILY EXP.'!C38 |  |  | =IFERROR(E65/$E$69,"") |  |  |  | =IFERROR(J65/$J$69,"")
+  R 66 | Land and House |  |  |  | ='FAMILY EXP.'!C42 |  |  | =IFERROR(E66/$E$69,"") |  |  |  | =IFERROR(J66/$J$69,"")
+  R 67 | TOTAL FAMILY FIXED ASSETS: |  |  |  | =SUM(E64:G66) |  |  | =IFERROR(E67/$E$69,"") |  | =SUM(J64:K66) |  | =IFERROR(J67/$J$69,"")
+  R 68 | TOTAL FIXED ASSETS: |  |  |  | =SUM(E62,E67) |  |  | =IFERROR(E68/$E$69,"") |  | =SUM(J62,J67) |  | =IFERROR(J68/$J$69,"")
+  R 69 | TOTAL ASSETS: |  |  |  | =SUM(E56,E68) |  |  | =IFERROR(E69/$E$69,"") |  | =SUM(J56,J68) |  | =IFERROR(J69/$J$69,"")
+  R 71 | SHORT-TERM LIABILITIES: |  |  |  |  |  |  |  |  |  |  | 
+  R 72 | Advance received from custo... |  |  |  |  |  |  | =IFERROR(E72/$E$69,"") |  |  |  | =IFERROR(J72/$J$69,"")
+  R 73 | Payables (Credit supplies) |  |  |  |  |  |  | =IFERROR(E73/$E$69,"") |  |  |  | =IFERROR(J73/$J$69,"")
+  R 74 | WFL loan |  |  |  | ='CLIENT''S INFORMATION'!F55 |  |  | =IFERROR(E74/$E$69,"") |  |  |  | =IFERROR(J74/$J$69,"")
+  R 75 | Other banks loan(Outstandin... |  |  |  | ='CLIENT''S INFORMATION'!J84 |  |  | =IFERROR(E75/$E$69,"") |  |  |  | =IFERROR(J75/$J$69,"")
+  R 76 | TOTAL SHORT-TERM LIABILITIES: |  |  |  | =SUM(E72:G75) |  |  | =IFERROR(E76/$E$69,"") |  | =SUM(J72:K75) |  | =IFERROR(J76/$J$69,"")
+  R 77 | LONG-TERM LIABILITIES: |  |  |  |  |  |  |  |  |  |  | 
+  R 78 | WFL long-term loan |  |  |  |  |  |  | =IFERROR(E78/$E$69,"") |  |  |  | =IFERROR(J78/$J$69,"")
+  R 79 | Other banks long-term loans |  |  |  |  |  |  | =IFERROR(E79/$E$69,"") |  |  |  | =IFERROR(J79/$J$69,"")
+  R 80 | TOTAL LONG-TERM LIABILITIES: |  |  |  | =SUM(E78:G79) |  |  | =IFERROR(E80/$E$69,"") |  | =SUM(J78:K79) |  | =IFERROR(J80/$J$69,"")
+
+################################################################################
+### SHEET: 'SALES & PURCHSES CROSS CHECKS'  (67r x 16384c)
+################################################################################
+  R  2 | CROSS-CHECK 1 |  |  |  |  |  |  |  |  |  |  | 
+  R  4 | Sales Summary Base |  |  |  |  |  |  |  |  |  |  | 
+  R  5 | DETAIL |  |  |  |  | AMOUNT |  |  | ADDITIONAL INFORMATION |  |  | 
+  R  6 | On Client Estimation |  |  |  |  | ='FINANCIAL ANALYSIS'!F130 |  |  |  |  |  | 
+  R  7 | On the last Days sales |  |  |  |  | ='FINANCIAL ANALYSIS'!F131 |  |  |  |  |  | 
+  R  8 | On Sales Records / Invoice |  |  |  |  | ='FINANCIAL ANALYSIS'!F132 |  |  |  |  |  | 
+  R  9 | Account Statement |  |  |  |  | ='FINANCIAL ANALYSIS'!F133 |  |  |  |  |  | 
+  R 11 | Sales consistency, (The lea... |  |  |  |  |  |  |  | ='FINANCIAL ANALYSIS'!I135 |  |  | 
+  R 13 | Purchase Summary Base |  |  |  |  |  |  |  |  |  |  | 
+  R 14 | DETAIL |  |  |  |  | AMOUNT |  |  | ADDITIONAL INFORMATION |  |  | 
+  R 15 | On Client Estimation |  |  |  |  | ='FINANCIAL ANALYSIS'!F169 |  |  |  |  |  | 
+  R 16 | Debit side of the Bank stat... |  |  |  |  | ='FINANCIAL ANALYSIS'!F170 |  |  |  |  |  | 
+  R 17 | On Purchases Invoice |  |  |  |  | ='FINANCIAL ANALYSIS'!F171 |  |  |  |  |  | 
+  R 18 | Purchases from margin |  |  |  |  | ='FINANCIAL ANALYSIS'!F172 |  |  |  |  |  | 
+  R 20 | Purchases consistency, (Ver... |  |  |  |  |  |  |  | ='FINANCIAL ANALYSIS'!F165 |  |  | 
+  R 22 | CROSS-CHECK 2 |  |  |  |  |  | Explain the difference amon... |  |  |  |  | 
+  R 24 | ='FINANCIAL ANALYSIS'!A28 |  |  | ='FINANCIAL ANALYSIS'!D28 |  |  |  |  |  |  |  | 
+  R 25 | ='FINANCIAL ANALYSIS'!A29 |  |  | ='FINANCIAL ANALYSIS'!D29 |  |  |  |  |  |  |  | 
+  R 26 | ='FINANCIAL ANALYSIS'!A30 |  |  | ='FINANCIAL ANALYSIS'!D30 |  |  |  |  |  |  |  | 
+  R 27 | ='FINANCIAL ANALYSIS'!A32 |  |  | ='FINANCIAL ANALYSIS'!D32 |  |  |  |  |  |  |  | 
+  R 28 | Sales |  |  | =I11 |  |  |  |  |  |  |  | 
+  R 30 | PURCHASE VERIFICATION FROM ... |  |  |  |  |  |  |  |  |  |  | 
+  R 31 | P= S * (1-gwm)  |  |  |  |  | =IFERROR(D28*(1-D27),"") |  |  |  |  |  | 
+  R 33 | CROSS-CHECK 3 |  |  |  |  |  |  |  |  |  |  | 
+  R 35 | Capitalization |  |  |  |  |  | Explain the variation in th... |  |  |  |  | 
+  R 37 | Equity variation |  |  | ='FINANCIAL ANALYSIS'!E82-'FINANCIAL ANALYSIS'!J82 |  |  |  |  |  |  |  | 
+  R 38 | Monthly reinvestment capacity |  |  | ='FINANCIAL ANALYSIS'!I211-'FINANCIAL ANALYSIS'!I212 |  |  |  |  |  |  |  | 
+  R 39 | No. of months btw the analysis |  |  | 7 |  |  |  |  |  |  |  | 
+  R 40 | Accrued profit |  |  | =D38*D39 |  |  |  |  |  |  |  | 
+  R 43 | CROSS-CHECK 4 |  |  |  |  |  |  |  |  |  |  | 
+  R 45 | Treasury vs Cash sales |  |  |  |  |  |  |  |  |  |  | 
+  R 46 | Is the balance sheet's trea... |  |  |  |  |  |  |  |  |  |  | 
+  R 48 | Last Purchase date |  |  |  | 2025-10-15 00:00:00 |  |  | When inputting the date use... |  |  |  | 
+  R 49 | Evaluation date |  |  |  | 2025-10-20 00:00:00 |  |  |  |  |  |  | 
+  R 50 | Difference between P and E ... |  |  |  | =E49-E48 |  |  |  |  |  |  | 
+  R 51 | Cash Sales/Day |  |  |  | =IFERROR((D28/24),"") |  |  |  |  |  |  | 
+  R 52 | Estimated Treasury |  |  |  | =IFERROR(E51*E50,"") |  |  |  |  |  |  | 
+  R 53 | Treasury according to balan... |  |  |  | ='FINANCIAL ANALYSIS'!E51 |  |  |  |  |  |  | 
+  R 55 | Rotation of Debts |  |  |  |  |  |  |  |  |  |  | 
+  R 56 | In how many days will the d... |  |  |  |  |  |  |  |  |  |  | 
+  R 58 | Purchases |  |  |  | =F31 |  |  |  |  |  |  | 
+  R 59 | Total short-term liabilities |  |  |  | ='FINANCIAL ANALYSIS'!E76 |  |  |  |  |  |  | 
+  R 60 | Debt rotation |  |  |  | =IFERROR(E59/(E58/24),"") |  |  |  |  |  |  | 
+  R 62 | Rotation of Inventory |  |  |  |  |  |  |  |  |  |  | 
+  R 63 | In how many days will the s... |  |  |  |  |  |  |  |  |  |  | 
+  R 65 | Purchases |  |  |  | =F31 |  |  |  |  |  |  | 
+  R 66 | Stock |  |  |  | ='FINANCIAL ANALYSIS'!E55 |  |  |  |  |  |  | 
+  R 67 | Stock rotation |  |  |  | =IFERROR((E66/E65)*24,"") |  |  |  |  |  |  | 
+
+################################################################################
+### SHEET: 'MONTHLY CASHFLOW TEST'  (27r x 16c)
+################################################################################
+  R  2 |  | Description | ONE YEAR CASHFLOW ANALYSIS |  |  |  |  |  |  |  |  | 
+  R  3 |  |  | 1st month | 2nd month | 3rd month | 4th month | 5th month | 6th month | 7th month | 8th month | 9th month | 10th month
+  R  4 |  | Business Inflow | ='FINANCIAL ANALYSIS'!A113 | ='FINANCIAL ANALYSIS'!C113 | ='FINANCIAL ANALYSIS'!E113 | ='FINANCIAL ANALYSIS'!G113 | ='FINANCIAL ANALYSIS'!A115 | ='FINANCIAL ANALYSIS'!C115 | ='FINANCIAL ANALYSIS'!E115 | ='FINANCIAL ANALYSIS'!G115 | ='FINANCIAL ANALYSIS'!A117 | ='FINANCIAL ANALYSIS'!C117
+  R  5 |  | % Margin | =IFERROR((1-'FINANCIAL ANALYSIS'!$L$23)*'MONTHLY CASHFLOW TEST'!C4,"") | =IFERROR((1-'FINANCIAL ANALYSIS'!$L$23)*'MONTHLY CASHFLOW TEST'!D4,"") | =IFERROR((1-'FINANCIAL ANALYSIS'!$L$23)*'MONTHLY CASHFLOW TEST'!E4,"") | =IFERROR((1-'FINANCIAL ANALYSIS'!$L$23)*'MONTHLY CASHFLOW TEST'!F4,"") | =IFERROR((1-'FINANCIAL ANALYSIS'!$L$23)*'MONTHLY CASHFLOW TEST'!G4,"") | =IFERROR((1-'FINANCIAL ANALYSIS'!$L$23)*'MONTHLY CASHFLOW TEST'!H4,"") | =IFERROR((1-'FINANCIAL ANALYSIS'!$L$23)*'MONTHLY CASHFLOW TEST'!I4,"") | =IFERROR((1-'FINANCIAL ANALYSIS'!$L$23)*'MONTHLY CASHFLOW TEST'!J4,"") | =IFERROR((1-'FINANCIAL ANALYSIS'!$L$23)*'MONTHLY CASHFLOW TEST'!K4,"") | =IFERROR((1-'FINANCIAL ANALYSIS'!$L$23)*'MONTHLY CASHFLOW TEST'!L4,"")
+  R  6 |  | Business Expenses | ='BUSINESS EXP.'!$B$17 | ='BUSINESS EXP.'!$B$17 | ='BUSINESS EXP.'!$B$17 | ='BUSINESS EXP.'!$B$17 | ='BUSINESS EXP.'!$B$17 | ='BUSINESS EXP.'!$B$17 | ='BUSINESS EXP.'!$B$17 | ='BUSINESS EXP.'!$B$17 | ='BUSINESS EXP.'!$B$17 | ='BUSINESS EXP.'!$B$17
+  R  7 |  | Total Expenses | =SUM(C5:C6) | =SUM(D5:D6) | =SUM(E5:E6) | =SUM(F5:F6) | =SUM(G5:G6) | =SUM(H5:H6) | =SUM(I5:I6) | =SUM(J5:J6) | =SUM(K5:K6) | =SUM(L5:L6)
+  R  8 |  | Operational Cashflow | =C4-C7 | =D4-D7 | =E4-E7 | =F4-F7 | =G4-G7 | =H4-H7 | =I4-I7 | =J4-J7 | =K4-K7 | =L4-L7
+  R  9 |  | Investment |  |  |  |  |  |  |  |  |  | 
+  R 10 |  | Client Contribution (Capital) |  |  |  |  |  |  |  |  |  | 
+  R 11 |  | Sales of Immobilizations |  |  |  |  |  |  |  |  |  | 
+  R 12 |  | Total Inflow from Investement  | =C11-(C9+C10) | =D11-(D9+D10) | =E11-(E9+E10) | =F11-(F9+F10) | =G11-(G9+G10) | =H11-(H9+H10) | =I11-(I9+I10) | =J11-(J9+J10) | =K11-(K9+K10) | =L11-(L9+L10)
+  R 13 |  | New loan (WFL) | <openpyxl.worksheet.formula... | 0 | 0 |  |  |  |  |  |  | 
+  R 14 |  | Client Contribution (Capital) |  |  |  |  |  |  |  |  |  | 
+  R 15 |  | Repayment on running loan (... | ='CLIENT''S INFORMATION'!$N$33 | ='CLIENT''S INFORMATION'!$N$33 | ='CLIENT''S INFORMATION'!$N$33 | ='CLIENT''S INFORMATION'!$N$33 | ='CLIENT''S INFORMATION'!$N$33 | ='CLIENT''S INFORMATION'!$N$33 | ='CLIENT''S INFORMATION'!$N$33 | ='CLIENT''S INFORMATION'!$N$33 | ='CLIENT''S INFORMATION'!$N$33 | ='CLIENT''S INFORMATION'!$N$33
+  R 16 |  | Repayment on new loan (WFL) |  | =IFERROR('FINANCIAL ANALYSIS'!$E$193,"") | =IFERROR('FINANCIAL ANALYSIS'!$E$193,"") | =IFERROR('FINANCIAL ANALYSIS'!$E$193,"") | =IFERROR('FINANCIAL ANALYSIS'!$E$193,"") | =IFERROR('FINANCIAL ANALYSIS'!$E$193,"") | =IFERROR('FINANCIAL ANALYSIS'!$E$193,"") | =IFERROR('FINANCIAL ANALYSIS'!$E$193,"") | =IFERROR('FINANCIAL ANALYSIS'!$E$193,"") | =IFERROR('FINANCIAL ANALYSIS'!$E$193,"")
+  R 17 |  | Repayment on other loans | =IFERROR('FINANCIAL ANALYSIS'!$E$210,"") | =IFERROR('FINANCIAL ANALYSIS'!$E$210,"") | =IFERROR('FINANCIAL ANALYSIS'!$E$210,"") | =IFERROR('FINANCIAL ANALYSIS'!$E$210,"") | =IFERROR('FINANCIAL ANALYSIS'!$E$210,"") | =IFERROR('FINANCIAL ANALYSIS'!$E$210,"") | =IFERROR('FINANCIAL ANALYSIS'!$E$210,"") | =IFERROR('FINANCIAL ANALYSIS'!$E$210,"") | =IFERROR('FINANCIAL ANALYSIS'!$E$210,"") | =IFERROR('FINANCIAL ANALYSIS'!$E$210,"")
+  R 18 |  | Total Financial Inflow | =IFERROR(C13+C14-C15-C16-C17,"") | =IFERROR(D13+D14-D15-D16-D17,"") | =IFERROR(E13+E14-E15-E16-E17,"") | =IFERROR(F13+F14-F15-F16-F17,"") | =IFERROR(G13+G14-G15-G16-G17,"") | =IFERROR(H13+H14-H15-H16-H17,"") | =IFERROR(I13+I14-I15-I16-I17,"") | =IFERROR(J13+J14-J15-J16-J17,"") | =IFERROR(K13+K14-K15-K16-K17,"") | =IFERROR(L13+L14-L15-L16-L17,"")
+  R 19 |  | Family Income |  |  |  |  |  |  |  |  |  | 
+  R 20 |  | Family Expenses | ='FAMILY EXP.'!$C$24 | ='FAMILY EXP.'!$C$24 | ='FAMILY EXP.'!$C$24 | ='FAMILY EXP.'!$C$24 | ='FAMILY EXP.'!$C$24 | ='FAMILY EXP.'!$C$24 | ='FAMILY EXP.'!$C$24 | ='FAMILY EXP.'!$C$24 | ='FAMILY EXP.'!$C$24 | ='FAMILY EXP.'!$C$24
+  R 21 |  | Family Net income | =C19-C20 | =D19-D20 | =E19-E20 | =F19-F20 | =G19-G20 | =H19-H20 | =I19-I20 | =J19-J20 | =K19-K20 | =L19-L20
+  R 22 |  | Repayment on Family loan |  |  |  |  |  |  |  |  |  | 
+  R 23 |  | Total Family Inflow | =C21-C22 | =D21-D22 | =E21-E22 | =F21-F22 | =G21-G22 | =H21-H22 | =I21-I22 | =J21-J22 | =K21-K22 | =L21-L22
+  R 24 |  | Cash at end of the period | =SUM(C8,C12,C18,C23) | =SUM(D8,D12,D18,D23) | =SUM(E8,E12,E18,E23) | =SUM(F8,F12,F18,F23) | =SUM(G8,G12,G18,G23) | =SUM(H8,H12,H18,H23) | =SUM(I8,I12,I18,I23) | =SUM(J8,J12,J18,J23) | =SUM(K8,K12,K18,K23) | =SUM(L8,L12,L18,L23)
+  R 25 |  | First Liquidity | =IFERROR('FINANCIAL ANALYSIS'!E51,"") | =+C26 | =+D26 | =+E26 | =+F26 | =+G26 | =+H26 | =+I26 | =+J26 | =+K26
+  R 26 |  | Accrued Flow | =SUM(C24:C25) | =SUM(D24:D25) | =SUM(E24:E25) | =SUM(F24:F25) | =SUM(G24:G25) | =SUM(H24:H25) | =SUM(I24:I25) | =SUM(J24:J25) | =SUM(K24:K25) | =SUM(L24:L25)
+
+################################################################################
+### SHEET: 'REFERENCE'  (48r x 12c)
+################################################################################
+  R  2 | FAMILY REFERENCE 1 |  |  |  |  |  |  |  |  |  |  | 
+  R  4 | FULL NAME |  |  | maureen Udemmadu |  |  |  |  |  | SEX | F  | 
+  R  5 | HOME ADDRESS |  |  | NO 20 GOODLUCK AVENUE CUSTO... |  |  |  |  |  |  |  | 
+  R  6 | BUINESS/COMPANY NAME |  |  |  |  |  |  | BUSINESS NATURE |  |  |  | 
+  R  7 | BUSINESS/OFFICE ADDRESS |  |  |  |  |  |  |  |  |  |  | 
+  R  8 | HOW LONG HAVE YOU KNOWN THE... |  |  |  |  | 8 |  | MARITAL STATUS |  | Married |  | 
+  R  9 | RELATIONSHIP |  |  | WIFE |  |  | PHONE NUMBER |  |  | 9020222846 |  | 
+  R 10 | COMMENT FROM REFENCE PERSON: |  |  |  |  |  |  |  |  |  |  | 
+  R 14 | FAMILY REFERENCE 2 |  |  |  |  |  |  |  |  |  |  | 
+  R 16 | FULL NAME |  |  | OKEKE SIMEON CHIBUZOR |  |  |  |  |  | SEX | Male | 
+  R 17 | HOME ADDRESS |  |  | NO 12B IJEGUN ROAD IKOTUN L... |  |  |  |  |  |  |  | 
+  R 18 | BUINESS/COMPANY NAME |  |  | CHIBEST FURNITURE |  |  |  | BUSINESS NATURE |  | Commercial enterprise |  | 
+  R 19 | BUSINESS/OFFICE ADDRESS |  |  | NO 12B IJEGUN ROAD IKOTUN L... |  |  |  |  |  |  |  | 
+  R 20 | HOW LONG HAVE YOU KNOWN THE... |  |  |  |  |  |  | MARITAL STATUS |  | Married |  | 
+  R 21 | RELATIONSHIP |  |  |  |  |  | PHONE NUMBER |  |  | 8106670499 |  | 
+  R 22 | COMMENT FROM REFENCE PERSON: |  |  |  |  |  |  |  |  |  |  | 
+  R 26 | COMMERCIAL REFERENCE |  |  |  |  |  |  |  |  |  |  | 
+  R 28 | FULL NAME |  |  |  |  |  |  |  |  | SEX | F | 
+  R 29 | HOME ADDRESS |  |  |  |  |  |  |  |  |  |  | 
+  R 30 | BUINESS/COMPANY NAME |  |  |  |  |  |  | BUSINESS NATURE |  |  |  | 
+  R 31 | BUSINESS/OFFICE ADDRESS |  |  |  |  |  |  |  |  |  |  | 
+  R 32 | HOW LONG HAVE YOU KNOWN THE... |  |  |  |  |  |  | MARITAL STATUS |  |  |  | 
+  R 33 | RELATIONSHIP |  |  | LL |  |  | PHONE NUMBER |  |  |  |  | 
+  R 34 | COMMENT FROM REFENCE PERSON: |  |  |  |  |  |  |  |  |  |  | 
+  R 38 | NEIGHBOURHOOD REFERENCE |  |  |  |  |  |  |  |  |  |  | 
+  R 40 | FULL NAME |  |  |  |  |  |  |  |  | SEX |  | 
+  R 41 | HOME ADDRESS |  |  |  |  |  |  |  |  |  |  | 
+  R 42 | BUINESS/COMPANY NAME |  |  |  |  |  |  | BUSINESS NATURE |  |  |  | 
+  R 43 | BUSINESS/OFFICE ADDRESS |  |  |  |  |  |  |  |  |  |  | 
+  R 44 | HOW LONG HAVE YOU KNOWN THE... |  |  |  |  |  |  | MARITAL STATUS |  |  |  | 
+  R 45 | RELATIONSHIP |  |  |  |  |  | PHONE NUMBER |  |  |  |  | 
+  R 46 | COMMENT FROM REFENCE PERSON: |  |  |  |  |  |  |  |  |  |  | 
+
+################################################################################
+### SHEET: "GUARANTORS' INFO"  (48r x 14c)
+################################################################################
+  R  2 | GUARANTOR |  |  |  | FIRST GUARANTOR |  |  |  |  |  |  | 
+  R  4 |  |  |  |  | BUSINESS/COMPANY NAME |  |  |  | CEE STORES LTD |  |  | 
+  R  5 |  |  |  |  | BRIEF DESCRIPTION OF THE BU... |  |  |  | ELECTRONIC DEALER |  |  | 
+  R  6 |  |  |  |  | MONTHLY SALARY IF EMPLOYED |  |  |  | NIL |  | PHONE NUMBER | 
+  R  7 |  |  |  |  | BUSINESS/COMPANY ADDRESS |  |  |  | 7B IJEGUN ROAD IKOTUN |  |  | 
+  R  8 |  |  |  |  |  |  |  |  |  |  |  | LANDMARK
+  R 10 | BUSINESS OWNER'S NAME |  |  |  | IFENATUDRAH ANSLEM OKWUNNA |  |  |  |  |  |  | SEX
+  R 11 | RESIDENCE ADDRESS |  |  |  | 8 AKIN TUGBIYELE STREET ABA... |  |  |  |  |  |  | 
+  R 12 | HOUSE OWNERSHIP STAUS |  |  | OWNED |  |  | FAMILY |  |  | RENTED |  | NO. OF STAY IN THE HOUSE
+  R 13 | BRIEF DESCRIPTION OF THE HOUSE |  |  |  |  |  |  |  |  |  |  | 
+  R 14 |  |  |  |  |  |  |  |  | RELATIONSHIP WITH CUSTOMER |  |  | 

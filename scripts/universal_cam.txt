@@ -1,0 +1,2339 @@
+FILE: C:\xampp\htdocs\bank\resources\views\livewire\admin\loan\layouts\universal-cam.blade.php
+==================================================
+@php
+    // =========================================================
+    // 1. GLOBAL INITIALIZATION & MODELS (COMPUTED PROPERTY SAFE)
+    // =========================================================
+    
+    $loanModel = $this->loan;
+    $appraisalModel = $this->appraisal;
+
+    $showConsoleInitial = in_array($mode, ['vetting', 'structuring', 'risk', 'analyst', 'cfo', 'legal', 'md']) || 
+                          ($workflow_state ?? '') === 'REVIEW' || 
+                          ($loanModel->current_step ?? '') === 'QUERY_RESPONSE';
+
+    // =========================================================
+    // 2. THE BULLETPROOF WATERFALL CASCADE
+    // =========================================================
+    $hud_repaymentCapacity = $repaymentCapacity ?? 0;
+    
+    // Base JSON Snapshots
+    $lo_snap = is_string($appraisalModel->lo_snapshot ?? '') ? json_decode($appraisalModel->lo_snapshot, true) : ($appraisalModel->lo_snapshot ?? []);
+    $bm_snap = is_string($appraisalModel->bm_snapshot ?? '') ? json_decode($appraisalModel->bm_snapshot, true) : ($appraisalModel->bm_snapshot ?? []);
+    $ana_snap = is_string($appraisalModel->analyst_snapshot ?? '') ? json_decode($appraisalModel->analyst_snapshot, true) : ($appraisalModel->analyst_snapshot ?? []);
+    $hoc_snap = is_string($appraisalModel->hoc_snapshot ?? '') ? json_decode($appraisalModel->hoc_snapshot, true) : ($appraisalModel->hoc_snapshot ?? []);
+    $cro_snap = is_string($appraisalModel->cro_snapshot ?? '') ? json_decode($appraisalModel->cro_snapshot, true) : ($appraisalModel->cro_snapshot ?? []);
+    $cfo_snap = is_string($appraisalModel->cfo_snapshot ?? '') ? json_decode($appraisalModel->cfo_snapshot, true) : ($appraisalModel->cfo_snapshot ?? []);
+    $leg_snap = is_string($appraisalModel->legal_snapshot ?? '') ? json_decode($appraisalModel->legal_snapshot, true) : ($appraisalModel->legal_snapshot ?? []);
+    $md_snap = is_string($appraisalModel->md_snapshot ?? '') ? json_decode($appraisalModel->md_snapshot, true) : ($appraisalModel->md_snapshot ?? []);
+
+    // A. Original Request
+    $val_req_amt = (float)$loanModel->amount;
+    $val_req_ten = (int)$loanModel->duration;
+    $val_req_rate = (float)($loanModel->plan->interest ?? 54);
+
+    // B. Loan Officer
+    $val_lo_amt = (float)str_replace(',', '', $lo_snap['recommendation']['suggested_amount'] ?? $lo_snap['recommendation']['amount'] ?? $val_req_amt);
+    $val_lo_ten = (int)($lo_snap['recommendation']['suggested_tenor'] ?? $lo_snap['recommendation']['tenor'] ?? $val_req_ten);
+
+    // C. Branch Manager
+    $val_bm_amt = (float)str_replace(',', '', $bm_snap['recommendation']['amount'] ?? $appraisalModel->bm_recommended_amount ?? $val_lo_amt);
+    $val_bm_ten = (int)($bm_snap['recommendation']['tenor'] ?? $appraisalModel->bm_recommended_tenor ?? $val_lo_ten);
+
+    // D. Analyst
+    $val_ana_amt = (float)str_replace(',', '', $ana_snap['recommendation']['amount'] ?? $ana_snap['recommendation']['suggested_amount'] ?? $appraisalModel->analyst_recommended_amount ?? $val_bm_amt);
+    $val_ana_ten = (int)($ana_snap['recommendation']['tenor'] ?? $ana_snap['recommendation']['suggested_tenor'] ?? $appraisalModel->analyst_recommended_tenor ?? $val_bm_ten);
+    $val_ana_rate = (float)($appraisalModel->analyst_interest_rate ?? $val_req_rate);
+    $ana_comment = $ana_snap['analyst_executive_summary'] ?? '';
+
+    // E. Head of Credit
+    $val_hoc_amt = (float)str_replace(',', '', $hoc_snap['recommendation']['amount'] ?? $appraisalModel->hoc_approved_amount ?? $appraisalModel->final_approved_amount ?? $val_ana_amt);
+    $val_hoc_ten = (int)($hoc_snap['recommendation']['tenor'] ?? $appraisalModel->hoc_approved_tenor ?? $appraisalModel->final_approved_tenor ?? $val_ana_ten);
+    $val_hoc_rate = (float)($hoc_snap['recommendation']['interest_rate'] ?? $appraisalModel->hoc_interest_rate ?? $val_ana_rate);
+
+    // F. Chief Risk Officer
+    $val_cro_amt = (float)str_replace(',', '', $cro_snap['recommendation']['amount'] ?? $appraisalModel->cro_approved_amount ?? $appraisalModel->final_approved_amount ?? $val_hoc_amt);
+    $val_cro_ten = (int)($cro_snap['recommendation']['tenor'] ?? $appraisalModel->cro_approved_tenor ?? $appraisalModel->final_approved_tenor ?? $val_hoc_ten);
+    $cro_comment = $cro_snap['cro_comment'] ?? '';
+
+    // G. Chief Financial Officer
+    $val_cfo_amt = (float)str_replace(',', '', $cfo_snap['recommendation']['amount'] ?? $loanModel->appraised_amount ?? $val_cro_amt);
+    $val_cfo_ten = (int)($cfo_snap['recommendation']['tenor'] ?? $loanModel->appraised_tenor ?? $val_cro_ten);
+    $cfo_comment = $cfo_snap['cfo_comment'] ?? '';
+
+    // H. Legal Department
+    $val_leg_amt = (float)str_replace(',', '', $leg_snap['recommendation']['amount'] ?? $val_cfo_amt);
+    $val_leg_ten = (int)($leg_snap['recommendation']['tenor'] ?? $val_cfo_ten);
+    $leg_comment = $leg_snap['legal_comment'] ?? '';
+
+    // I. Managing Director
+    $val_md_amt = (float)str_replace(',', '', $md_snap['recommendation']['amount'] ?? $appraisalModel->final_approved_amount ?? $val_leg_amt);
+    $val_md_ten = (int)($md_snap['recommendation']['tenor'] ?? $appraisalModel->final_approved_tenor ?? $val_leg_ten);
+    $md_comment = $md_snap['md_comment'] ?? '';
+
+    // =========================================================
+    // 3. NIBSS VERIFICATION DATA (BVN, CAC, CREDIT BUREAU, CRC FILE)
+    // =========================================================
+    
+    $nibss_data = $lo_snap['nibss_verifications'] ?? [];
+    
+    // BVN Verification Status
+    $bvn_verification = $nibss_data['bvn'] ?? [];
+    $bvn_status = $bvn_verification['status'] ?? ($loanModel->user->bvn_verified ?? false ? 'verified' : 'pending');
+    $bvn_match_score = $bvn_verification['match_score'] ?? ($loanModel->user->bvn_match_score ?? 0);
+    $bvn_verified_at = $bvn_verification['verified_at'] ?? ($loanModel->user->bvn_verified_at ?? null);
+    
+    // CAC Verification Status
+    $cac_verification = $nibss_data['cac'] ?? [];
+    $cac_status = $cac_verification['status'] ?? null;
+    $cac_verified_at = $cac_verification['verified_at'] ?? ($loanModel->user->business->cac_verified_at ?? null);
+    $cac_data = $cac_verification['data'] ?? [];
+    
+    // Credit Bureau Data
+    $crc_data = $lo_snap['crc_data'] ?? [];
+    $credit_score = $crc_data['credit_score'] ?? null;
+    $credit_bureau_queried_at = $crc_data['queried_at'] ?? null;
+    $negative_status = $crc_data['negative_status'] ?? false;
+    $watchlist_status = $crc_data['watchlist_status'] ?? 'CLEAR';
+    $total_exposure = $crc_data['total_exposure'] ?? 0;
+    
+    // Running Loans / Existing Facilities
+    $running_loans = $lo_snap['running_loans'] ?? [];
+
+    // ðŸš¨ CRC FILE UPLOAD STATUS (Like CAC Evidence)
+    $crc_file_path = $loanModel->crc_report_path ?? null;
+    $crc_uploaded_at = $loanModel->crc_report_uploaded_at ?? null;
+    $crc_uploaded_by = $loanModel->crc_report_uploaded_by ?? null;
+
+    // =========================================================
+    // 4. LIVE TYPING OVERRIDES (Real-Time UI Updates)
+    // =========================================================
+    
+    if ($mode === 'edit') {
+        if (property_exists($this, 'suggested_amount') && $this->suggested_amount) {
+            $val_lo_amt = (float)str_replace(',', '', $this->suggested_amount);
+        }
+        if (property_exists($this, 'suggested_tenor') && $this->suggested_tenor) {
+            $val_lo_ten = (int)$this->suggested_tenor;
+        }
+    }
+    elseif ($mode === 'vetting' && property_exists($this, 'bm_recommended_amount') && $this->bm_recommended_amount) {
+        $val_bm_amt = (float)str_replace(',', '', $this->bm_recommended_amount);
+        $val_bm_ten = (int)$this->bm_recommended_tenor;
+    }
+    elseif ($mode === 'analyst' && property_exists($this, 'analyst_recommended_amount') && $this->analyst_recommended_amount) {
+        $val_ana_amt = (float)str_replace(',', '', $this->analyst_recommended_amount);
+        $val_ana_ten = (int)$this->analyst_recommended_tenor;
+        $val_ana_rate = (float)($this->analyst_interest_rate ?? $val_ana_rate);
+        $val_hoc_amt = $val_ana_amt; 
+    }
+    elseif ($mode === 'structuring' && property_exists($this, 'hoc_approved_amount') && $this->hoc_approved_amount) {
+        $val_hoc_amt = (float)str_replace(',', '', $this->hoc_approved_amount);
+        $val_hoc_ten = (int)$this->hoc_approved_tenor;
+        $val_hoc_rate = (float)($this->hoc_interest_rate ?? $val_hoc_rate);
+        $val_cro_amt = $val_hoc_amt; 
+    }
+    elseif ($mode === 'risk' && property_exists($this, 'cro_recommended_amount') && $this->cro_recommended_amount) {
+        $live_cro_amt = (float)str_replace(',', '', $this->cro_recommended_amount);
+        if ($live_cro_amt == $val_req_amt && $val_hoc_amt != $val_req_amt && empty($cro_snap)) {
+            $val_cro_amt = $val_hoc_amt;
+            $val_cro_ten = $val_hoc_ten;
+        } else {
+            $val_cro_amt = $live_cro_amt;
+            $val_cro_ten = (int)$this->cro_recommended_tenor;
+        }
+        $val_cfo_amt = $val_cro_amt; 
+        $cro_comment = property_exists($this, 'cro_comment') ? $this->cro_comment : $cro_comment;
+    }
+    elseif ($mode === 'cfo' && property_exists($this, 'cfo_recommended_amount') && $this->cfo_recommended_amount) {
+        $val_cfo_amt = (float)str_replace(',', '', $this->cfo_recommended_amount);
+        $val_cfo_ten = (int)$this->cfo_recommended_tenor;
+        $val_leg_amt = $val_cfo_amt; 
+        $cfo_comment = property_exists($this, 'cfo_comment') ? $this->cfo_comment : $cfo_comment;
+    }
+    elseif ($mode === 'legal' && property_exists($this, 'legal_recommended_amount') && $this->legal_recommended_amount) {
+        $val_leg_amt = (float)str_replace(',', '', $this->legal_recommended_amount);
+        $val_leg_ten = (int)$this->legal_recommended_tenor;
+        $val_md_amt = $val_leg_amt;
+        $leg_comment = property_exists($this, 'legal_comment') ? $this->legal_comment : $leg_comment;
+    }
+    elseif ($mode === 'md' && property_exists($this, 'md_approved_amount') && $this->md_approved_amount) {
+        $val_md_amt = (float)str_replace(',', '', $this->md_approved_amount);
+        $val_md_ten = (int)$this->md_approved_tenor;
+        $md_comment = property_exists($this, 'md_comment') ? $this->md_comment : $md_comment;
+    }
+
+    // Assign HUD Globals
+    $hud_loanPrincipal = match($mode) {
+        'edit' => $val_lo_amt, 'vetting' => $val_bm_amt, 'analyst' => $val_ana_amt,
+        'structuring' => $val_hoc_amt, 'risk' => $val_cro_amt, 'cfo' => $val_cfo_amt,
+        'legal' => $val_leg_amt, 'md' => $val_md_amt, default => $val_md_amt
+    };
+    $hud_tenor = match($mode) {
+        'edit' => $val_lo_ten, 'vetting' => $val_bm_ten, 'analyst' => $val_ana_ten,
+        'structuring' => $val_hoc_ten, 'risk' => $val_cro_ten, 'cfo' => $val_cfo_ten,
+        'legal' => $val_leg_ten, 'md' => $val_md_ten, default => $val_md_ten
+    };
+    $hud_storedRate = match($mode) {
+        'edit', 'vetting' => $val_req_rate, 'analyst' => $val_ana_rate,
+        default => $val_hoc_rate
+    };
+
+    // =========================================================
+    // 5. BULLETPROOF DSR CALCULATION HELPER
+    // =========================================================
+    $calcPMT = function($p, $r, $n) {
+        if($p <= 0 || $n <= 0) return 0;
+        $mr = ($r > 20) ? ($r / 12 / 100) : ($r / 100);
+        if($mr == 0) return $p / $n;
+        return ($p * $mr * pow(1+$mr, $n)) / (pow(1+$mr, $n) - 1);
+    };
+
+    $timeline_base_rate = $val_hoc_rate ?? 54;
+    $req_dsr = ($hud_repaymentCapacity > 0) ? ($calcPMT($val_req_amt, $val_req_rate, $val_req_ten) / $hud_repaymentCapacity) * 100 : 0;
+    $lo_dsr  = ($hud_repaymentCapacity > 0) ? ($calcPMT($val_lo_amt, $timeline_base_rate, $val_lo_ten) / $hud_repaymentCapacity) * 100 : 0;
+    $bm_dsr  = ($hud_repaymentCapacity > 0) ? ($calcPMT($val_bm_amt, $timeline_base_rate, $val_bm_ten) / $hud_repaymentCapacity) * 100 : 0;
+    $ana_dsr = ($hud_repaymentCapacity > 0) ? ($calcPMT($val_ana_amt, $val_ana_rate, $val_ana_ten) / $hud_repaymentCapacity) * 100 : 0;
+    $hoc_dsr = ($hud_repaymentCapacity > 0) ? ($calcPMT($val_hoc_amt, $val_hoc_rate, $val_hoc_ten) / $hud_repaymentCapacity) * 100 : 0;
+    $cro_dsr = ($hud_repaymentCapacity > 0) ? ($calcPMT($val_cro_amt, $val_hoc_rate, $val_cro_ten) / $hud_repaymentCapacity) * 100 : 0;
+    $cfo_dsr = ($hud_repaymentCapacity > 0) ? ($calcPMT($val_cfo_amt, $val_hoc_rate, $val_cfo_ten) / $hud_repaymentCapacity) * 100 : 0;
+    $leg_dsr = ($hud_repaymentCapacity > 0) ? ($calcPMT($val_leg_amt, $val_hoc_rate, $val_leg_ten) / $hud_repaymentCapacity) * 100 : 0;
+    $md_dsr  = ($hud_repaymentCapacity > 0) ? ($calcPMT($val_md_amt, $val_hoc_rate, $val_md_ten) / $hud_repaymentCapacity) * 100 : 0;
+
+    $hud_dsr_percent = ($hud_repaymentCapacity > 0) ? ($calcPMT($hud_loanPrincipal, $hud_storedRate, $hud_tenor) / $hud_repaymentCapacity) * 100 : 0;
+    
+    // Utilities
+    $riskGrade = $riskGrade ?? ($engine_results['rating']['grade'] ?? 'F');
+    $isTimeMachineActive = isset($active_snapshot_view) && $active_snapshot_view !== 'current';
+    $isUniversallyLocked = ($mode === 'read') || $isTimeMachineActive;
+    
+    $auditSource = !empty($governance_audits) ? $governance_audits : ($tab_audits ?? []);
+    
+    $ignoredTabs = ['structure', 'risk', 'treasury', 'legal', 'md_sanction', 'bm_recommendation'];
+    $totalTabs = count(array_filter(array_keys($auditSource), fn($k) => !in_array($k, $ignoredTabs))); 
+    $verifiedCount = count(array_filter($auditSource, fn($t, $k) => ($t['status'] ?? '') === 'verified' && !in_array($k, $ignoredTabs), ARRAY_FILTER_USE_BOTH));
+    $hasQueries = count(array_filter($auditSource, fn($t) => ($t['status'] ?? '') === 'queried')) > 0;
+    $isReadyForApproval = ($verifiedCount >= $totalTabs) && !$hasQueries;
+@endphp
+
+<div x-data="{ 
+    showConsole: @json($showConsoleInitial),
+    isMobile: false,
+    decision: null,
+    activeDecisionView: null,
+    showBvnModal: false,
+    showCacModal: false,
+    showCrcModal: false,
+    showCreditBureauModal: false
+}" 
+@resize.window="isMobile = window.innerWidth < 992"
+@toggle-audit-console.window="showConsole = !showConsole">
+
+    <style>
+        /* ================================================ */
+        /* SIDEBAR RESPONSIVE EXPANSION                     */
+        /* ================================================ */
+        
+        :root {
+            --sidebar-width-expanded: 250px;
+            --sidebar-width-collapsed: 70px;
+            --content-transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .cam-main-container {
+            width: 100%;
+            transition: all var(--content-transition);
+        }
+        
+        /* ========== MODERN GLASSMORPHISM HUD ========== */
+        .cam-glass { 
+            background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(248,250,252,0.98)); 
+            backdrop-filter: blur(20px); 
+            border-bottom: 1px solid rgba(229,231,235,0.8);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+        
+        /* ========== LIGHT GREEN AUDIT SIDEBAR ========== */
+        .vetting-sidebar { 
+            background: linear-gradient(180deg, #ecfdf5 0%, #d1fae5 50%, #a7f3d0 100%); 
+            color: #065f46; 
+            height: 100%; 
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
+            z-index: 100; 
+            border-left: 2px solid rgba(16, 185, 129, 0.3);
+        } 
+        
+        @media (max-width: 991px) {
+            .vetting-sidebar { 
+                position: fixed; 
+                top: 0; 
+                right: 0; 
+                width: 85%; 
+                max-width: 340px; 
+                height: 100vh; 
+                box-shadow: -10px 0 40px rgba(16, 185, 129, 0.2); 
+                overflow-y: auto; 
+                border-left: none;
+            }
+            .mobile-overlay { 
+                position: fixed; 
+                top: 0; 
+                left: 0; 
+                width: 100%; 
+                height: 100vh; 
+                background: rgba(0,0,0,0.6); 
+                z-index: 99;
+                backdrop-filter: blur(4px);
+            }
+        }
+        
+        .vetting-sidebar .text-gray-800, 
+        .vetting-sidebar .form-label { color: #065f46 !important; }
+        .vetting-sidebar .text-muted, 
+        .vetting-sidebar .text-gray-500, 
+        .vetting-sidebar .text-gray-600 { color: #047857 !important; }
+        .vetting-sidebar .card { 
+            background: rgba(255, 255, 255, 0.9); 
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            backdrop-filter: blur(10px);
+        }
+        
+        /* ========== TIMELINE VISUALIZATION ========== */
+        .timeline-track { 
+            border-left: 2px dashed rgba(16, 185, 129, 0.4); 
+            margin-left: 24px; 
+            position: relative; 
+            padding-bottom: 16px; 
+        }
+        .timeline-node { 
+            width: 14px; 
+            height: 14px; 
+            border-radius: 50%; 
+            position: absolute; 
+            left: -8px; 
+            top: 0; 
+            border: 3px solid #ecfdf5;
+            box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+        }
+        .timeline-card { 
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(236, 253, 245, 0.95)); 
+            border: 1px solid rgba(16, 185, 129, 0.3); 
+            border-radius: 12px; 
+            margin-left: 20px; 
+            padding: 14px; 
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.1);
+        }
+        .timeline-card:hover { 
+            border-color: rgba(16, 185, 129, 0.5); 
+            transform: translateX(4px);
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.2);
+        }
+        .dsr-badge { 
+            font-size: 10px; 
+            font-weight: 800; 
+            padding: 3px 8px; 
+            border-radius: 6px; 
+            letter-spacing: 0.5px;
+        }
+        
+        /* ========== NIBSS VERIFICATION BADGES ========== */
+        .verification-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .verification-badge:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .verification-badge.verified {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.05));
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        .verification-badge.pending {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(245, 158, 11, 0.05));
+            color: #f59e0b;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+        .verification-badge.failed {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.05));
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+        
+        /* ========== CRC FILE BADGE (Like CAC) ========== */
+        .crc-file-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .crc-file-badge:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+        }
+        .crc-file-badge.uploaded {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.12), rgba(220, 38, 38, 0.05));
+            color: #dc2626;
+            border: 1px solid rgba(220, 38, 38, 0.3);
+        }
+        .crc-file-badge.pending {
+            background: linear-gradient(135deg, rgba(156, 163, 175, 0.15), rgba(156, 163, 175, 0.05));
+            color: #6b7280;
+            border: 1px solid rgba(156, 163, 175, 0.3);
+        }
+        
+        /* ========== CREDIT SCORE DISPLAY ========== */
+        .credit-score-display {
+            font-size: 32px;
+            font-weight: 900;
+            line-height: 1;
+        }
+        .credit-score-excellent { color: #10b981; }
+        .credit-score-good { color: #22c55e; }
+        .credit-score-fair { color: #f59e0b; }
+        .credit-score-poor { color: #ef4444; }
+        
+        /* ========== TAB STATUS INDICATORS ========== */
+        .verified-tab { 
+            border-bottom: 4px solid #10b981 !important; 
+            color: #10b981 !important; 
+            background: linear-gradient(180deg, rgba(16, 185, 129, 0.08) 0%, transparent 100%);
+        }
+        .queried-tab { 
+            border-bottom: 4px solid #ef4444 !important; 
+            color: #ef4444 !important; 
+            background: linear-gradient(180deg, rgba(239, 68, 68, 0.08) 0%, transparent 100%);
+        }
+        
+        /* ========== HUD METRICS STYLING ========== */
+        .cam-metric { 
+            min-width: 120px; 
+            border-radius: 12px; 
+            padding: 12px 16px; 
+            background: linear-gradient(135deg, #ffffff, #f8fafc); 
+            border: 1px solid rgba(229,231,235,0.8); 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.8); 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: flex-start;
+            transition: all 0.3s ease;
+        }
+        .cam-metric:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            transform: translateY(-1px);
+        }
+        .cam-label { 
+            font-size: 10px; 
+            letter-spacing: 0.8px; 
+            text-transform: uppercase; 
+            color: #6b7280; 
+            font-weight: 700; 
+            margin-bottom: 6px; 
+        }
+        .cam-value { 
+            font-size: 18px; 
+            font-weight: 900; 
+            color: #111827; 
+            line-height: 1; 
+        }
+        
+        /* ========== GRADE BOX STYLING ========== */
+        .grade-box { 
+            border: 2px solid; 
+            background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(248,250,252,0.95));
+            min-width: 100px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+        .grade-A, .grade-B { 
+            border-color: #10b981; 
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(16, 185, 129, 0.02));
+        }
+        .grade-A .cam-value, .grade-B .cam-value { color: #10b981; }
+        .grade-C { 
+            border-color: #f59e0b;
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.02));
+        }
+        .grade-C .cam-value { color: #f59e0b; }
+        .grade-D, .grade-E, .grade-F { 
+            border-color: #ef4444;
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(239, 68, 68, 0.02));
+        }
+        .grade-D .cam-value, .grade-E .cam-value, .grade-F .cam-value { color: #ef4444; }
+        
+        /* ========== DECISION BUTTONS BAR ========== */
+        .decision-bar {
+            background: linear-gradient(90deg, #1f2937, #111827);
+            border-radius: 10px;
+            padding: 6px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);
+            border: 1px solid rgba(75, 85, 99, 0.3);
+        }
+        .decision-bar .btn {
+            border-radius: 6px;
+            font-size: 11px;
+            letter-spacing: 0.3px;
+            transition: all 0.2s ease;
+        }
+        .decision-bar .btn:hover {
+            transform: translateY(-1px);
+        }
+        
+        /* ========== CLIENT AVATAR ========== */
+        .client-avatar {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+        }
+        
+        /* ========== TAB NAVIGATION ========== */
+        .nav-tabs-custom {
+            background: linear-gradient(180deg, #f8fafc, #ffffff);
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .nav-tabs-custom .nav-link {
+            border-radius: 8px 8px 0 0;
+            margin: 0 2px;
+            transition: all 0.3s ease;
+        }
+        .nav-tabs-custom .nav-link:hover:not(.active) {
+            background: rgba(99, 102, 241, 0.05);
+        }
+        .nav-tabs-custom .nav-link.active {
+            background: linear-gradient(180deg, rgba(99, 102, 241, 0.1), transparent);
+            border-bottom: 3px solid #6366f1;
+        }
+        
+        /* ========== ALERT CARDS ========== */
+        .alert-card {
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            border: 1px dashed;
+        }
+        .alert-card.alert-success {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(16, 185, 129, 0.02));
+            border-color: rgba(16, 185, 129, 0.3);
+        }
+        .alert-card.alert-warning {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.02));
+            border-color: rgba(245, 158, 11, 0.3);
+        }
+        .alert-card.alert-danger {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(239, 68, 68, 0.02));
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+        
+        /* ========== HISTORICAL VIEW CARDS ========== */
+        .historical-card {
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            transition: all 0.3s ease;
+        }
+        .historical-card:hover {
+            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+            transform: translateY(-2px);
+        }
+        .historical-card .card-header { padding: 16px 20px; }
+        .historical-card .card-body { padding: 20px; }
+    </style>
+
+    {{-- ========================================================= --}}
+    {{-- TOP HUD (STICKY HEADER)                                 --}}
+    {{-- ========================================================= --}}
+    <div class="card mb-3 mb-lg-6 shadow-lg sticky-top cam-glass rounded-4" style="z-index:90; top:60px;">
+        <div class="card-body px-4 px-lg-6 py-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-4">
+                
+                {{-- CLIENT IDENTITY --}}
+                <div class="d-flex align-items-center me-lg-5 w-100 w-lg-auto">
+                    <div class="symbol symbol-40px symbol-lg-55px me-4">
+                        <div class="symbol-label client-avatar text-white fw-bolder fs-3">
+                            {{ substr($client_profile['first_name'] ?? 'C', 0, 1) }}
+                        </div>
+                    </div>
+                    <div class="d-flex flex-column overflow-hidden">
+                        <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
+                            <h3 class="fs-5 fs-lg-4 fw-bolder mb-0 text-dark">{{ $client_profile['full_name'] ?? 'Client Name' }}</h3>
+                            
+                            {{-- NUBAN DISPLAY BADGE --}}
+                            @if(!empty($loanModel->user->account_number))
+                                <span class="badge badge-light-primary border border-primary border-dashed fw-bold px-3 py-2 rounded-pill">
+                                    <i class="fas fa-university text-primary me-1"></i> {{ $loanModel->user->account_number }}
+                                </span>
+                            @else
+                                <span class="badge badge-light-danger border border-danger border-dashed fw-bold px-3 py-2 rounded-pill">
+                                    <i class="fas fa-exclamation-triangle text-danger me-1"></i> NUBAN PENDING
+                                </span>
+                            @endif
+                            
+                            {{-- BVN VERIFICATION BADGE --}}
+                            @if($bvn_status === 'verified')
+                                <span class="verification-badge verified" @click="showBvnModal = true">
+                                    <i class="fas fa-check-circle me-1"></i> BVN Verified
+                                </span>
+                            @elseif($bvn_status === 'pending')
+                                <span class="verification-badge pending">
+                                    <i class="fas fa-clock me-1"></i> BVN Pending
+                                </span>
+                            @elseif($bvn_status === 'failed')
+                                <span class="verification-badge failed">
+                                    <i class="fas fa-times-circle me-1"></i> BVN Failed
+                                </span>
+                            @endif
+                            
+                            {{-- CAC VERIFICATION BADGE --}}
+                            @if($cac_status === 'found')
+                                <span class="verification-badge verified" @click="showCacModal = true">
+                                    <i class="fas fa-building me-1"></i> CAC Verified
+                                </span>
+                            @elseif($cac_status === 'not_found' && !empty($business_profile['rc_bn_number']))
+                                <span class="verification-badge pending">
+                                    <i class="fas fa-search me-1"></i> CAC Not Found
+                                </span>
+                            @endif
+                            
+                            {{-- ðŸš¨ CRC FILE UPLOAD BADGE (Like CAC Evidence) ðŸš¨ --}}
+                            @if(!empty($crc_file_path))
+                                <span class="crc-file-badge uploaded" @click="showCrcModal = true">
+                                    <i class="fas fa-file-contract me-1"></i> CRC Report
+                                    <i class="fas fa-check-circle ms-1"></i>
+                                </span>
+                            @else
+                                <span class="crc-file-badge pending">
+                                    <i class="fas fa-file-upload me-1"></i> CRC Pending
+                                </span>
+                            @endif
+                            
+                            {{-- CREDIT SCORE BADGE --}}
+                            @if(!empty($credit_score))
+                                <span class="verification-badge {{ $credit_score >= 600 ? 'verified' : ($credit_score >= 400 ? 'pending' : 'failed') }}" @click="showCreditBureauModal = true">
+                                    <i class="fas fa-chart-line me-1"></i> Score: {{ $credit_score }}
+                                </span>
+                            @endif
+                        </div>
+                        <div class="d-flex align-items-center gap-2 text-gray-500 fs-8 fw-bold">
+                            <span class="text-truncate" style="max-width: 180px;">{{ $business_profile['name'] ?? 'Business Name' }}</span>
+                            
+                            @if(!empty($business_profile['rc_bn_number']) && $business_profile['rc_bn_number'] !== 'Not Registered')
+                                <span class="text-primary">â€¢ RC/BN: {{ $business_profile['rc_bn_number'] }}</span>
+                            @endif
+                            
+                            <span class="badge badge-{{ in_array($mode, ['vetting', 'analyst']) ? 'warning' : 'success' }} fw-bold px-3 py-2 rounded-pill">
+                                {{ strtoupper($mode) }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- HISTORICAL DECISION ARCHIVE (HEADER BUTTONS) --}}
+                @if(in_array($mode, ['vetting', 'analyst', 'structuring', 'risk', 'cfo', 'legal', 'md', 'read']))
+                <div class="decision-bar d-flex align-items-center mx-auto overflow-auto" style="max-width: 100%; scrollbar-width: none;">
+
+                    @if((!empty($bm_snap) || !empty($appraisalModel->bm_recommended_amount)) && $mode !== 'vetting')
+                        <button @click="activeDecisionView = 'bm'" class="btn btn-sm px-4 py-2 text-nowrap fw-bold" 
+                                :class="activeDecisionView === 'bm' ? 'btn-warning text-dark' : 'btn-active-light text-gray-400'">
+                            <i class="fas fa-user-tie me-1"></i> BM Decision
+                        </button>
+                    @endif
+
+                    @if((!empty($ana_snap) || !empty($appraisalModel->analyst_recommended_amount)) && $mode !== 'analyst')
+                        <button @click="activeDecisionView = 'analyst'" class="btn btn-sm px-4 py-2 text-nowrap fw-bold" 
+                                :class="activeDecisionView === 'analyst' ? 'btn-info text-dark' : 'btn-active-light text-gray-400'">
+                            <i class="fas fa-chart-bar me-1"></i> Analyst
+                        </button>
+                    @endif
+
+                    @if((!empty($hoc_snap) || !empty($appraisalModel->hoc_approved_amount)) && $mode !== 'structuring')
+                        <button @click="activeDecisionView = 'hoc'" class="btn btn-sm px-4 py-2 text-nowrap fw-bold" 
+                                :class="activeDecisionView === 'hoc' ? 'btn-success' : 'btn-active-light text-gray-400'">
+                            <i class="fas fa-check-double me-1"></i> HOC Decision
+                        </button>
+                    @endif
+
+                    @if((!empty($cro_snap) || !empty($appraisalModel->cro_approved_amount) || !empty($appraisalModel->final_approved_amount)) && $mode !== 'risk')
+                        <button @click="activeDecisionView = 'cro'" class="btn btn-sm px-4 py-2 text-nowrap fw-bold" 
+                                :class="activeDecisionView === 'cro' ? 'btn-danger' : 'btn-active-light text-gray-400'">
+                            <i class="fas fa-shield-alt me-1"></i> CRO Decision
+                        </button>
+                    @endif
+
+                    @if((!empty($cfo_snap) || !empty($appraisalModel->cfo_snapshot)) && $mode !== 'cfo')
+                        <button @click="activeDecisionView = 'cfo'" class="btn btn-sm px-4 py-2 text-nowrap fw-bold" 
+                                :class="activeDecisionView === 'cfo' ? 'btn-warning text-dark' : 'btn-active-light text-gray-400'">
+                            <i class="fas fa-coins me-1"></i> CFO Decision
+                        </button>
+                    @endif
+
+                    @if((!empty($leg_snap) || !empty($appraisalModel->legal_snapshot)) && $mode !== 'legal')
+                        <button @click="activeDecisionView = 'legal'" class="btn btn-sm px-4 py-2 text-nowrap fw-bold" 
+                                :class="activeDecisionView === 'legal' ? 'btn-primary' : 'btn-active-light text-gray-400'">
+                            <i class="fas fa-balance-scale me-1"></i> Legal Decision
+                        </button>
+                    @endif
+
+                    @if((!empty($md_snap) || !empty($appraisalModel->md_snapshot)) && $mode !== 'md')
+                        <button @click="activeDecisionView = 'md'" class="btn btn-sm px-4 py-2 text-nowrap fw-bold" 
+                                :class="activeDecisionView === 'md' ? 'btn-success' : 'btn-active-light text-gray-400'">
+                            <i class="fas fa-crown me-1"></i> MD Sanction
+                        </button>
+                    @endif
+
+                    @if($mode !== 'read')
+                        <div class="border-start border-gray-600 mx-2 h-25px"></div>
+                        <button @click="activeDecisionView = null" class="btn btn-sm px-4 py-2 text-nowrap fw-bold" 
+                                :class="!activeDecisionView ? 'bg-white text-dark shadow-sm' : 'btn-active-light text-gray-400'">
+                            <i class="fas fa-circle text-success fs-9 me-1" :class="!activeDecisionView ? '' : 'opacity-50'"></i> Live Mode
+                        </button>
+                    @endif
+                </div>
+                @endif
+
+                {{-- KEY METRICS --}}
+                <div class="d-flex gap-3 w-100 w-lg-auto overflow-auto pb-1 pb-lg-0 align-items-stretch">
+                    
+                    @php
+                        $sanitizedGrade = $riskGrade ?? 'Pending';
+                        $gradeClass = 'grade-F';
+                        if(in_array($sanitizedGrade, ['A', 'B'])) $gradeClass = 'grade-A';
+                        elseif($sanitizedGrade === 'C') $gradeClass = 'grade-C';
+                        elseif(in_array($sanitizedGrade, ['D', 'E', 'F'])) $gradeClass = 'grade-D';
+                    @endphp
+                    
+                    <div class="cam-metric grade-box {{ $gradeClass }}">
+                        <span class="cam-label">Risk Grade</span>
+                        <span class="cam-value fs-1">{{ $sanitizedGrade }}</span>
+                    </div>
+
+                    <div class="cam-metric">
+                        <span class="cam-label text-{{ $hud_dsr_percent > 45 ? 'danger' : 'success' }}">DSR (Limit 45%)</span>
+                        <span class="cam-value text-{{ $hud_dsr_percent > 45 ? 'danger' : 'success' }}">{{ number_format($hud_dsr_percent, 1) }}%</span>
+                    </div>
+
+                    <div class="cam-metric">
+                        <span class="cam-label">Loan Amount</span>
+                        <span class="cam-value text-primary">â‚¦{{ number_format($hud_loanPrincipal/1000000, 1) }}M</span>
+                    </div>
+                </div>
+
+                {{-- ACTIONS --}}
+                <div class="d-flex align-items-center gap-3 w-100 w-lg-auto mt-3 mt-lg-0">
+                    <div class="btn-group">
+                        <button class="btn btn-light border fw-bold px-4" wire:click="exportPdf">
+                            <i class="fas fa-file-pdf text-danger me-2"></i> Export PDF
+                        </button>
+                    </div>
+
+                    @if($mode === 'edit')
+                        <button class="btn btn-success fw-bold px-5" wire:click="submitAppraisal" wire:loading.attr="disabled">
+                            <span wire:loading.remove wire:target="submitAppraisal">
+                                <i class="fas fa-paper-plane me-2"></i> Submit
+                            </span>
+                            <span wire:loading wire:target="submitAppraisal">
+                                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                Processing...
+                            </span>
+                        </button>
+                    @endif
+
+                    <button class="btn {{ in_array($mode, ['vetting', 'analyst', 'structuring']) ? 'btn-light-secondary border' : 'btn-dark' }} fw-bold px-4" @click="showConsole = !showConsole">
+                        <i class="fas fa-history me-2"></i>
+                        <span x-text="showConsole ? 'Close Audit' : 'Audit Console'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="collapse bg-white border-top" id="stressTestPanel">
+            <div class="card-body py-4 px-6 bg-light-primary bg-opacity-25">
+                 @include('livewire.admin.loan.partials.hud-stress-test')
+            </div>
+        </div>
+    </div>
+
+    {{-- ========================================================= --}}
+    {{-- BVN VERIFICATION MODAL                                     --}}
+    {{-- ========================================================= --}}
+    <div x-show="showBvnModal" x-transition.opacity class="modal fade show" style="display: block; background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content rounded-4">
+                <div class="modal-header bg-light-success border-bottom-0">
+                    <h5 class="modal-title fw-bolder">
+                        <i class="fas fa-id-card text-success me-2"></i> BVN Verification Details
+                    </h5>
+                    <button type="button" class="btn-close" @click="showBvnModal = false"></button>
+                </div>
+                <div class="modal-body p-5">
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="bg-light rounded-3 p-4 border">
+                                <span class="fs-8 text-muted text-uppercase d-block mb-2">Verification Status</span>
+                                <span class="badge badge-success fs-6 fw-bold">
+                                    <i class="fas fa-check-circle me-1"></i> {{ strtoupper($bvn_status) }}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="bg-light rounded-3 p-4 border">
+                                <span class="fs-8 text-muted text-uppercase d-block mb-2">Match Score</span>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="progress flex-grow-1" style="height: 10px;">
+                                        <div class="progress-bar bg-{{ $bvn_match_score >= 90 ? 'success' : ($bvn_match_score >= 70 ? 'warning' : 'danger') }}" 
+                                             style="width: {{ $bvn_match_score }}%"></div>
+                                    </div>
+                                    <span class="fs-4 fw-bolder">{{ $bvn_match_score }}%</span>
+                                </div>
+                            </div>
+                        </div>
+                        @if($bvn_verified_at)
+                        <div class="col-md-12">
+                            <div class="bg-light-info rounded-3 p-4 border border-info">
+                                <span class="fs-8 text-info text-uppercase d-block mb-1">
+                                    <i class="fas fa-clock me-1"></i> Verified At
+                                </span>
+                                <span class="fs-6 fw-bold">{{ \Carbon\Carbon::parse($bvn_verified_at)->format('d M Y, H:i:s') }}</span>
+                            </div>
+                        </div>
+                        @endif
+                    </div>
+                </div>
+                <div class="modal-footer border-top-0">
+                    <button type="button" class="btn btn-light" @click="showBvnModal = false">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- ========================================================= --}}
+    {{-- CAC VERIFICATION MODAL                                     --}}
+    {{-- ========================================================= --}}
+    <div x-show="showCacModal" x-transition.opacity class="modal fade show" style="display: none; background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content rounded-4">
+                <div class="modal-header bg-light-primary border-bottom-0">
+                    <h5 class="modal-title fw-bolder">
+                        <i class="fas fa-building text-primary me-2"></i> CAC Registration Details
+                    </h5>
+                    <button type="button" class="btn-close" @click="showCacModal = false"></button>
+                </div>
+                <div class="modal-body p-5">
+                    @if(!empty($cac_data))
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="bg-light rounded-3 p-4 border">
+                                <span class="fs-8 text-muted text-uppercase d-block mb-2">Company Name</span>
+                                <span class="fs-5 fw-bold">{{ $cac_data['business_name'] ?? $business_profile['name'] ?? 'N/A' }}</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="bg-light rounded-3 p-4 border">
+                                <span class="fs-8 text-muted text-uppercase d-block mb-2">RC/BN Number</span>
+                                <span class="fs-5 fw-bold text-primary">{{ $business_profile['rc_bn_number'] ?? 'N/A' }}</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="bg-light rounded-3 p-4 border">
+                                <span class="fs-8 text-muted text-uppercase d-block mb-2">Legal Structure</span>
+                                <span class="fs-6 fw-bold">{{ $cac_data['type'] ?? $business_profile['legal_structure'] ?? 'N/A' }}</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="bg-light rounded-3 p-4 border">
+                                <span class="fs-8 text-muted text-uppercase d-block mb-2">Status</span>
+                                <span class="badge badge-success fs-7 fw-bold">{{ strtoupper($cac_data['status'] ?? 'Active') }}</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="bg-light rounded-3 p-4 border">
+                                <span class="fs-8 text-muted text-uppercase d-block mb-2">Date Registered</span>
+                                <span class="fs-6 fw-bold">{{ $cac_data['date_registered'] ?? 'N/A' }}</span>
+                            </div>
+                        </div>
+                        
+                        @if(!empty($cac_data['directors']))
+                        <div class="col-md-12">
+                            <div class="bg-light-warning rounded-3 p-4 border border-warning">
+                                <span class="fs-8 text-warning text-uppercase d-block mb-3">
+                                    <i class="fas fa-users me-1"></i> Directors / Shareholders
+                                </span>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-borderless mb-0">
+                                        @foreach($cac_data['directors'] as $director)
+                                        <tr>
+                                            <td class="ps-0">{{ $director['name'] ?? '' }}</td>
+                                            <td class="text-muted">{{ $director['position'] ?? 'Director' }}</td>
+                                            <td class="text-end fw-bold">{{ $director['shares'] ?? '' }}</td>
+                                        </tr>
+                                        @endforeach
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        @endif
+                    </div>
+                    @else
+                    <div class="text-center py-5">
+                        <i class="fas fa-search text-muted fs-1 mb-3"></i>
+                        <p class="text-muted">No CAC data available. Please verify CAC registration.</p>
+                    </div>
+                    @endif
+                </div>
+                <div class="modal-footer border-top-0">
+                    <button type="button" class="btn btn-light" @click="showCacModal = false">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- ========================================================= --}}
+    {{-- ðŸš¨ CRC FILE MODAL (Like CAC Evidence Modal) ðŸš¨            --}}
+    {{-- ========================================================= --}}
+    <div x-show="showCrcModal" x-transition.opacity class="modal fade show" style="display: none; background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content rounded-4">
+                <div class="modal-header bg-light-danger border-bottom-0">
+                    <h5 class="modal-title fw-bolder">
+                        <i class="fas fa-file-contract text-danger me-2"></i> Credit Bureau Report (CRC)
+                    </h5>
+                    <button type="button" class="btn-close" @click="showCrcModal = false"></button>
+                </div>
+                <div class="modal-body p-5">
+                    @if(!empty($crc_file_path))
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="bg-light-success rounded-3 p-4 border border-success">
+                                <span class="fs-8 text-muted text-uppercase d-block mb-2">File Status</span>
+                                <span class="badge badge-success fs-6 fw-bold">
+                                    <i class="fas fa-check-circle me-1"></i> UPLOADED
+                                </span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="bg-light rounded-3 p-4 border">
+                                <span class="fs-8 text-muted text-uppercase d-block mb-2">Upload Date</span>
+                                <span class="fs-5 fw-bold">
+                                    @if($crc_uploaded_at)
+                                        {{ \Carbon\Carbon::parse($crc_uploaded_at)->format('d M Y, H:i') }}
+                                    @else
+                                        N/A
+                                    @endif
+                                </span>
+                            </div>
+                        </div>
+                        <div class="col-md-12">
+                            <div class="bg-light-info rounded-3 p-4 border border-info">
+                                <span class="fs-8 text-info text-uppercase d-block mb-2">
+                                    <i class="fas fa-file me-1"></i> File Path
+                                </span>
+                                <span class="fs-7 fw-bold text-truncate d-block">{{ $crc_file_path }}</span>
+                            </div>
+                        </div>
+                        <div class="col-md-12">
+                            @php
+                                $isPdf = \Illuminate\Support\Str::endsWith(strtolower($crc_file_path), '.pdf');
+                            @endphp
+                            <div class="d-flex gap-3">
+                                @if($isPdf)
+                                    <a href="{{ asset('storage/' . $crc_file_path) }}" target="_blank" class="btn btn-danger fw-bold flex-grow-1">
+                                        <i class="fas fa-external-link-alt me-2"></i> Open PDF Report
+                                    </a>
+                                @else
+                                    <button type="button" class="btn btn-danger fw-bold flex-grow-1" data-bs-toggle="modal" data-bs-target="#crcImagePreview">
+                                        <i class="fas fa-eye me-2"></i> View Report Image
+                                    </button>
+                                @endif
+                                <a href="{{ asset('storage/' . $crc_file_path) }}" download class="btn btn-outline btn-light-danger fw-bold">
+                                    <i class="fas fa-download me-2"></i> Download
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    @else
+                    <div class="text-center py-5">
+                        <i class="fas fa-file-upload text-muted fs-1 mb-3"></i>
+                        <p class="text-muted">No CRC report has been uploaded yet.</p>
+                    </div>
+                    @endif
+                </div>
+                <div class="modal-footer border-top-0">
+                    <button type="button" class="btn btn-light" @click="showCrcModal = false">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- ========================================================= --}}
+    {{-- CREDIT BUREAU MODAL                                        --}}
+    {{-- ========================================================= --}}
+    <div x-show="showCreditBureauModal" x-transition.opacity class="modal fade show" style="display: none; background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content rounded-4">
+                <div class="modal-header bg-light-warning border-bottom-0">
+                    <h5 class="modal-title fw-bolder">
+                        <i class="fas fa-chart-line text-warning me-2"></i> Credit Bureau Report
+                    </h5>
+                    <button type="button" class="btn-close" @click="showCreditBureauModal = false"></button>
+                </div>
+                <div class="modal-body p-5">
+                    <div class="row g-4">
+                        <div class="col-md-3">
+                            <div class="bg-light rounded-3 p-4 border text-center">
+                                <span class="fs-8 text-muted text-uppercase d-block mb-2">Credit Score</span>
+                                @php
+                                    $scoreClass = 'credit-score-excellent';
+                                    if($credit_score < 400) $scoreClass = 'credit-score-poor';
+                                    elseif($credit_score < 600) $scoreClass = 'credit-score-fair';
+                                    elseif($credit_score < 700) $scoreClass = 'credit-score-good';
+                                @endphp
+                                <span class="credit-score-display {{ $scoreClass }}">{{ $credit_score ?? 'N/A' }}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-3">
+                            <div class="bg-light rounded-3 p-4 border">
+                                <span class="fs-8 text-muted text-uppercase d-block mb-2">Total Exposure</span>
+                                <span class="fs-4 fw-bold">â‚¦{{ number_format($total_exposure) }}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-3">
+                            <div class="bg-light rounded-3 p-4 border">
+                                <span class="fs-8 text-muted text-uppercase d-block mb-2">Watchlist Status</span>
+                                <span class="badge badge-{{ $watchlist_status === 'CLEAR' ? 'success' : 'danger' }} fs-7 fw-bold">
+                                    {{ $watchlist_status }}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-3">
+                            <div class="bg-light rounded-3 p-4 border">
+                                <span class="fs-8 text-muted text-uppercase d-block mb-2">Negative Status</span>
+                                <span class="badge badge-{{ $negative_status ? 'danger' : 'success' }} fs-7 fw-bold">
+                                    {{ $negative_status ? 'FLAGGED' : 'CLEAR' }}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        @if(!empty($running_loans))
+                        <div class="col-md-12">
+                            <div class="bg-light rounded-3 p-4 border">
+                                <span class="fs-8 text-muted text-uppercase d-block mb-3">
+                                    <i class="fas fa-list me-1"></i> Existing Facilities ({{ count($running_loans) }})
+                                </span>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Institution</th>
+                                                <th>Type</th>
+                                                <th>Amount</th>
+                                                <th>Outstanding</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach($running_loans as $facility)
+                                            <tr>
+                                                <td>{{ $facility['institution'] ?? '-' }}</td>
+                                                <td>{{ $facility['facility_type'] ?? '-' }}</td>
+                                                <td>â‚¦{{ number_format($facility['amount_granted'] ?? 0) }}</td>
+                                                <td>â‚¦{{ number_format($facility['outstanding_balance'] ?? 0) }}</td>
+                                                <td>
+                                                    <span class="badge badge-{{ ($facility['status'] ?? 'ACTIVE') === 'ACTIVE' ? 'success' : 'warning' }}">
+                                                        {{ $facility['status'] ?? 'ACTIVE' }}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        @endif
+                        
+                        @if(!empty($crc_data['file_path']))
+                        <div class="col-md-12">
+                            <div class="bg-light-info rounded-3 p-4 border border-info">
+                                <span class="fs-8 text-info text-uppercase d-block mb-2">
+                                    <i class="fas fa-file-pdf me-1"></i> CRC Report Document
+                                </span>
+                                <a href="{{ asset('storage/' . $crc_data['file_path']) }}" target="_blank" class="btn btn-primary btn-sm">
+                                    <i class="fas fa-download me-1"></i> Download Full Report
+                                </a>
+                            </div>
+                        </div>
+                        @endif
+                    </div>
+                </div>
+                <div class="modal-footer border-top-0">
+                    <button type="button" class="btn btn-light" @click="showCreditBureauModal = false">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- ========================================================= --}}
+    {{-- GLOBAL LEGAL VERIFICATION SNAPSHOT BANNER (CAC)           --}}
+    {{-- ========================================================= --}}
+    @if($loanModel->is_cac_verified || !empty($loanModel->cac_evidence_path))
+    <div class="alert-card alert-success d-flex align-items-center p-5 mb-6 shadow-sm mx-lg-6 mx-3 rounded-4">
+        <div class="symbol symbol-50px symbol-circle bg-success me-4">
+            <i class="fas fa-balance-scale text-white fs-2"></i>
+        </div>
+        <div class="d-flex flex-column flex-grow-1">
+            <h4 class="mb-1 text-success fw-bolder fs-6 text-uppercase">Legal Verification Completed</h4>
+            <span class="text-dark fw-bold fs-7 fst-italic">
+                "{{ $loanModel->cac_status_comment ?? 'Entity verified successfully on CAC Portal.' }}"
+            </span>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <span class="badge badge-success fs-7 py-2 px-4 rounded-pill shadow-sm">
+                RC/BN: {{ $business_profile['rc_bn_number'] ?? 'N/A' }}
+            </span>
+            
+            @if($loanModel->cac_evidence_path)
+                <a href="{{ asset('storage/'.$loanModel->cac_evidence_path) }}" target="_blank" class="btn btn-success fw-bold shadow-sm">
+                    <i class="fas fa-file-contract me-2"></i> View Evidence
+                </a>
+            @endif
+        </div>
+    </div>
+    @endif
+
+    {{-- ========================================================= --}}
+    {{-- ðŸš¨ CRC FILE UPLOAD BANNER (Like CAC Banner) ðŸš¨            --}}
+    {{-- ========================================================= --}}
+    @if(!empty($crc_file_path))
+    <div class="alert-card alert-danger d-flex align-items-center p-5 mb-6 shadow-sm mx-lg-6 mx-3 rounded-4">
+        <div class="symbol symbol-50px symbol-circle bg-danger me-4">
+            <i class="fas fa-file-contract text-white fs-2"></i>
+        </div>
+        <div class="d-flex flex-column flex-grow-1">
+            <h4 class="mb-1 text-danger fw-bolder fs-6 text-uppercase">Credit Bureau Report Uploaded</h4>
+            <span class="text-dark fw-bold fs-7 fst-italic">
+                @if($crc_uploaded_at)
+                    "CRC Report uploaded on {{ \Carbon\Carbon::parse($crc_uploaded_at)->format('d M Y, H:i') }}"
+                @else
+                    "Credit Bureau report has been successfully uploaded and verified."
+                @endif
+            </span>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            @php
+                $isCrcPdf = \Illuminate\Support\Str::endsWith(strtolower($crc_file_path), '.pdf');
+            @endphp
+            <span class="badge badge-danger fs-7 py-2 px-4 rounded-pill shadow-sm">
+                <i class="fas {{ $isCrcPdf ? 'fa-file-pdf' : 'fa-file-image' }} me-1"></i> 
+                {{ $isCrcPdf ? 'PDF Document' : 'Image File' }}
+            </span>
+            
+            @if($isCrcPdf)
+                <a href="{{ asset('storage/'.$crc_file_path) }}" target="_blank" class="btn btn-danger fw-bold shadow-sm">
+                    <i class="fas fa-external-link-alt me-2"></i> View Report
+                </a>
+            @else
+                <button type="button" class="btn btn-danger fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#crcImagePreviewModal">
+                    <i class="fas fa-eye me-2"></i> View Report
+                </button>
+            @endif
+            
+            <a href="{{ asset('storage/'.$crc_file_path) }}" download class="btn btn-outline btn-light-danger fw-bold shadow-sm">
+                <i class="fas fa-download me-2"></i> Download
+            </a>
+        </div>
+    </div>
+    
+    {{-- CRC IMAGE PREVIEW MODAL --}}
+    @if(!$isCrcPdf)
+    <div class="modal fade" id="crcImagePreviewModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-light-danger">
+                    <h5 class="modal-title fw-bolder text-danger">
+                        <i class="fas fa-file-contract me-2"></i> Credit Bureau Report
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <img src="{{ asset('storage/' . $crc_file_path) }}" 
+                         alt="Credit Bureau Report" 
+                         class="w-100"
+                         style="max-height: 80vh; object-fit: contain;">
+                </div>
+                <div class="modal-footer">
+                    <a href="{{ asset('storage/' . $crc_file_path) }}" 
+                       download
+                       class="btn btn-danger fw-bold">
+                        <i class="fas fa-download me-2"></i> Download
+                    </a>
+                    <button type="button" class="btn btn-light fw-bold" data-bs-dismiss="modal">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    @endif
+    @endif
+
+    {{-- ========================================================= --}}
+    {{-- MAIN WORKSPACE & AUDIT SIDEBAR                            --}}
+    {{-- ========================================================= --}}
+    <div class="card shadow-lg border-0 rounded-4 cam-main-card">
+        
+        {{-- TABS HEADER --}}
+        <div class="card-header border-0 pt-0 pt-lg-6 px-0 overflow-hidden bg-transparent">
+            <div class="w-100 overflow-auto">
+                <ul class="nav nav-tabs nav-line-tabs nav-line-tabs-2x fw-bold fs-6 flex-nowrap px-4 nav-tabs-custom" style="min-width: max-content;">
+                    @foreach([
+                        'profile'=>'1. KYC', 
+                        'business'=>'2. Biz', 
+                        'forensics'=>'3. Sales', 
+                        'inventory'=>'4. Stock', 
+                        'expenses'=>'5. Exp', 
+                        'assets'=>'6. Asset', 
+                        'security'=>'7. Sec', 
+                        'visitation'=>'8. Visit', 
+                        'swot'=>'9. SWOT', 
+                        'engine'=>'10. Response'
+                    ] as $key => $label)
+                        <li class="nav-item">
+                            <a class="nav-link py-4 text-nowrap {{ $activeTab === $key ? 'active text-primary' : 'text-gray-600' }} {{ ($auditSource[$key]['status'] ?? '') === 'verified' ? 'verified-tab' : '' }} {{ ($auditSource[$key]['status'] ?? '') === 'queried' ? 'queried-tab' : '' }}" 
+                               wire:click="$set('activeTab', '{{ $key }}')" href="javascript:;">
+                               {{ $label }}
+                               @if(($auditSource[$key]['status'] ?? '') === 'verified') <i class="fas fa-check-circle text-success ms-1 fs-9"></i>
+                               @elseif(($auditSource[$key]['status'] ?? '') === 'queried') <i class="fas fa-exclamation-circle text-danger ms-1 fs-9"></i>
+                               @endif
+                            </a>
+                        </li>
+                    @endforeach
+
+                    @if($mode === 'vetting')
+                        <li class="nav-item ms-auto border-start border-2 ps-2">
+                            <a class="nav-link py-4 text-nowrap text-warning fw-bolder {{ $activeTab === 'bm_recommendation' ? 'active border-warning bg-light-warning px-4 rounded-top' : '' }}" 
+                               wire:click="$set('activeTab', 'bm_recommendation')" href="javascript:;">
+                               <i class="fas fa-gavel text-warning me-2"></i> 11. BM Decision
+                            </a>
+                        </li>
+                    @endif
+
+                    @if(in_array($mode, ['structuring', 'analyst', 'read']) && isset($is_hoc))
+                        <li class="nav-item ms-auto border-start border-2 ps-2">
+                            <a class="nav-link py-4 text-nowrap text-primary fw-bolder {{ $activeTab === 'structure' ? 'active border-primary bg-light-primary px-4 rounded-top' : '' }}" 
+                               wire:click="$set('activeTab', 'structure')" href="javascript:;">
+                               <i class="fas fa-sliders-h text-primary me-2"></i> 11. Structuring
+                            </a>
+                        </li>
+                    @endif
+
+                    @if($mode === 'risk')
+                        <li class="nav-item ms-auto border-start border-2 ps-2">
+                            <a class="nav-link py-4 text-nowrap text-danger {{ $activeTab === 'stress_test' ? 'active border-danger bg-light-danger px-4 rounded-top' : '' }}" 
+                               wire:click="$set('activeTab', 'stress_test')" href="javascript:;">
+                               <i class="fas fa-shield-alt text-danger me-2"></i> 11. RISK
+                            </a>
+                        </li>
+                    @endif
+
+                    @if($mode === 'cfo')
+                        <li class="nav-item ms-auto border-start border-2 ps-2">
+                            <a class="nav-link py-4 text-nowrap text-success {{ $activeTab === 'treasury' ? 'active border-success bg-light-success px-4 rounded-top' : '' }}" 
+                               wire:click="$set('activeTab', 'treasury')" href="javascript:;">
+                               <i class="fas fa-coins text-success me-2"></i> 12. TREASURY
+                            </a>
+                        </li>
+                    @endif
+
+                    @if($mode === 'legal')
+                        <li class="nav-item ms-auto border-start border-2 ps-2">
+                            <a class="nav-link py-4 text-nowrap text-primary {{ $activeTab === 'legal' ? 'active border-primary bg-light-primary px-4 rounded-top' : '' }}" 
+                               wire:click="$set('activeTab', 'legal')" href="javascript:;">
+                               <i class="fas fa-balance-scale text-primary me-2"></i> 13. LEGAL
+                            </a>
+                        </li>
+                    @endif
+
+                    @if($mode === 'md')
+                        <li class="nav-item ms-auto border-start border-2 ps-2">
+                            <a class="nav-link py-4 text-nowrap text-success {{ $activeTab === 'md_sanction' ? 'active border-success bg-light-success px-4 rounded-top' : '' }}" 
+                               wire:click="$set('activeTab', 'md_sanction')" href="javascript:;">
+                               <i class="fas fa-crown text-success me-2"></i> 14. MD SANCTION
+                            </a>
+                        </li>
+                    @endif
+                </ul>
+            </div>
+        </div>
+
+        <div class="card-body pt-0 px-0 position-relative cam-content-area">
+            
+            <div class="row g-0">
+                
+                {{-- LEFT COLUMN: DATA FIELDS --}}
+                <div class="pe-0 pt-4 pt-lg-8 ps-0 ps-lg-8 smooth-transition cam-main-container" 
+                     :class="(showConsole && !isMobile) ? 'col-lg-9 pe-lg-5' : 'col-12'">
+                    <div class="px-3 px-lg-0">
+                        @php
+                            $dynamicMode = ($mode === 'structuring' && ($enableForensicOverride ?? false)) ? 'edit' : ($mode === 'edit' ? 'edit' : 'read');
+                            $isForensicLocked = ($mode === 'structuring' && !($enableForensicOverride ?? false));
+                        @endphp
+
+                        {{-- LIVE WORKSPACE --}}
+                        <div x-show="!activeDecisionView">
+
+                            @if(($loanModel->status === 'queried' || $loanModel->current_step === 'QUERY_RESPONSE') && isset($auditSource[$activeTab]) && ($auditSource[$activeTab]['status'] ?? '') === 'queried')
+                                <div class="alert-card alert-danger d-flex align-items-center p-5 mb-6 shadow-sm rounded-4">
+                                    <div class="symbol symbol-50px symbol-circle bg-danger me-4">
+                                        <i class="fas fa-exclamation-triangle text-white fs-2"></i>
+                                    </div>
+                                    <div class="d-flex flex-column">
+                                        <h4 class="mb-1 text-danger fw-bolder text-uppercase fs-6">
+                                            <i class="fas fa-flag me-2"></i>Manager Query: {{ ucfirst($activeTab) }}
+                                        </h4>
+                                        <span class="text-dark fw-bold fs-7">
+                                            "{{ $auditSource[$activeTab]['comment'] ?? 'Please review and correct the information in this section.' }}"
+                                        </span>
+                                    </div>
+                                </div>
+                            @endif
+
+                            <fieldset {{ $isUniversallyLocked || $isForensicLocked ? 'disabled="disabled"' : '' }} class="{{ $isUniversallyLocked || $isForensicLocked ? 'opacity-75' : '' }}">
+
+                                @if($activeTab === 'profile')       @include('livewire.admin.loan.partials.tab-profile', ['mode' => $dynamicMode, 'loan' => $loanModel]) @endif
+                                @if($activeTab === 'business')      @include('livewire.admin.loan.partials.tab-business', ['mode' => $dynamicMode, 'loan' => $loanModel]) @endif
+                                @if($activeTab === 'forensics')     @include('livewire.admin.loan.partials.tab-financials', ['mode' => $dynamicMode, 'isSalesVarianceHigh' => $isSalesVarianceHigh, 'salesVariance' => $salesVariance, 'loan' => $loanModel]) @endif
+                                @if($activeTab === 'inventory')     @include('livewire.admin.loan.partials.tab-inventory', ['mode' => $dynamicMode, 'loan' => $loanModel]) @endif
+                                @if($activeTab === 'expenses')      @include('livewire.admin.loan.partials.tab-expenses', ['mode' => $dynamicMode, 'loan' => $loanModel]) @endif
+                                @if($activeTab === 'assets')        @include('livewire.admin.loan.partials.tab-assets', ['mode' => $dynamicMode, 'loan' => $loanModel]) @endif
+                                @if($activeTab === 'security')      @include('livewire.admin.loan.partials.tab-security', ['mode' => $dynamicMode, 'loan' => $loanModel]) @endif
+                                @if($activeTab === 'visitation')    @include('livewire.admin.loan.partials.tab-visitation', ['mode' => $dynamicMode, 'loan' => $loanModel]) @endif
+                                @if($activeTab === 'swot')          @include('livewire.admin.loan.partials.tab-swot', ['mode' => $dynamicMode, 'loan' => $loanModel]) @endif
+                                @if($activeTab === 'engine')        @include('livewire.admin.loan.partials.tab-analysis', ['mode' => 'read', 'loan' => $loanModel]) @endif
+
+                            </fieldset>
+
+                            @if($activeTab === 'bm_recommendation' && $mode === 'vetting')
+                                @include('livewire.admin.loan.partials.tab-bm-decision')
+                            @endif
+
+                            @if($activeTab === 'stress_test' && $mode === 'risk')
+                                <div class="row g-5">
+                                    <div class="col-xl-4">@include('livewire.admin.loan.partials.risk-stress-simulator')</div>
+                                    <div class="col-xl-8">@include('livewire.admin.loan.partials.risk-decision-board')</div>
+                                </div>
+                            @endif
+
+                            @if($activeTab === 'treasury' && $mode === 'cfo')
+                                @include('livewire.admin.loan.partials.tab-treasury')
+                            @endif
+
+                            @if($activeTab === 'legal' && $mode === 'legal')
+                                @include('livewire.admin.loan.partials.tab-legal')
+                            @endif
+
+                            @if($activeTab === 'md_sanction' && $mode === 'md')
+                                @include('livewire.admin.loan.partials.tab-md-sanction')
+                            @endif
+
+                            @if($activeTab === 'structure' && in_array($mode, ['structuring', 'analyst', 'read'])) 
+                                @include('livewire.admin.loan.partials.tab-structure') 
+                            @endif
+
+                        </div>
+
+                        {{-- HISTORICAL DECISION OVERLAYS --}}
+                        <div x-show="activeDecisionView" style="display: none;" x-transition>
+                            
+                            <div class="alert-card alert-warning d-flex align-items-center p-5 mb-6 shadow-sm rounded-4">
+                                <div class="symbol symbol-50px symbol-circle bg-warning me-4">
+                                    <i class="fas fa-lock text-white fs-2"></i>
+                                </div>
+                                <div class="d-flex flex-column flex-grow-1">
+                                    <h4 class="mb-1 text-warning fw-bolder text-uppercase fs-6">Historical Record</h4>
+                                    <span class="text-dark fw-bold fs-7">You are viewing a locked past decision. Click "Live Mode" to return to active workflow.</span>
+                                </div>
+                                <button class="btn btn-warning fw-bold" @click="activeDecisionView = null">
+                                    <i class="fas fa-undo me-2"></i>Return to Live Mode
+                                </button>
+                            </div>
+
+                            <fieldset disabled="disabled" class="opacity-75">
+                                
+                                <div x-show="activeDecisionView === 'bm'">
+                                    @include('livewire.admin.loan.partials.tab-bm-decision', ['mode' => 'read'])
+                                </div>
+                                
+                                <div x-show="activeDecisionView === 'analyst'" style="display: none;">
+                                    <div class="historical-card card border-info mb-6">
+                                        <div class="card-header bg-light-info border-bottom border-info border-opacity-25 d-flex align-items-center justify-content-between">
+                                            <h3 class="card-title fw-bolder text-info fs-5 text-uppercase m-0">
+                                                <i class="fas fa-user-edit text-info me-2"></i> Analyst Proposed Structure
+                                            </h3>
+                                            <span class="badge badge-info fs-7">Historical</span>
+                                        </div>
+                                        <div class="card-body p-5 bg-white">
+                                            <div class="row g-4 mb-5">
+                                                <div class="col-md-4">
+                                                    <span class="fs-8 fw-bold text-gray-600 text-uppercase d-block mb-2">Proposed Amount</span>
+                                                    <span class="fs-2 fw-bolder text-dark">â‚¦{{ number_format($val_ana_amt ?? 0) }}</span>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <span class="fs-8 fw-bold text-gray-600 text-uppercase d-block mb-2">Proposed Tenor</span>
+                                                    <span class="fs-3 fw-bolder text-dark">{{ $val_ana_ten ?? 0 }} Months</span>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <span class="fs-8 fw-bold text-gray-600 text-uppercase d-block mb-2">Interest Rate</span>
+                                                    <span class="fs-3 fw-bolder text-dark">{{ $val_ana_rate ?? 54 }}% p.a</span>
+                                                </div>
+                                            </div>
+                                            @if(!empty($ana_comment))
+                                            <div class="bg-light rounded p-4 border mt-auto">
+                                                <span class="badge badge-info fw-bolder mb-2">Analyst Executive Summary</span>
+                                                <div class="fs-7 text-gray-800 fst-italic">"{!! nl2br(e($ana_comment)) !!}"</div>
+                                            </div>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div x-show="activeDecisionView === 'hoc'" style="display: none;">
+                                    <div class="historical-card card border-success mb-6">
+                                        <div class="card-header bg-light-success border-bottom border-success border-opacity-25 d-flex align-items-center justify-content-between">
+                                            <h3 class="card-title fw-bolder text-success fs-5 text-uppercase m-0">
+                                                <i class="fas fa-check-double text-success me-2"></i> HOC Final Approved Structure
+                                            </h3>
+                                            <span class="badge badge-success fs-7">Checker</span>
+                                        </div>
+                                        <div class="card-body p-5 bg-white">
+                                            <div class="row g-4 mb-4">
+                                                <div class="col-md-4">
+                                                    <span class="fs-8 fw-bold text-gray-600 text-uppercase d-block mb-2">Approved Amount</span>
+                                                    <span class="fs-2 fw-bolder text-dark">â‚¦{{ number_format($val_hoc_amt ?? 0) }}</span>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <span class="fs-8 fw-bold text-gray-600 text-uppercase d-block mb-2">Approved Tenor</span>
+                                                    <span class="fs-4 fw-bolder text-dark">{{ $val_hoc_ten ?? 0 }} Months</span>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <span class="fs-8 fw-bold text-gray-600 text-uppercase d-block mb-2">Interest Rate</span>
+                                                    <span class="fs-4 fw-bolder text-dark">{{ $val_hoc_rate ?? 54 }}% p.a</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div x-show="activeDecisionView === 'cro'" style="display: none;">
+                                    <div class="historical-card card border-danger mb-6">
+                                        <div class="card-header bg-light-danger border-bottom border-danger border-opacity-25 d-flex align-items-center justify-content-between">
+                                            <h3 class="card-title fw-bolder text-danger fs-5 text-uppercase m-0">
+                                                <i class="fas fa-shield-alt text-danger me-2"></i> CRO Final Risk Decision
+                                            </h3>
+                                            <span class="badge badge-danger fs-7">Risk Approved</span>
+                                        </div>
+                                        <div class="card-body p-5 bg-white">
+                                            <div class="row g-4 mb-5">
+                                                <div class="col-md-4">
+                                                    <div class="bg-light-success rounded-3 p-4 border border-success text-center">
+                                                        <span class="fs-8 fw-bold text-gray-600 text-uppercase d-block mb-2">Approved Amount</span>
+                                                        <span class="fs-2hx fw-bolder text-success">â‚¦{{ number_format($val_cro_amt ?? 0) }}</span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="bg-light-primary rounded-3 p-4 border border-primary text-center">
+                                                        <span class="fs-8 fw-bold text-gray-600 text-uppercase d-block mb-2">Approved Tenor</span>
+                                                        <span class="fs-2hx fw-bolder text-primary">{{ $val_cro_ten ?? 0 }} Months</span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="bg-light-warning rounded-3 p-4 border border-warning text-center">
+                                                        <span class="fs-8 fw-bold text-gray-600 text-uppercase d-block mb-2">Interest Rate</span>
+                                                        <span class="fs-2hx fw-bolder text-warning">{{ $val_hoc_rate ?? 54 }}% p.a</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            @if(!empty($cro_comment))
+                                            <div class="bg-light rounded p-4 border">
+                                                <span class="fs-8 fw-bold text-gray-600 text-uppercase d-block mb-2">Risk Opinion</span>
+                                                <div class="fs-7 text-gray-800 fst-italic">"{!! nl2br(e($cro_comment)) !!}"</div>
+                                            </div>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div x-show="activeDecisionView === 'cfo'" style="display: none;">
+                                    <div class="historical-card card border-warning mb-6">
+                                        <div class="card-header bg-light-warning border-bottom border-warning border-opacity-25 d-flex align-items-center justify-content-between">
+                                            <h3 class="card-title fw-bolder text-warning fs-5 text-uppercase m-0">
+                                                <i class="fas fa-coins text-warning me-2"></i> CFO Treasury Decision
+                                            </h3>
+                                            <span class="badge badge-warning fs-7">Liquidity Cleared</span>
+                                        </div>
+                                        <div class="card-body p-5 bg-white">
+                                            <div class="row g-4 mb-5">
+                                                <div class="col-md-4">
+                                                    <div class="bg-light-success rounded-3 p-4 border border-success text-center">
+                                                        <span class="fs-8 fw-bold text-gray-600 text-uppercase d-block mb-2">Treasury Approved</span>
+                                                        <span class="fs-2hx fw-bolder text-success">â‚¦{{ number_format($val_cfo_amt ?? 0) }}</span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="bg-light-primary rounded-3 p-4 border border-primary text-center">
+                                                        <span class="fs-8 fw-bold text-gray-600 text-uppercase d-block mb-2">Approved Tenor</span>
+                                                        <span class="fs-2hx fw-bolder text-primary">{{ $val_cfo_ten ?? 0 }} Months</span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="bg-light-warning rounded-3 p-4 border border-warning text-center">
+                                                        <span class="fs-8 fw-bold text-gray-600 text-uppercase d-block mb-2">Interest Rate</span>
+                                                        <span class="fs-2hx fw-bolder text-warning">{{ $val_hoc_rate ?? 54 }}% p.a</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            @if(!empty($cfo_comment))
+                                            <div class="bg-light rounded p-4 border">
+                                                <span class="fs-8 fw-bold text-gray-600 text-uppercase d-block mb-2">Treasury Opinion</span>
+                                                <div class="fs-7 text-gray-800 fst-italic">"{!! nl2br(e($cfo_comment)) !!}"</div>
+                                            </div>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div x-show="activeDecisionView === 'legal'" style="display: none;">
+                                    <div class="historical-card card border-primary mb-6">
+                                        <div class="card-header bg-light-primary border-bottom border-primary border-opacity-25 d-flex align-items-center justify-content-between">
+                                            <h3 class="card-title fw-bolder text-primary fs-5 text-uppercase m-0">
+                                                <i class="fas fa-balance-scale text-primary me-2"></i> Legal Security & Perfection
+                                            </h3>
+                                            <span class="badge badge-primary fs-7">Cleared</span>
+                                        </div>
+                                        <div class="card-body p-5 bg-white">
+                                            <div class="row g-4 mb-5">
+                                                <div class="col-md-4">
+                                                    <div class="bg-light-success rounded-3 p-4 border border-success text-center">
+                                                        <span class="fs-8 fw-bold text-gray-600 text-uppercase d-block mb-2">Legal Cleared Amount</span>
+                                                        <span class="fs-2hx fw-bolder text-success">â‚¦{{ number_format($val_leg_amt ?? 0) }}</span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="bg-light-primary rounded-3 p-4 border border-primary text-center">
+                                                        <span class="fs-8 fw-bold text-gray-600 text-uppercase d-block mb-2">Cleared Tenor</span>
+                                                        <span class="fs-2hx fw-bolder text-primary">{{ $val_leg_ten ?? 0 }} Months</span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="bg-light-warning rounded-3 p-4 border border-warning text-center">
+                                                        <span class="fs-8 fw-bold text-gray-600 text-uppercase d-block mb-2">Interest Rate</span>
+                                                        <span class="fs-2hx fw-bolder text-warning">{{ $val_hoc_rate ?? 54 }}% p.a</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            @if(!empty($leg_comment))
+                                            <div class="bg-light rounded p-4 border">
+                                                <span class="fs-8 fw-bold text-gray-600 text-uppercase d-block mb-2">Legal Opinion</span>
+                                                <div class="fs-7 text-gray-800 fst-italic">"{!! nl2br(e($leg_comment)) !!}"</div>
+                                            </div>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div x-show="activeDecisionView === 'md'" style="display: none;">
+                                    <div class="historical-card card border-success mb-6">
+                                        <div class="card-header bg-light-success border-bottom border-success border-opacity-25 d-flex align-items-center justify-content-between">
+                                            <h3 class="card-title fw-bolder text-success fs-5 text-uppercase m-0">
+                                                <i class="fas fa-crown text-success me-2"></i> Managing Director Sanction
+                                            </h3>
+                                            <span class="badge badge-success fs-7">Final Approval</span>
+                                        </div>
+                                        <div class="card-body p-5 bg-white">
+                                            <div class="row g-4 mb-5">
+                                                <div class="col-md-4">
+                                                    <div class="bg-light-success rounded-3 p-4 border border-success text-center">
+                                                        <span class="fs-8 fw-bold text-gray-600 text-uppercase d-block mb-2">Final Approved Amount</span>
+                                                        <span class="fs-2hx fw-bolder text-success">â‚¦{{ number_format($val_md_amt ?? 0) }}</span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="bg-light-primary rounded-3 p-4 border border-primary text-center">
+                                                        <span class="fs-8 fw-bold text-gray-600 text-uppercase d-block mb-2">Final Tenor</span>
+                                                        <span class="fs-2hx fw-bolder text-primary">{{ $val_md_ten ?? 0 }} Months</span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="bg-light-warning rounded-3 p-4 border border-warning text-center">
+                                                        <span class="fs-8 fw-bold text-gray-600 text-uppercase d-block mb-2">Interest Rate</span>
+                                                        <span class="fs-2hx fw-bolder text-warning">{{ $val_hoc_rate ?? 54 }}% p.a</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            @if(!empty($md_comment))
+                                            <div class="bg-light rounded p-4 border">
+                                                <span class="fs-8 fw-bold text-gray-600 text-uppercase d-block mb-2">MD Decision Remarks</span>
+                                                <div class="fs-7 text-gray-800 fst-italic">"{!! nl2br(e($md_comment)) !!}"</div>
+                                            </div>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                            </fieldset>
+                        </div>
+
+                    </div>
+                </div>
+
+                {{-- MOBILE OVERLAY --}}
+                <div class="mobile-overlay" x-show="showConsole && isMobile" x-transition.opacity @click="showConsole = false" style="display: none;"></div>
+
+                {{-- RIGHT COLUMN: GOVERNANCE & AUDIT CONSOLE (LIGHT GREEN) --}}
+                <div class="vetting-sidebar position-absolute top-0 end-0 h-100" 
+                     :class="(showConsole && !isMobile) ? 'col-lg-3 position-relative' : (showConsole && isMobile ? 'w-85 max-w-340px' : 'd-none')" 
+                     x-show="showConsole" 
+                     x-transition:enter="transition ease-out duration-300"
+                     x-transition:enter-start="opacity-0 transform translate-x-full"
+                     x-transition:enter-end="opacity-100 transform translate-x-0">
+                     
+                    <div class="p-5 h-100 overflow-auto d-flex flex-column">
+                        
+                        {{-- Console Header --}}
+                        <div class="mb-6 d-flex justify-content-between align-items-center">
+                            <div>
+                                <h4 class="fw-bolder text-emerald-800 mb-1 fs-5">GOVERNANCE & AUDIT</h4>
+                                <div class="text-emerald-600 fs-9 fw-bold text-uppercase ls-1">Timeline & Approvals</div>
+                            </div>
+                            <button class="btn btn-icon btn-light bg-opacity-10 text-emerald-700 border-0" @click="showConsole = false">
+                                <i class="fas fa-times fs-7"></i>
+                            </button>
+                        </div>
+
+                        {{-- REQUEST VS PROPOSAL --}}
+                        <div class="mb-5">
+                            <div class="text-emerald-600 fs-9 fw-bold text-uppercase mb-3 ps-1">Request vs Proposal</div>
+                            <div class="row g-3">
+                                <div class="col-6">
+                                    <div class="bg-white rounded p-3 border border-gray-200 shadow-sm">
+                                        <div class="fs-9 text-gray-500 mb-1 fw-bold text-uppercase">Customer Asked</div>
+                                        <div class="fs-6 fw-bolder text-gray-800 mb-1">â‚¦{{ number_format($val_req_amt/1000000, 1) }}M</div>
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <span class="fs-10 text-gray-500">{{ $val_req_ten }} Mo</span>
+                                            <span class="badge badge-secondary fs-9 px-2 py-1 rounded-pill">{{ number_format($req_dsr, 0) }}% DSR</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="bg-emerald-50 rounded p-3 border border-emerald-200 shadow-sm">
+                                        <div class="fs-9 text-emerald-600 mb-1 fw-bold text-uppercase">LO Proposed</div>
+                                        <div class="fs-6 fw-bolder text-emerald-800 mb-1">â‚¦{{ number_format($val_lo_amt / 1000000, 1) }}M</div>
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <span class="fs-10 text-gray-500">{{ $val_lo_ten }} Mo</span>
+                                            <span class="badge badge-emerald fs-9 px-2 py-1 rounded-pill">{{ number_format($lo_dsr, 0) }}% DSR</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- TIMELINE VISUALIZATION --}}
+                        <div class="timeline-label mt-4 flex-grow-1">
+                            
+                            {{-- 1. LOAN OFFICER --}}
+                            <div class="timeline-track">
+                                <div class="timeline-node bg-emerald-500"></div>
+                                <div class="timeline-card" style="border-left: 3px solid #10b981;">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-emerald-700 fs-8 fw-bold text-uppercase">Loan Officer</span>
+                                        <span class="dsr-badge {{ $lo_dsr > 45 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700' }}">{{ number_format($lo_dsr, 1) }}% DSR</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between text-emerald-900 fs-7 fw-bolder">
+                                        <span>â‚¦{{ number_format($val_lo_amt) }}</span>
+                                        <span>{{ $val_lo_ten }} Months</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {{-- 2. BRANCH MANAGER --}}
+                            @if($loanModel->bm_verified_at || !empty($bm_snap) || in_array($mode, ['vetting', 'analyst', 'structuring', 'risk', 'cfo', 'legal', 'md']))
+                            <div class="timeline-track">
+                                <div class="timeline-node bg-amber-500"></div>
+                                <div class="timeline-card" style="border-left: 3px solid #f59e0b;">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-amber-700 fs-8 fw-bold text-uppercase">Branch Manager</span>
+                                        <span class="dsr-badge {{ $bm_dsr > 45 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700' }}">{{ number_format($bm_dsr, 1) }}% DSR</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between text-amber-900 fs-7 fw-bolder">
+                                        <span>â‚¦{{ number_format($val_bm_amt) }}</span>
+                                        <span>{{ $val_bm_ten }} Months</span>
+                                    </div>
+                                </div>
+                            </div>
+                            @endif
+
+                            {{-- 3. ANALYST --}}
+                            @if(!empty($ana_snap) || in_array($mode, ['analyst', 'structuring', 'risk', 'cfo', 'legal', 'md']))
+                            <div class="timeline-track">
+                                <div class="timeline-node bg-cyan-500"></div>
+                                <div class="timeline-card" style="border-left: 3px solid #06b6d4;">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-cyan-700 fs-8 fw-bold text-uppercase">Credit Analyst</span>
+                                        <span class="dsr-badge {{ $ana_dsr > 45 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700' }}">{{ number_format($ana_dsr, 1) }}% DSR</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between text-cyan-900 fs-7 fw-bolder">
+                                        <span>â‚¦{{ number_format($val_ana_amt) }}</span>
+                                        <span>{{ $val_ana_ten }} Months</span>
+                                    </div>
+                                </div>
+                            </div>
+                            @endif
+
+                            {{-- 4. HEAD OF CREDIT --}}
+                            @if(!empty($hoc_snap) || in_array($mode, ['structuring', 'risk', 'cfo', 'legal', 'md']))
+                            <div class="timeline-track {{ in_array($mode, ['risk', 'cfo', 'legal', 'md']) || !empty($cro_snap) ? '' : 'border-0' }}">
+                                <div class="timeline-node bg-emerald-500"></div>
+                                <div class="timeline-card" style="border-left: 3px solid #10b981;">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-emerald-700 fs-8 fw-bold text-uppercase">Head of Credit</span>
+                                        <span class="dsr-badge {{ $hoc_dsr > 45 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700' }}">{{ number_format($hoc_dsr, 1) }}% DSR</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between text-emerald-900 fs-7 fw-bolder">
+                                        <span>â‚¦{{ number_format($val_hoc_amt) }}</span>
+                                        <span>{{ $val_hoc_ten }} Months</span>
+                                    </div>
+                                </div>
+                            </div>
+                            @endif
+
+                            {{-- 5. CHIEF RISK OFFICER --}}
+                            @if(!empty($cro_snap) || in_array($mode, ['risk', 'cfo', 'legal', 'md']))
+                            <div class="timeline-track {{ in_array($mode, ['cfo', 'legal', 'md']) || !empty($cfo_snap) ? '' : 'border-0' }}">
+                                <div class="timeline-node bg-red-500"></div>
+                                <div class="timeline-card" style="border-left: 3px solid #ef4444;">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-red-700 fs-8 fw-bold text-uppercase">Chief Risk Officer</span>
+                                        <span class="dsr-badge {{ $cro_dsr > 45 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700' }}">{{ number_format($cro_dsr, 1) }}% DSR</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between text-red-900 fs-7 fw-bolder">
+                                        <span>â‚¦{{ number_format($val_cro_amt) }}</span>
+                                        <span>{{ $val_cro_ten }} Months</span>
+                                    </div>
+                                </div>
+                            </div>
+                            @endif
+
+                            {{-- 6. TREASURY (CFO) --}}
+                            @if(!empty($cfo_snap) || in_array($mode, ['cfo', 'legal', 'md']))
+                            <div class="timeline-track {{ in_array($mode, ['legal', 'md']) || !empty($leg_snap) ? '' : 'border-0' }}">
+                                <div class="timeline-node bg-amber-500"></div>
+                                <div class="timeline-card" style="border-left: 3px solid #f59e0b;">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-amber-700 fs-8 fw-bold text-uppercase">CFO (Treasury)</span>
+                                        <span class="dsr-badge {{ $cfo_dsr > 45 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700' }}">{{ number_format($cfo_dsr, 1) }}% DSR</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between text-amber-900 fs-7 fw-bolder">
+                                        <span>â‚¦{{ number_format($val_cfo_amt) }}</span>
+                                        <span>{{ $val_cfo_ten }} Months</span>
+                                    </div>
+                                </div>
+                            </div>
+                            @endif
+
+                            {{-- 7. LEGAL DEPARTMENT --}}
+                            @if(!empty($leg_snap) || in_array($mode, ['legal', 'md']))
+                            <div class="timeline-track {{ in_array($mode, ['md']) || !empty($md_snap) ? '' : 'border-0' }}">
+                                <div class="timeline-node bg-indigo-500"></div>
+                                <div class="timeline-card" style="border-left: 3px solid #6366f1;">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-indigo-700 fs-8 fw-bold text-uppercase">Legal Verification</span>
+                                        <span class="dsr-badge {{ $leg_dsr > 45 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700' }}">{{ number_format($leg_dsr, 1) }}% DSR</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between text-indigo-900 fs-7 fw-bolder">
+                                        <span>â‚¦{{ number_format($val_leg_amt) }}</span>
+                                        <span>{{ $val_leg_ten }} Months</span>
+                                    </div>
+                                </div>
+                            </div>
+                            @endif
+
+                            {{-- 8. MD SANCTION --}}
+                            @if(!empty($md_snap) || $mode === 'md')
+                            <div class="timeline-track border-0">
+                                <div class="timeline-node bg-emerald-500"></div>
+                                <div class="timeline-card" style="border-left: 3px solid #10b981; background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), transparent);">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-emerald-700 fs-8 fw-bolder text-uppercase"><i class="fas fa-crown me-1"></i> MD Sanction</span>
+                                        <span class="dsr-badge {{ $md_dsr > 45 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700' }}">{{ number_format($md_dsr, 1) }}% DSR</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between text-emerald-900 fs-6 fw-bolder">
+                                        <span>â‚¦{{ number_format($val_md_amt) }}</span>
+                                        <span>{{ $val_md_ten }} Months</span>
+                                    </div>
+                                </div>
+                            </div>
+                            @endif
+
+                        </div>
+                        
+                        {{-- ACTION FOOTER --}}
+                        @if(!$isTimeMachineActive)
+                            <div class="mt-auto pt-6 border-top" style="border-color: rgba(16, 185, 129, 0.2) !important;">
+                                <div class="d-grid gap-3">
+                                    
+                                    @if($mode === 'edit')
+                                        <button class="btn btn-emerald fw-bold rounded-3" wire:click="submitAppraisal" wire:loading.attr="disabled">
+                                            <span wire:loading.remove wire:target="submitAppraisal">
+                                                <i class="fas fa-paper-plane me-2"></i> Resubmit Application
+                                            </span>
+                                            <span wire:loading wire:target="submitAppraisal">
+                                                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                                Processing...
+                                            </span>
+                                        </button>
+                                    @endif
+
+                                    @if($mode === 'vetting')
+                                        <button class="btn btn-danger fw-bold rounded-3" wire:click="returnQuery('Please address flagged queries.')">
+                                            <i class="fas fa-undo-alt me-2"></i> Return to Loan Officer
+                                        </button>
+                                        <button class="btn btn-emerald fw-bold rounded-3" wire:click="approve" @if(!$isReadyForApproval) disabled style="opacity: 0.6;" @endif>
+                                            <i class="fas fa-paper-plane me-2"></i> 
+                                            {{ $isReadyForApproval ? 'Approve & Send to Structuring' : "Complete Audit First" }}
+                                        </button>
+                                    @endif
+
+                                    @if($mode === 'analyst')
+                                        <button class="btn btn-emerald fw-bold w-100 rounded-3" wire:click="submitToHoc" @if(!$isReadyForApproval) disabled style="opacity: 0.6;" @endif>
+                                            <i class="fas fa-paper-plane me-2"></i> 
+                                            {{ $isReadyForApproval ? 'Submit to HOC' : "Complete Audit First" }}
+                                        </button>
+                                    @endif
+
+                                    @if($mode === 'structuring' && in_array($loanModel->current_step, ['HOC_APPROVAL', 'HOC_STRUCTURING']))
+                                        <button class="btn btn-emerald fw-bold rounded-3" wire:click="approveStructure" wire:loading.attr="disabled">
+                                            <i class="fas fa-check-double me-2"></i> Lock & Send to CRO
+                                        </button>
+                                    @endif
+
+                                </div>
+                            </div>
+                        @endif
+
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    
+</div>
+
+
+==================================================
+FILE: C:\xampp\htdocs\bank\resources\views\livewire\admin\loan\legal\cac-verifier.blade.php
+==================================================
+{{-- ========================================================= --}}
+{{-- LEGAL CAC VERIFIER - PREMIUM DESIGN                       --}}
+{{-- A compelling, modern interface for legal gatekeepers       --}}
+{{-- ========================================================= --}}
+
+<div class="row g-5 g-xl-8">
+    
+    {{-- ========================================================= --}}
+    {{-- LEFT COLUMN: APPLICATION CONTEXT & DECISION FORM          --}}
+    {{-- ========================================================= --}}
+    <div class="col-xl-5">
+        
+        {{-- === ENTITY SNAPSHOT CARD === --}}
+        <div class="card card-flush shadow-lg border-0 mb-5 overflow-hidden" style="border-radius: 16px;">
+            
+            {{-- Premium Gradient Header --}}
+            <div class="card-header border-0 py-5 px-6" style="background: linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 100%);">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center">
+                        <div class="symbol symbol-50px symbol-circle me-4" style="background: linear-gradient(135deg, #4fc3f7 0%, #2196f3 100%); box-shadow: 0 8px 20px rgba(33, 150, 243, 0.4);">
+                            <i class="fas fa-balance-scale text-white fs-2"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-white fw-bolder mb-1 fs-4">Legal Gatekeeper</h3>
+                            <span class="text-white text-opacity-75 fs-7">Corporate Affairs Commission Verification</span>
+                        </div>
+                    </div>
+                    <div class="badge badge-light-warning border border-warning border-dashed fw-bold px-4 py-3 rounded-pill">
+                        <i class="fas fa-shield-alt me-2"></i> Pre-Qualification
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card-body p-6">
+                
+                {{-- === BUSINESS ENTITY DISPLAY === --}}
+                <div class="mb-6 p-5 rounded-3 position-relative overflow-hidden" style="background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); border: 2px dashed #cbd5e1;">
+                    
+                    {{-- Decorative Corner Accent --}}
+                    <div class="position-absolute top-0 end-0 w-100px h-100px opacity-10">
+                        <svg viewBox="0 0 100 100" class="w-100 h-100">
+                            <circle cx="100" cy="0" r="80" fill="#1e3a5f"/>
+                        </svg>
+                    </div>
+                    
+                    {{-- Business Name --}}
+                    <div class="d-flex justify-content-between align-items-start mb-4 position-relative">
+                        <div>
+                            <span class="text-gray-500 fs-9 fw-bolder text-uppercase tracking-3px d-block mb-2">
+                                <i class="fas fa-building me-1"></i> Business Entity
+                            </span>
+                            <h2 class="text-dark fw-bolder fs-4 mb-0" style="text-shadow: 0 1px 0 rgba(255,255,255,0.8);">
+                                {{ $loan->user->business->name ?? 'N/A' }}
+                            </h2>
+                        </div>
+                        <div class="symbol symbol-40px symbol-circle bg-white shadow-sm">
+                            <i class="fas fa-landmark text-primary fs-5"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="separator separator-dashed border-gray-300 my-4"></div>
+                    
+                    {{-- RC/BN Number Input --}}
+                    <div class="position-relative">
+                        <label class="text-gray-600 fs-8 fw-bolder text-uppercase tracking-2px d-block mb-3">
+                            <i class="fas fa-fingerprint text-primary me-2"></i> Registration Number (RC/BN)
+                        </label>
+                        <div class="input-group input-group-lg">
+                            <span class="input-group-text bg-white border-end-0 rounded-start-3 shadow-sm">
+                                <i class="fas fa-hashtag text-primary fs-5"></i>
+                            </span>
+                            <input type="text" 
+                                   wire:model.defer="cac_number_input" 
+                                   class="form-control form-control-solid border-start-0 rounded-end-3 fw-bolder text-dark fs-4" 
+                                   style="letter-spacing: 1px;"
+                                   placeholder="e.g. RC123456">
+                        </div>
+                        <div class="d-flex align-items-center mt-2">
+                            <i class="fas fa-info-circle text-info me-2 fs-9"></i>
+                            <span class="text-gray-500 fs-9">
+                                <strong class="text-primary">Editable:</strong> Correct any typos before verification
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                
+                {{-- === VERDICT FORM === --}}
+                <form wire:submit.prevent="submitDecision">
+                    
+                    {{-- Portal Verdict Selection --}}
+                    <div class="mb-5">
+                        <label class="form-label required fw-bold fs-6 text-dark mb-3">
+                            <i class="fas fa-gavel text-primary me-2"></i> Portal Verification Result
+                        </label>
+                        
+                        <div class="row g-3">
+                            {{-- ACTIVE Option --}}
+                            <div class="col-6">
+                                <label class="d-flex align-items-center p-4 rounded-3 cursor-pointer transition-all hover-shadow
+                                             {{ $cac_status_verdict === 'ACTIVE' ? 'bg-light-success border border-success' : 'bg-light border border-gray-200' }}"
+                                       style="cursor: pointer;">
+                                    <input type="radio" wire:model="cac_status_verdict" value="ACTIVE" class="d-none">
+                                    <div class="symbol symbol-45px symbol-circle me-3 {{ $cac_status_verdict === 'ACTIVE' ? 'bg-success' : 'bg-gray-200' }}">
+                                        <i class="fas fa-check-circle {{ $cac_status_verdict === 'ACTIVE' ? 'text-white' : 'text-gray-500' }} fs-2"></i>
+                                    </div>
+                                    <div>
+                                        <span class="fw-bolder {{ $cac_status_verdict === 'ACTIVE' ? 'text-success' : 'text-gray-700' }} d-block">ACTIVE</span>
+                                        <span class="text-gray-500 fs-9">Proceed to BM</span>
+                                    </div>
+                                </label>
+                            </div>
+                            
+                            {{-- QUERY Option --}}
+                            <div class="col-6">
+                                <label class="d-flex align-items-center p-4 rounded-3 cursor-pointer transition-all hover-shadow
+                                             {{ $cac_status_verdict === 'QUERY' ? 'bg-light-warning border border-warning' : 'bg-light border border-gray-200' }}"
+                                       style="cursor: pointer;">
+                                    <input type="radio" wire:model="cac_status_verdict" value="QUERY" class="d-none">
+                                    <div class="symbol symbol-45px symbol-circle me-3 {{ $cac_status_verdict === 'QUERY' ? 'bg-warning' : 'bg-gray-200' }}">
+                                        <i class="fas fa-undo {{ $cac_status_verdict === 'QUERY' ? 'text-white' : 'text-gray-500' }} fs-2"></i>
+                                    </div>
+                                    <div>
+                                        <span class="fw-bolder {{ $cac_status_verdict === 'QUERY' ? 'text-warning' : 'text-gray-700' }} d-block">RETURN</span>
+                                        <span class="text-gray-500 fs-9">Back to LO</span>
+                                    </div>
+                                </label>
+                            </div>
+                            
+                            {{-- INACTIVE Option --}}
+                            <div class="col-6">
+                                <label class="d-flex align-items-center p-4 rounded-3 cursor-pointer transition-all hover-shadow
+                                             {{ $cac_status_verdict === 'INACTIVE' ? 'bg-light-danger border border-danger' : 'bg-light border border-gray-200' }}"
+                                       style="cursor: pointer;">
+                                    <input type="radio" wire:model="cac_status_verdict" value="INACTIVE" class="d-none">
+                                    <div class="symbol symbol-45px symbol-circle me-3 {{ $cac_status_verdict === 'INACTIVE' ? 'bg-danger' : 'bg-gray-200' }}">
+                                        <i class="fas fa-exclamation-triangle {{ $cac_status_verdict === 'INACTIVE' ? 'text-white' : 'text-gray-500' }} fs-2"></i>
+                                    </div>
+                                    <div>
+                                        <span class="fw-bolder {{ $cac_status_verdict === 'INACTIVE' ? 'text-danger' : 'text-gray-700' }} d-block">INACTIVE</span>
+                                        <span class="text-gray-500 fs-9">Reject/Hold</span>
+                                    </div>
+                                </label>
+                            </div>
+                            
+                            {{-- UNREGISTERED Option --}}
+                            <div class="col-6">
+                                <label class="d-flex align-items-center p-4 rounded-3 cursor-pointer transition-all hover-shadow
+                                             {{ $cac_status_verdict === 'UNREGISTERED' ? 'bg-light-dark border border-dark' : 'bg-light border border-gray-200' }}"
+                                       style="cursor: pointer;">
+                                    <input type="radio" wire:model="cac_status_verdict" value="UNREGISTERED" class="d-none">
+                                    <div class="symbol symbol-45px symbol-circle me-3 {{ $cac_status_verdict === 'UNREGISTERED' ? 'bg-dark' : 'bg-gray-200' }}">
+                                        <i class="fas fa-times-circle {{ $cac_status_verdict === 'UNREGISTERED' ? 'text-white' : 'text-gray-500' }} fs-2"></i>
+                                    </div>
+                                    <div>
+                                        <span class="fw-bolder {{ $cac_status_verdict === 'UNREGISTERED' ? 'text-dark' : 'text-gray-700' }} d-block">NOT FOUND</span>
+                                        <span class="text-gray-500 fs-9">Terminate</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        @error('cac_status_verdict') 
+                            <div class="text-danger fs-9 fw-bold mt-2 d-flex align-items-center">
+                                <i class="fas fa-exclamation-circle me-1"></i> {{ $message }}
+                            </div> 
+                        @enderror
+                    </div>
+
+                    {{-- Evidence Upload with Premium Design --}}
+                    <div class="mb-5" x-data="{ isUploading: false, progress: 0 }" 
+                         x-on:livewire-upload-start="isUploading = true"
+                         x-on:livewire-upload-finish="isUploading = false"
+                         x-on:livewire-upload-error="isUploading = false"
+                         x-on:livewire-upload-progress="progress = $event.detail.progress">
+                         
+                        <label class="form-label fw-bold fs-6 text-dark mb-3">
+                            <i class="fas fa-camera text-primary me-2"></i> Verification Evidence
+                            <span class="badge badge-light-primary ms-2 fs-9">Required for Approval</span>
+                        </label>
+                        
+                        <div class="d-flex align-items-stretch gap-4">
+                            {{-- Upload Zone --}}
+                            <div class="flex-grow-1">
+                                <label class="d-flex flex-column align-items-center justify-content-center p-6 rounded-3 cursor-pointer transition-all
+                                             {{ $evidence_file ? 'bg-light-primary border-2 border-primary border-dashed' : 'bg-light border-2 border-gray-300 border-dashed hover-border-primary' }}"
+                                       style="cursor: pointer; min-height: 120px;">
+                                    <input type="file" wire:model="evidence_file" class="d-none" accept="image/*">
+                                    
+                                    @if($evidence_file)
+                                        <div class="text-center">
+                                            <div class="symbol symbol-50px symbol-circle bg-primary mb-2">
+                                                <i class="fas fa-check text-white fs-2"></i>
+                                            </div>
+                                            <span class="text-primary fw-bolder d-block">Screenshot Attached</span>
+                                            <span class="text-gray-500 fs-9">{{ $evidence_file->getClientOriginalName() }}</span>
+                                        </div>
+                                    @else
+                                        <div class="text-center">
+                                            <i class="fas fa-cloud-upload-alt text-gray-400 fs-3x mb-2"></i>
+                                            <span class="text-gray-600 fw-bold d-block">Upload Portal Screenshot</span>
+                                            <span class="text-gray-400 fs-9">PNG, JPG up to 5MB</span>
+                                        </div>
+                                    @endif
+                                </label>
+                                
+                                {{-- Progress Bar --}}
+                                <div x-show="isUploading" class="progress h-4px w-100 mt-2 rounded-pill overflow-hidden">
+                                    <div class="progress-bar bg-primary progress-bar-striped progress-bar-animated" 
+                                         role="progressbar" 
+                                         :style="`width: ${progress}%`"></div>
+                                </div>
+
+                                @error('evidence_file') 
+                                    <div class="text-danger fs-9 fw-bold mt-2 d-flex align-items-center">
+                                        <i class="fas fa-exclamation-circle me-1"></i> {{ $message }}
+                                    </div> 
+                                @enderror
+                            </div>
+
+                            {{-- Preview Thumbnail --}}
+                            @if($evidence_file)
+                                <div class="position-relative shadow-lg rounded-3 overflow-hidden flex-shrink-0" 
+                                     style="width: 100px; height: 120px; border: 3px solid #10b981;">
+                                    <img src="{{ $evidence_file->temporaryUrl() }}" 
+                                         class="w-100 h-100" 
+                                         style="object-fit: cover;">
+                                    <div class="position-absolute top-0 end-0 m-1">
+                                        <span class="badge badge-circle badge-success h-20px w-20px shadow-sm">
+                                            <i class="fas fa-check text-white fs-10"></i>
+                                        </span>
+                                    </div>
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+
+                    {{-- Legal Opinion --}}
+                    <div class="mb-6">
+                        <label class="form-label required fw-bold fs-6 text-dark mb-3">
+                            <i class="fas fa-pen-fancy text-primary me-2"></i> Legal Opinion
+                        </label>
+                        <textarea wire:model.defer="legal_comment" 
+                                  class="form-control form-control-solid resize-none rounded-3" 
+                                  rows="4" 
+                                  placeholder="e.g., Entity is active. Registration number verified. Address matches application details..."></textarea>
+                        @error('legal_comment') 
+                            <div class="text-danger fs-9 fw-bold mt-2 d-flex align-items-center">
+                                <i class="fas fa-exclamation-circle me-1"></i> {{ $message }}
+                            </div> 
+                        @enderror
+                    </div>
+
+                    {{-- Premium Submit Button --}}
+                    <div class="d-grid">
+                        <button type="submit" 
+                                class="btn fw-bolder py-4 px-6 rounded-3 shadow-lg position-relative overflow-hidden"
+                                style="background: linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 100%); border: none;">
+                            <span wire:loading.remove wire:target="submitDecision" class="position-relative d-flex align-items-center justify-content-center">
+                                <i class="fas fa-paper-plane me-2 fs-5"></i> 
+                                <span class="fs-5">Submit Verdict</span>
+                                <span class="ms-3 badge badge-light-warning border border-warning rounded-pill px-3 py-1">
+                                    {{ $cac_status_verdict ?: 'Select Result' }}
+                                </span>
+                            </span>
+                            <span wire:loading wire:target="submitDecision" class="position-relative d-flex align-items-center justify-content-center">
+                                <span class="spinner-border spinner-border-sm me-3" role="status" aria-hidden="true"></span>
+                                <span class="fs-5">Processing Decision...</span>
+                            </span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        {{-- === QUICK STATS CARD === --}}
+        <div class="card card-flush shadow-sm border-0 bg-light-primary bg-opacity-50 rounded-3">
+            <div class="card-body py-4 px-5">
+                <div class="d-flex align-items-center">
+                    <div class="symbol symbol-45px symbol-circle bg-primary me-4">
+                        <i class="fas fa-lightbulb text-white fs-2"></i>
+                    </div>
+                    <div>
+                        <span class="text-gray-700 fw-bold fs-7 d-block mb-1">Pro Tip</span>
+                        <span class="text-gray-600 fs-8">
+                            Use "Open New Tab" if the embedded portal doesn't load properly due to browser security policies.
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- ========================================================= --}}
+    {{-- RIGHT COLUMN: THE "LIVE LOOK" PORTAL                      --}}
+    {{-- ========================================================= --}}
+    <div class="col-xl-7">
+        <div class="card card-flush shadow-lg border-0 h-100 overflow-hidden" style="border-radius: 16px;">
+            
+            {{-- Portal Toolbar --}}
+            <div class="card-header border-0 py-4 px-6" style="background: linear-gradient(90deg, #f8fafc 0%, #e2e8f0 100%);">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center">
+                        <div class="symbol symbol-40px symbol-circle me-3" style="background: linear-gradient(135deg, #4fc3f7 0%, #0288d1 100%);">
+                            <i class="fas fa-globe text-white fs-4"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-gray-800 fw-bolder mb-0 fs-5">CAC Public Registry</h3>
+                            <span class="text-gray-500 fs-9">icrp.cac.gov.ng</span>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex gap-2">
+                        {{-- Toggle Button --}}
+                        <button wire:click="togglePortal" 
+                                class="btn btn-sm fw-bold px-4 rounded-pill shadow-sm {{ $showCacPortal ? 'btn-light-primary' : 'btn-primary' }}">
+                            <i class="fas {{ $showCacPortal ? 'fa-sync-alt' : 'fa-play' }} me-2"></i>
+                            {{ $showCacPortal ? 'Reload Portal' : 'Launch Portal' }}
+                        </button>
+                        
+                        {{-- External Link --}}
+                        <a href="https://icrp.cac.gov.ng/public-search/" 
+                           target="_blank" 
+                           class="btn btn-sm btn-white border border-gray-300 fw-bold px-4 rounded-pill shadow-sm">
+                            <i class="fas fa-external-link-alt text-primary me-2"></i> New Tab
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Portal Viewport --}}
+            <div class="card-body p-0 d-flex align-items-center justify-content-center position-relative overflow-hidden"
+                 style="min-height: 550px; background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);">
+                
+                @if($showCacPortal)
+                    {{-- Live Iframe with Security Banner --}}
+                    <div class="w-100 h-100 d-flex flex-column">
+                        {{-- Security Notice Bar --}}
+                        <div class="px-4 py-2 d-flex align-items-center justify-content-center" 
+                             style="background: linear-gradient(90deg, #fff3cd 0%, #ffeeba 100%); border-bottom: 1px solid #ffc107;">
+                            <i class="fas fa-shield-alt text-warning me-2"></i>
+                            <span class="text-warning-900 fs-9 fw-bold text-uppercase tracking-1px">
+                                Secure External Connection - CAC Official Portal
+                            </span>
+                            <span class="badge badge-warning ms-2 rounded-pill px-2 py-1">LIVE</span>
+                        </div>
+                        
+                        <iframe src="https://icrp.cac.gov.ng/public-search/" 
+                                class="w-100 flex-grow-1 border-0" 
+                                style="min-height: 500px;" 
+                                title="CAC Public Search"
+                                sandbox="allow-scripts allow-same-origin allow-forms allow-popups">
+                        </iframe>
+                    </div>
+                @else
+                    {{-- Premium Placeholder State --}}
+                    <div class="text-center p-10">
+                        <div class="mb-8">
+                            {{-- Animated Icon --}}
+                            <div class="symbol symbol-120px symbol-circle mx-auto mb-5 position-relative" 
+                                 style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); box-shadow: 0 20px 40px rgba(33, 150, 243, 0.15);">
+                                <i class="fas fa-search-location text-primary" style="font-size: 3.5rem;"></i>
+                                
+                                {{-- Pulse Animation Rings --}}
+                                <span class="position-absolute top-0 start-0 w-100 h-100 rounded-circle animate-pulse-fast" 
+                                      style="border: 3px solid rgba(33, 150, 243, 0.3);"></span>
+                            </div>
+                            
+                            <h2 class="text-gray-800 fw-bolder fs-2 mb-3">
+                                Ready to Verify Entity?
+                            </h2>
+                            <p class="text-gray-500 fs-6 mb-6 mx-auto" style="max-width: 400px;">
+                                Load the <strong class="text-gray-700">Corporate Affairs Commission</strong> 
+                                public search portal directly in this window to verify the registration status.
+                            </p>
+                        </div>
+                        
+                        {{-- Action Buttons --}}
+                        <div class="d-flex justify-content-center gap-3 mb-6">
+                            <button wire:click="togglePortal" 
+                                    class="btn btn-primary btn-lg fw-bolder px-8 py-4 rounded-3 shadow-lg position-relative overflow-hidden"
+                                    style="background: linear-gradient(135deg, #1e88e5 0%, #1565c0 100%); border: none;">
+                                <i class="fas fa-rocket me-2 fs-5"></i>
+                                <span>Load Live Portal</span>
+                            </button>
+                        </div>
+                        
+                        {{-- Feature Cards --}}
+                        <div class="row g-3 justify-content-center">
+                            <div class="col-md-4">
+                                <div class="bg-white rounded-3 p-4 shadow-sm border border-gray-100 h-100">
+                                    <div class="symbol symbol-40px symbol-circle bg-light-success mb-3">
+                                        <i class="fas fa-check-double text-success fs-4"></i>
+                                    </div>
+                                    <h5 class="text-gray-800 fw-bold fs-7 mb-1">Verify Status</h5>
+                                    <span class="text-gray-500 fs-8">Check if entity is ACTIVE</span>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="bg-white rounded-3 p-4 shadow-sm border border-gray-100 h-100">
+                                    <div class="symbol symbol-40px symbol-circle bg-light-info mb-3">
+                                        <i class="fas fa-search text-info fs-4"></i>
+                                    </div>
+                                    <h5 class="text-gray-800 fw-bold fs-7 mb-1">Search by RC/BN</h5>
+                                    <span class="text-gray-500 fs-8">Find registration details</span>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="bg-white rounded-3 p-4 shadow-sm border border-gray-100 h-100">
+                                    <div class="symbol symbol-40px symbol-circle bg-light-warning mb-3">
+                                        <i class="fas fa-camera text-warning fs-4"></i>
+                                    </div>
+                                    <h5 class="text-gray-800 fw-bold fs-7 mb-1">Capture Proof</h5>
+                                    <span class="text-gray-500 fs-8">Screenshot for evidence</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                @endif
+
+                {{-- Loading Overlay --}}
+                <div wire:loading.flex wire:target="togglePortal" 
+                     class="position-absolute top-0 start-0 w-100 h-100 align-items-center justify-content-center z-index-10"
+                     style="background: rgba(255,255,255,0.95); backdrop-filter: blur(10px);">
+                    <div class="text-center">
+                        <div class="symbol symbol-80px symbol-circle mb-4" style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);">
+                            <span class="spinner-border text-primary" style="width: 2.5rem; height: 2.5rem;"></span>
+                        </div>
+                        <span class="text-gray-700 fw-bolder fs-5 d-block mb-2">Establishing Secure Connection</span>
+                        <span class="text-gray-500 fs-7">Connecting to CAC servers...</span>
+                    </div>
+                </div>
+            </div>
+            
+            {{-- Portal Footer Status --}}
+            <div class="card-footer border-0 py-3 px-6" style="background: linear-gradient(90deg, #f8fafc 0%, #e2e8f0 100%);">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="badge badge-light-primary border border-primary rounded-pill px-3 py-2">
+                            <i class="fas fa-server me-1"></i> Official CAC Portal
+                        </span>
+                        <span class="badge badge-light-success border border-success rounded-pill px-3 py-2">
+                            <i class="fas fa-lock me-1"></i> Secure Connection
+                        </span>
+                    </div>
+                    <span class="text-gray-500 fs-9">
+                        <i class="fas fa-info-circle me-1"></i> Portal may block embedding - use "New Tab" option
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- Custom Styles --}}
+<style>
+    .animate-pulse-fast {
+        animation: pulse-fast 1.5s ease-in-out infinite;
+    }
+    
+    @keyframes pulse-fast {
+        0% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.15); opacity: 0.5; }
+        100% { transform: scale(1); opacity: 1; }
+    }
+    
+    .hover-shadow:hover {
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
+        transform: translateY(-1px);
+        transition: all 0.3s ease;
+    }
+    
+    .transition-all {
+        transition: all 0.3s ease;
+    }
+    
+    .tracking-1px {
+        letter-spacing: 1px;
+    }
+    
+    .tracking-2px {
+        letter-spacing: 2px;
+    }
+    
+    .tracking-3px {
+        letter-spacing: 3px;
+    }
+</style>
+
+
+==================================================
+FILE: C:\xampp\htdocs\bank\resources\views\livewire\admin\loan\partials\financial-tables.blade.php

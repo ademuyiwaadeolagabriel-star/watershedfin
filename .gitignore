@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+
+# Environment
+.env
+.env.local
+.env.production
+.env.development
+
+# Vercel
+.vercel/
+
+# Logs
+*.log
+dev.log
+server.log
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Build
+dist/
+coverage/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# TypeScript
+*.tsbuildinfo

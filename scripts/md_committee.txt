@@ -1,0 +1,1028 @@
+FILE: C:\xampp\htdocs\bank\resources\views\livewire\admin\loan\md-committee.blade.php
+==================================================
+<div class="row g-5" x-data="{ 
+    formatDisplay(val) { if(!val) return ''; return val.toString().replace(/[^0-9.]/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, ','); } 
+}">
+
+    {{-- ================= HEADER ================= --}}
+    <div class="col-12">
+        <div class="card bg-dark shadow-sm border-0">
+            <div class="card-body py-4 d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    <div class="symbol symbol-50px me-4">
+                        <div class="symbol-label bg-warning bg-opacity-20 border border-warning border-opacity-25">
+                            <i class="fas fa-crown text-warning fs-1"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="text-white fw-bolder mb-1">Executive Approval Committee</h3>
+                        <div class="text-white text-opacity-50 fs-8 text-uppercase fw-bold ls-1">
+                            Final Authority & Offer Trigger
+                        </div>
+                    </div>
+                </div>
+                
+                {{-- Status Indicators --}}
+                <div class="d-flex gap-3">
+                    <div class="rounded border border-secondary border-dashed px-3 py-2 text-center">
+                        <span class="text-gray-500 fs-10 fw-bold text-uppercase d-block">Structured Amount</span>
+                        <span class="text-white fw-bold">â‚¦{{ number_format($loan->structured_amount) }}</span>
+                    </div>
+                    <div class="rounded border border-secondary border-dashed px-3 py-2 text-center">
+                        <span class="text-gray-500 fs-10 fw-bold text-uppercase d-block">Liquidity Cap</span>
+                        <span class="text-{{ $loan->final_amount < $loan->structured_amount ? 'warning' : 'success' }} fw-bold">
+                            {{ $loan->final_amount ? 'â‚¦'.number_format($loan->final_amount) : 'None' }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- ================= THE OVERRIDE ENGINE ================= --}}
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-light min-h-60px">
+                <h3 class="card-title fw-bold text-dark fs-6">
+                    <i class="fas fa-sliders-h me-2 text-primary"></i> Decision Engine
+                </h3>
+                <div class="card-toolbar">
+                    <span class="badge badge-light-primary fw-bold">Live Recalculation Active</span>
+                </div>
+            </div>
+            
+            <div class="card-body">
+                <div class="alert alert-info border border-info border-dashed d-flex align-items-center p-5 mb-8">
+                    <i class="fas fa-info-circle fs-2hx text-info me-4"></i>
+                    <div class="d-flex flex-column">
+                        <h5 class="mb-1 text-info">Power to Override</h5>
+                        <span>Adjusting these figures will instantly recalculate the Repayment Schedule, Fees, and Yield before the Offer Letter is generated.</span>
+                    </div>
+                </div>
+
+                <div class="row g-8">
+                    {{-- 1. FINAL AMOUNT --}}
+                    <div class="col-md-6">
+                        <label class="form-label fs-6 fw-bolder text-dark required">Approved Principal</label>
+                        <div class="input-group input-group-solid input-group-lg">
+                            <span class="input-group-text border-0">â‚¦</span>
+                            <input type="text" 
+                                   class="form-control fw-bolder fs-4 text-dark" 
+                                   wire:model.lazy="approved_amount"
+                                   x-on:keyup="$el.value = formatDisplay($el.value)">
+                        </div>
+                        <div class="form-text fs-9">Base: â‚¦{{ number_format($loan->final_amount ?? $loan->structured_amount) }}</div>
+                    </div>
+
+                    {{-- 2. FINAL TENOR --}}
+                    <div class="col-md-3">
+                        <label class="form-label fs-6 fw-bolder text-dark required">Tenor (Mths)</label>
+                        <input type="number" 
+                               class="form-control form-control-solid form-control-lg fw-bolder fs-4 text-center" 
+                               wire:model.lazy="approved_tenor">
+                    </div>
+
+                    {{-- 3. FINAL RATE --}}
+                    <div class="col-md-3">
+                        <label class="form-label fs-6 fw-bolder text-dark required">Rate (%)</label>
+                        <input type="number" 
+                               class="form-control form-control-solid form-control-lg fw-bolder fs-4 text-center" 
+                               wire:model.lazy="approved_rate" step="0.1">
+                    </div>
+                </div>
+
+                <div class="separator my-8"></div>
+
+                {{-- APPROVAL NOTES --}}
+                <div class="mb-0">
+                    <label class="form-label fs-6 fw-bold text-dark required">Final Approval Directive / Note</label>
+                    <textarea wire:model.defer="md_comment" 
+                              class="form-control form-control-solid" 
+                              rows="4" 
+                              placeholder="e.g. Approved subject to receipt of post-dated cheques..."></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- ================= IMPACT SIMULATOR (SIDEBAR) ================= --}}
+    <div class="col-lg-4">
+        <div class="card bg-light-primary border-primary border-dashed h-100 shadow-sm">
+            <div class="card-header min-h-50px border-0">
+                <h3 class="card-title fw-bolder text-primary fs-7">Impact Analysis</h3>
+            </div>
+            
+            <div class="card-body pt-0">
+                
+                {{-- METRIC 1: MONTHLY INSTALLMENT --}}
+                <div class="bg-white rounded p-4 mb-4 shadow-sm border border-gray-200">
+                    <span class="text-gray-500 fw-bold fs-8 text-uppercase d-block mb-1">Monthly Installment</span>
+                    
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="d-flex flex-column">
+                            <span class="fs-7 text-muted text-decoration-line-through">
+                                â‚¦{{ number_format($old_installment, 2) }}
+                            </span>
+                            <span class="fs-9 text-gray-400">Previous</span>
+                        </div>
+                        
+                        <i class="fas fa-arrow-right text-gray-300 fs-7"></i>
+                        
+                        <div class="d-flex flex-column text-end">
+                            <span class="fs-3 fw-bolder text-primary">
+                                â‚¦{{ number_format($new_installment, 2) }}
+                            </span>
+                            <span class="fs-9 text-success fw-bold">New Value</span>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- METRIC 2: NET YIELD --}}
+                <div class="bg-white rounded p-4 mb-6 shadow-sm border border-gray-200">
+                    <span class="text-gray-500 fw-bold fs-8 text-uppercase d-block mb-1">Projected Net Yield</span>
+                    <div class="fs-2hx fw-bolder text-dark">
+                        {{ number_format($new_yield, 2) }}%
+                    </div>
+                    <div class="fs-9 text-muted mt-1">Return on Investment (Annualized)</div>
+                </div>
+
+                {{-- CHECKLIST --}}
+                <div class="mb-6">
+                    <h5 class="text-gray-700 fw-bold fs-8 text-uppercase mb-3">Pre-Signing Checklist</h5>
+                    
+                    <div class="d-flex flex-column gap-2">
+                        <label class="form-check form-check-sm form-check-custom form-check-solid">
+                            <input class="form-check-input" type="checkbox" wire:model="final_checklist.reviewed_risk_notes" />
+                            <span class="form-check-label fw-bold text-gray-600 fs-8">I have reviewed the Risk Report</span>
+                        </label>
+                        
+                        <label class="form-check form-check-sm form-check-custom form-check-solid">
+                            <input class="form-check-input" type="checkbox" wire:model="final_checklist.reviewed_cfo_cap" />
+                            <span class="form-check-label fw-bold text-gray-600 fs-8">I have noted the Liquidity Cap</span>
+                        </label>
+
+                        <label class="form-check form-check-sm form-check-custom form-check-solid">
+                            <input class="form-check-input" type="checkbox" wire:model="final_checklist.board_policy_compliant" />
+                            <span class="form-check-label fw-bold text-gray-600 fs-8">Compliant with Board Policy</span>
+                        </label>
+                    </div>
+                    
+                    @error('final_checklist.*') <div class="text-danger fs-9 mt-2 fw-bold">{{ $message }}</div> @enderror
+                </div>
+
+                {{-- THE TRIGGER BUTTON --}}
+                <button wire:click="finalApprove" 
+                        class="btn btn-success w-100 py-4 fw-bolder fs-6 shadow-sm"
+                        wire:loading.attr="disabled">
+                    <span wire:loading.remove>
+                        <i class="fas fa-file-signature fs-4 me-2"></i> SIGN & GENERATE OFFER
+                    </span>
+                    <span wire:loading>
+                        <span class="spinner-border spinner-border-sm me-2"></span> Processing...
+                    </span>
+                </button>
+                
+                <div class="row mt-3 g-2">
+                    <div class="col-6">
+                        <button wire:click="returnToHoc" class="btn btn-light-warning w-100 btn-sm fw-bold">
+                            <i class="fas fa-undo me-1"></i> Return
+                        </button>
+                    </div>
+                    <div class="col-6">
+                        <button wire:click="decline" class="btn btn-light-danger w-100 btn-sm fw-bold">
+                            <i class="fas fa-times me-1"></i> Decline
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    
+</div>
+
+
+==================================================
+FILE: C:\xampp\htdocs\bank\resources\views\livewire\admin\loan\others.blade.php
+==================================================
+<div>
+    <div wire:ignore.self id="kt_filter" class="bg-white" data-kt-drawer="true" data-kt-drawer-activate="true" data-kt-drawer-toggle="#kt_filter_button" data-kt-drawer-close="#kt_filter_close" data-kt-drawer-width="{'md': '500px'}">
+        <div class="card w-100">
+            <div class="card-header pe-5 border-0">
+                <div class="card-title">
+                    <div class="d-flex justify-content-center flex-column me-3">
+                        <div class="fs-4 fw-bolder text-gray-900 text-hover-primary me-1 lh-1">{{__('Filter')}}</div>
+                    </div>
+                </div>
+                <div class="card-toolbar">
+                    <div class="btn btn-sm btn-icon btn-icon-dark btn-active-light-primary" data-kt-drawer-dismiss="true" id="kt_filter_close">
+                        <span class="svg-icon svg-icon-2">
+                            <i class="fal fa-times"></i>
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body text-wrap">
+                <div class="fv-row mb-6">
+                    <label class="form-label fs-6 fw-bolder text-dark">{{__('Sort by')}}</label>
+                    <select class="form-select form-select-solid" wire:model="sortBy">
+                        <option value="created_at">{{__('Date')}}</option>
+                        <option value="amount">{{__('Amount')}}</option>
+                    </select>
+                </div>
+                <div class="fv-row mb-6">
+                    <label class="form-label fs-6 fw-bolder text-dark">{{__('Order by')}}</label>
+                    <select class="form-select form-select-solid" wire:model="orderBy">
+                        <option value="asc">{{__('ASC')}}</option>
+                        <option value="desc">{{__('DESC')}}</option>
+                    </select>
+                </div>
+                <div class="fv-row mb-6">
+                    <label class="form-label fs-6 fw-bolder text-dark">{{__('Per page')}}</label>
+                    <select class="form-select form-select-solid" wire:model="perPage">
+                        <option value="10">{{__('10')}}</option>
+                        <option value="25">{{__('25')}}</option>
+                        <option value="50">{{__('50')}}</option>
+                        <option value="100">{{__('100')}}</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="post fs-6 d-flex flex-column-fluid min-vh-100" id="kt_post">
+        <div class="container">
+            <div class="row g-xl-8">
+                <div class="col-md-6">
+                    <div class="d-flex justify-content-center flex-column me-3">
+                        <div class="col-md-12">
+                            <div class="input-group input-group-solid mb-5 rounded-4">
+                                <span class="input-group-text" id="basic-addon1"><i class="fal fa-search"></i></span>
+                                <input type="search" class="form-control form-control-solid text-dark" wire:model="search" placeholder="{{__('Transaction reference')}}" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 text-end">
+                    <button id="kt_filter_button" class="btn btn-dark me-4"><i class="fal fa-filter-list"></i> {{__('Filter')}}</button>
+                </div>
+            </div>
+
+            @if($transactions->count() > 0)
+            <div class="" wire:loading.class.delay="opacity-50" wire:target="search, status, orderBy, perPage, date, loadMore">
+                <div class="card-body pt-0">
+                    <div class="table-responsive">
+                        <table class="table align-middle table-row-bordered table-row-gray-300 gy-5 gs-7" id="kt_datatable_example_5">
+                            <thead>
+                                <tr class="text-start text-dark fw-bolder fs-7 text-uppercase px-7">
+                                    <th></th>
+                                    <th class="min-w-150px">{{__('Name')}}</th>
+                                    <th class="min-w-150px">{{__('Amount')}}</th>
+                                    <th class="min-w-50px">{{__('Reference ID')}}</th>
+                                    <th class="min-w-200px">{{__('Created')}}</th>
+                                </tr>
+                                <!--end::Table row-->
+                            </thead>
+                            <tbody class="fw-semibold text-dark fs-6">
+                                @foreach($transactions as $k=>$val)
+                                <tr class="cursor-pointer" id="kt_trx_{{$val->id}}_button">
+                                    <td>
+                                        <div class="symbol symbol-40px symbol-circle me-5">
+                                            <div class="symbol-label fs-3 fw-bolder text-dark">
+                                            <i class="fal fa-institution"></i>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>{{$val->user->business->name}}</td>
+                                    <td>{{$currency->currency_symbol.currencyFormat(number_format($val->amount, 2)).' '.$currency->currency}}</td>
+                                    <td>{{$val->ref_id}}</td>
+                                    <td>{{$val->created_at->toDayDateTimeString()}}</td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                        @if($transactions->total() > 0 && $transactions->count() < $transactions->total())<button wire:click="loadMore" wire:loading.remove class="btn btn-secondary btn-block">See more</button>@endif
+                    </div>
+                </div>
+            </div>
+            @else
+            <div class="text-center mt-20">
+                <img src="{{asset('asset/images/transactions.png')}}" style="height:auto; max-width:150px;" class="mb-6">
+                <h3 class="text-dark">{{__('No Transactions Found')}}</h3>
+            </div>
+            @endif
+        </div>
+        @foreach($transactions as $val)
+        <livewire:admin.loan.details :val=$val :admin=$admin :wire:key="'kt_trx_'. $val->id">
+            @endforeach
+    </div>
+</div>
+
+
+==================================================
+FILE: C:\xampp\htdocs\bank\resources\views\livewire\admin\loan\portfolio-ledger.blade.php
+==================================================
+<div class="row g-5">
+
+    {{-- TOP ROW: FINANCIAL HEALTH WIDGETS --}}
+    <div class="col-12">
+        <div class="card bg-dark shadow-sm border-0 mb-2">
+            <div class="card-body py-5 d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    <div class="symbol symbol-50px me-4">
+                        <div class="symbol-label bg-white bg-opacity-10 text-white">
+                            <i class="fas fa-chart-network fs-1"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="text-white fw-bolder mb-1">Portfolio Ledger: {{ $loan->user->first_name }} {{ $loan->user->last_name }}</h3>
+                        <div class="text-white text-opacity-50 fs-7 fw-bold">
+                            Ref: {{ $loan->application_ref }} | Disbursed: {{ \Carbon\Carbon::parse($loan->disbursed_at)->format('d M Y') }}
+                        </div>
+                    </div>
+                </div>
+                
+                @if($loan->status === 'paid')
+                    <span class="badge badge-success fs-5 py-3 px-4"><i class="fas fa-check-double text-white me-2"></i> LOAN SETTLED</span>
+                @elseif($loan->defaulter == 1)
+                    <span class="badge badge-danger fs-5 py-3 px-4 shadow-sm animate__animated animate__pulse animate__infinite"><i class="fas fa-exclamation-triangle text-white me-2"></i> DEFAULT / NPL</span>
+                @else
+                    <span class="badge badge-primary fs-5 py-3 px-4"><i class="fas fa-spinner fa-spin text-white me-2"></i> ACTIVE & PERFORMING</span>
+                @endif
+            </div>
+        </div>
+
+        {{-- 4 KPI BLOCKS --}}
+        <div class="row g-5 mb-8">
+            <div class="col-md-3">
+                <div class="card bg-light-primary border-primary border border-dashed shadow-sm h-100">
+                    <div class="card-body p-5">
+                        <span class="text-primary fw-bolder fs-7 text-uppercase">Total Expected</span>
+                        <div class="fs-2 fw-boldest text-dark mt-2">â‚¦{{ number_format($total_expected) }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-light-success border-success border border-dashed shadow-sm h-100">
+                    <div class="card-body p-5">
+                        <span class="text-success fw-bolder fs-7 text-uppercase">Total Collected</span>
+                        <div class="fs-2 fw-boldest text-dark mt-2">â‚¦{{ number_format($total_paid) }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-light-warning border-warning border border-dashed shadow-sm h-100">
+                    <div class="card-body p-5">
+                        <span class="text-warning fw-bolder fs-7 text-uppercase">Outstanding Balance</span>
+                        <div class="fs-2 fw-boldest text-dark mt-2">â‚¦{{ number_format($outstanding_balance) }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-light-danger border-danger border border-dashed shadow-sm h-100">
+                    <div class="card-body p-5">
+                        <span class="text-danger fw-bolder fs-7 text-uppercase">Arrears (Past Due)</span>
+                        <div class="fs-2 fw-boldest text-danger mt-2">â‚¦{{ number_format($arrears_amount) }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- LEFT COLUMN: AMORTIZATION SCHEDULE --}}
+    <div class="col-xl-8">
+        <div class="card shadow-sm border border-gray-300">
+            <div class="card-header bg-light min-h-50px">
+                <h3 class="card-title fw-bolder text-dark fs-6"><i class="fas fa-calendar-alt text-primary me-2"></i> Amortization & Repayment Schedule</h3>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-row-dashed table-row-gray-200 align-middle gs-4 gy-4 fs-8 m-0">
+                        <thead class="bg-gray-100 text-gray-600 fw-bolder text-uppercase">
+                            <tr>
+                                <th class="ps-4 w-50px">No.</th>
+                                <th>Due Date</th>
+                                <th class="text-end">Base Amount</th>
+                                <th class="text-end">Late Penalty</th>
+                                <th>Status</th>
+                                <th class="text-end pe-4">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="fw-bold text-gray-700">
+                            @foreach($installments as $index => $inst)
+                                @php
+                                    $isLate = \Carbon\Carbon::parse($inst->expiry_date)->isPast() && $inst->status == 'unpaid';
+                                @endphp
+                                <tr class="{{ $isLate ? 'bg-light-danger' : '' }}">
+                                    <td class="ps-4">{{ $index + 1 }}</td>
+                                    <td>
+                                        {{ \Carbon\Carbon::parse($inst->expiry_date)->format('d M Y') }}
+                                        @if($isLate) <span class="badge badge-danger fs-9 ms-1">Overdue</span> @endif
+                                    </td>
+                                    <td class="text-end font-monospace">â‚¦{{ number_format($inst->payback) }}</td>
+                                    <td class="text-end font-monospace text-danger">{{ $isLate ? 'â‚¦'.number_format($inst->failed) : '-' }}</td>
+                                    
+                                    <td>
+                                        @if($inst->status == 'paid')
+                                            <span class="badge badge-light-success"><i class="fas fa-check me-1 text-success"></i> Paid on {{ \Carbon\Carbon::parse($inst->updated_at)->format('d M') }}</span>
+                                        @else
+                                            <span class="badge badge-light-warning">Pending</span>
+                                        @endif
+                                    </td>
+                                    
+                                    <td class="text-end pe-4">
+                                        @if($inst->status == 'unpaid')
+                                            <button wire:click="openPaymentModal('{{ $inst->id }}')" data-bs-toggle="modal" data-bs-target="#paymentModal" class="btn btn-sm btn-primary py-2 px-3 fw-bolder">
+                                                Log Payment
+                                            </button>
+                                        @else
+                                            <button class="btn btn-sm btn-light py-2 px-3 text-muted" disabled>Cleared</button>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- RIGHT COLUMN: ACTION CENTER --}}
+    <div class="col-xl-4">
+        <div class="card shadow-sm border border-gray-300 position-sticky" style="top: 20px;">
+            <div class="card-header bg-light min-h-50px">
+                <h3 class="card-title fw-bolder text-dark fs-6"><i class="fas fa-bolt text-warning me-2"></i> Action Center</h3>
+            </div>
+            <div class="card-body">
+                
+                <div class="mb-6">
+                    <span class="fs-8 fw-bold text-gray-500 text-uppercase d-block mb-1">Next Payment Due</span>
+                    <span class="fs-3 fw-boldest text-dark">{{ $next_due_date }}</span>
+                </div>
+
+                <hr class="text-gray-300 mb-6">
+
+                <button class="btn btn-light-info w-100 mb-4 fw-bolder" onclick="alert('Email reminder dispatched to customer!')">
+                    <i class="fas fa-envelope me-2"></i> Send Manual Reminder
+                </button>
+
+                <button class="btn btn-light-success w-100 mb-4 fw-bolder" onclick="confirm('Are you sure you want to generate a Full Liquidation Quote?')">
+                    <i class="fas fa-file-invoice-dollar me-2"></i> Generate Settlement Quote
+                </button>
+
+                @if($loan->defaulter == 1)
+                <button class="btn btn-light-danger w-100 fw-bolder border border-danger border-dashed">
+                    <i class="fas fa-balance-scale-right me-2"></i> Push to Legal Recovery
+                </button>
+                @endif
+                
+            </div>
+        </div>
+    </div>
+
+    {{-- PAYMENT MODAL --}}
+    <div wire:ignore.self class="modal fade" id="paymentModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg">
+                <div class="modal-header bg-light-primary border-0 pt-6 pb-4">
+                    <h3 class="fw-bolder text-dark m-0"><i class="fas fa-cash-register text-primary me-2"></i> Log Manual Repayment</h3>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-8">
+                    
+                    <div class="fv-row mb-6">
+                        <label class="form-label fw-bold text-dark fs-7 required">Amount Collected (â‚¦)</label>
+                        <input type="number" wire:model.defer="payment_amount" class="form-control form-control-lg form-control-solid fw-bolder font-monospace text-success fs-3">
+                        @error('payment_amount') <span class="text-danger fs-9 fw-bold">{{ $message }}</span> @enderror
+                    </div>
+
+                    <div class="row g-4 mb-6">
+                        <div class="col-6 fv-row">
+                            <label class="form-label fw-bold text-dark fs-7 required">Payment Method</label>
+                            <select wire:model.defer="payment_method" class="form-select form-select-solid">
+                                <option value="bank_transfer">Bank Transfer</option>
+                                <option value="direct_debit">Direct Debit (Remita)</option>
+                                <option value="cash">Physical Cash</option>
+                                <option value="cheque">Cheque</option>
+                            </select>
+                        </div>
+                        <div class="col-6 fv-row">
+                            <label class="form-label fw-bold text-dark fs-7 required">Reference ID</label>
+                            <input type="text" wire:model.defer="payment_reference" class="form-control form-control-solid text-uppercase">
+                            @error('payment_reference') <span class="text-danger fs-9 fw-bold">{{ $message }}</span> @enderror
+                        </div>
+                    </div>
+
+                    <div class="fv-row mb-8">
+                        <label class="form-label fw-bold text-dark fs-7">Internal Notes</label>
+                        <textarea wire:model.defer="payment_notes" class="form-control form-control-solid" rows="2" placeholder="e.g. Customer paid at the branch..."></textarea>
+                    </div>
+
+                    <button wire:click="submitPayment" wire:loading.attr="disabled" class="btn btn-primary w-100 py-4 fw-bolder fs-6 shadow-sm hover-elevate-up">
+                        <span wire:loading.remove wire:target="submitPayment">
+                            <i class="fas fa-check-circle me-2"></i> Confirm & Update Ledger
+                        </span>
+                        <span wire:loading wire:target="submitPayment">
+                            <span class="spinner-border spinner-border-sm me-2"></span> Processing Ledger...
+                        </span>
+                    </button>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+{{-- Script to safely close the modal --}}
+<script>
+    window.addEventListener('closeModal', event => {
+        var myModalEl = document.getElementById('paymentModal');
+        var modal = bootstrap.Modal.getInstance(myModalEl);
+        if(modal) { modal.hide(); }
+        // Clean up backdrop just in case
+        document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+        document.body.classList.remove('modal-open');
+    });
+</script>
+
+
+==================================================
+FILE: C:\xampp\htdocs\bank\resources\views\livewire\admin\loan\products.blade.php
+==================================================
+<div>
+    <div wire:ignore.self class="modal fade" id="filter" tabindex="-1" role="dialog" aria-labelledby="modal-form" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 class="modal-title">{{__('Filter Messages')}}</h3>
+                    <div class="btn btn-icon btn-sm btn-active-light-primary ms-2" data-bs-dismiss="modal" aria-label="Close">
+                        <span class="svg-icon svg-icon-1">
+                            <i class="fal fa-times"></i>
+                        </span>
+                    </div>
+                </div>
+                <div class="modal-body">
+                    <div class="fv-row mb-6">
+                        <label class="form-label fs-6 fw-bolder text-dark">{{__('Sort by')}}</label>
+                        <select class="form-select form-select-solid" wire:model="sortBy">
+                            <option value="asc">{{__('ASC')}}</option>
+                            <option value="desc">{{__('DESC')}}</option>
+                        </select>
+                    </div>
+                    <div class="fv-row mb-6">
+                        <label class="form-label fs-6 fw-bolder text-dark">{{__('Order by')}}</label>
+                        <select class="form-select form-select-solid" wire:model="orderBy">
+                            <option value="interest">{{__('Interest')}}</option>
+                            <option value="failed_interest">{{__('Failed Interest')}}</option>
+                            <option value="duration">{{__('Duration')}}</option>
+                            <option value="created_at">{{__('Date')}}</option>
+                        </select>
+                    </div>
+                    <div class="fv-row mb-6">
+                        <label class="form-label fs-6 fw-bolder text-dark">{{__('Per page')}}</label>
+                        <select class="form-select form-select-solid" wire:model="perPage">
+                            <option value="10">{{__('10')}}</option>
+                            <option value="25">{{__('25')}}</option>
+                            <option value="50">{{__('50')}}</option>
+                            <option value="100">{{__('100')}}</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="post fs-6 d-flex flex-column-fluid min-vh-100" id="kt_post">
+        <div class="container">
+            <div class="row g-xl-8">
+                <div class="col-md-8">
+                    <div class="d-flex flex-column align-items-start justify-content-center flex-wrap me-2">
+                        <div class="input-group input-group-solid mb-5 rounded-4">
+                            <span class="input-group-text" id="basic-addon1"><i class="fal fa-search"></i></span>
+                            <input type="search" class="form-control form-control-solid text-dark" wire:model="search" placeholder="{{__('Search plans')}}" />
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 text-end">
+                    <button data-bs-toggle="modal" data-bs-target="#filter" class="btn btn-light text-dark me-4"><i class="fal fa-filter-list"></i> {{__('Filter')}}</button>
+                    <button id="kt_article_button" class="btn btn-info me-4"><i class="fal fa-pie-chart"></i> {{__('Add plan')}}</button>
+                </div>
+            </div>
+            <div wire:ignore.self id="kt_article" class="bg-white" data-kt-drawer="true" data-kt-drawer-activate="true" data-kt-drawer-toggle="#kt_article_button" data-kt-drawer-close="#kt_article_close" data-kt-drawer-width="{'md': '900px'}">
+                <div class="card w-100">
+                    <div class="card-header pe-5 border-0">
+                        <div class="card-title">
+                            <div class="d-flex justify-content-center flex-column me-3">
+                                <div class="fs-4 fw-bolder text-gray-900 text-hover-primary me-1 lh-1">{{__('Create a Plan')}}</div>
+                            </div>
+                        </div>
+                        <div class="card-toolbar">
+                            <div class="btn btn-sm btn-icon btn-icon-dark btn-active-light-primary" data-kt-drawer-dismiss="true" id="kt_article_close">
+                                <span class="svg-icon svg-icon-2">
+                                    <i class="fal fa-times"></i>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body text-wrap">
+                        <div class="pb-5 mt-10 position-relative zindex-1">
+                            <form class="form w-100 mb-10" wire:submit.prevent="addPlan" method="post">
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="card card-flush py-4">
+                                            <!--begin::Card body-->
+                                            <div class="card-body text-center pt-0" wire:ignore>
+                                                <!--begin::Image input-->
+                                                <!--begin::Image input placeholder-->
+                                                <style>
+                                                    .image-input-placeholder {
+                                                        background-image: url({{asset('dashboard/media/svg/files/blank-image.svg')
+                                                    }})
+                                                    }
+                                                </style>
+                                                <!--end::Image input placeholder-->
+
+                                                <div class="image-input image-input-empty image-input-outline image-input-placeholder mb-3" data-kt-image-input="true">
+                                                    <!--begin::Preview existing avatar-->
+                                                    <div class="image-input-wrapper w-150px h-150px"></div>
+                                                    <!--end::Preview existing avatar-->
+
+                                                    <!--begin::Label-->
+                                                    <label class="btn btn-icon btn-circle btn-active-color-primary w-25px h-25px bg-body shadow" data-kt-image-input-action="change" data-bs-toggle="tooltip" aria-label="Change avatar" data-bs-original-title="Change avatar" data-kt-initialized="1">
+                                                        <i class="bi bi-pencil-fill fs-7"></i>
+
+                                                        <!--begin::Inputs-->
+                                                        <input type="file" wire:model="image" id="image" accept=".png, .jpg, .jpeg, .webp" required>
+                                                        <input type="hidden" name="avatar_remove">
+                                                        <!--end::Inputs-->
+                                                    </label>
+                                                    <!--end::Label-->
+
+                                                    <!--begin::Cancel-->
+                                                    <span class="btn btn-icon btn-circle btn-active-color-primary w-25px h-25px bg-body shadow" data-kt-image-input-action="cancel" data-bs-toggle="tooltip" aria-label="Cancel avatar" data-bs-original-title="Cancel avatar" data-kt-initialized="1">
+                                                        <i class="bi bi-x fs-2"></i>
+                                                    </span>
+                                                    <!--end::Cancel-->
+
+                                                    <!--begin::Remove-->
+                                                    <span class="btn btn-icon btn-circle btn-active-color-primary w-25px h-25px bg-body shadow" data-kt-image-input-action="remove" data-bs-toggle="tooltip" aria-label="Remove avatar" data-bs-original-title="Remove avatar" data-kt-initialized="1">
+                                                        <i class="bi bi-x fs-2"></i>
+                                                    </span>
+                                                    <!--end::Remove-->
+                                                </div>
+                                                <!--end::Image input-->
+
+                                                <!--begin::Description-->
+                                                <div class="text-muted fs-7">Set the thumbnail image. Only *.png, *.jpg and *.jpeg image files are accepted</div>
+                                                @error('image')
+                                                <span class="form-text text-danger">{{$message}}</span>
+                                                @enderror
+                                                <!--end::Description-->
+                                            </div>
+                                            <!--end::Card body-->
+                                        </div>
+                                        <div class="fv-row mb-6">
+                                            <label class="form-label fs-5 fw-bolder text-dark">{{__('Category')}}</label>
+                                            <select class="form-select form-select-solid" wire:model.defer="selectCategory" required>
+                                                <option value="">Select Category</option>
+                                                @foreach($categoryAll as $val)
+                                                <option value="{{$val->id}}">{{$val->name}}</option>
+                                                @endforeach
+                                            </select>
+                                            @error('selectCategory')
+                                            <span class="form-text text-danger">{{$message}}</span>
+                                            @enderror
+                                        </div>
+                                        <div class="fv-row mb-6">
+                                            <label class="form-label fs-5 fw-bolder text-dark">{{__('Product type')}}</label>
+                                            <select class="form-select form-select-solid" wire:model.defer="product_type" required>
+                                                <option value="digital">{{__('Digital')}}</option>
+                                                <option value="physical">{{__('Physical')}}</option>
+                                            </select>
+                                            @error('product_type')
+                                            <span class="form-text text-danger">{{$message}}</span>
+                                            @enderror
+                                        </div>
+                                        <div class="fv-row mb-6">
+                                            <label class="form-label fs-5 fw-bolder text-dark">{{__('Status')}}</label>
+                                            <select class="form-select form-select-solid" wire:model.defer="status" required>
+                                                <option value="1">{{__('Published')}}</option>
+                                                <option value="0">{{__('Disabled')}}</option>
+                                            </select>
+                                            @error('status')
+                                            <span class="form-text text-danger">{{$message}}</span>
+                                            @enderror
+                                        </div>
+                                        <div class="fv-row mb-6">
+                                            <label class="form-label fs-5 fw-bolder text-dark">{{__('Installment')}}</label>
+                                            <select class="form-select form-select-solid" wire:model.defer="installment" required>
+                                                <option value="1">{{__('Yes')}}</option>
+                                                <option value="0">{{__('No')}}</option>
+                                            </select>
+                                            @error('installment')
+                                            <span class="form-text text-danger">{{$message}}</span>
+                                            @enderror
+                                            <span class="form-text">User will pay loan monthly</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-8">
+                                        <div class="fv-row mb-6">
+                                            <input class="form-control form-control-lg form-control-solid" type="text" wire:model.defer="name" required placeholder="Name of Product" />
+                                            @error('name')
+                                            <span class="form-text text-danger">{{$message}}</span>
+                                            @enderror
+                                        </div>
+                                        <div class="fv-row mb-6">
+                                            <label class="col-form-label">{{__('Amount')}}</label>
+                                            <div class="input-group">
+                                                <span class="input-group-text border-0">{{$currency->currency_symbol}}</span>
+                                                <input type="number" wire:model.defer="amount" steps="any" class="form-control form-control-lg form-control-solid" required placeholder="0.00">
+                                            </div>
+                                            @error('amount')
+                                            <span class="form-text text-danger">{{$message}}</span>
+                                            @enderror
+                                        </div>
+                                        <div class="fv-row mb-6">
+                                            <label class="col-form-label">{{__('Loan Interest')}}</label>
+                                            <div class="input-group">
+                                                <input type="number" wire:model.defer="interest" steps="any" class="form-control form-control-lg form-control-solid" required placeholder="1">
+                                                <span class="input-group-text border-0">%</span>
+                                            </div>
+                                            @error('interest')
+                                            <span class="form-text text-danger">{{$message}}</span>
+                                            @enderror
+                                        </div>
+                                        <div class="fv-row mb-6">
+                                            <label class="col-form-label">{{__('Defaulter Loan Interest')}}</label>
+                                            <div class="input-group">
+                                                <input type="number" wire:model.defer="failed_interest" steps="any" class="form-control form-control-lg form-control-solid" required placeholder="1">
+                                                <span class="input-group-text border-0">%</span>
+                                            </div>
+                                            @error('failed_interest')
+                                            <span class="form-text text-danger">{{$message}}</span>
+                                            @enderror
+                                        </div>
+                                        <div class="fv-row mb-6">
+                                            <label class="col-form-label">{{__('Loan duration')}}</label>
+                                            <div class="input-group">
+                                                <input type="number" wire:model.defer="duration" steps="any" class="form-control form-control-lg form-control-solid" required placeholder="1">
+                                                <span class="input-group-text border-0">{{__('Months')}}</span>
+                                            </div>
+                                            @error('duration')
+                                            <span class="form-text text-danger">{{$message}}</span>
+                                            @enderror
+                                        </div>
+                                        <div class="fv-row mb-6">
+                                            <input type="url" wire:model.defer="digital_link" class="form-control form-control-lg form-control-solid" placeholder="Product download link for digital product">
+                                            @error('digital_link')
+                                            <span class="form-text text-danger">{{$message}}</span>
+                                            @enderror
+                                        </div>
+                                        <div class="fv-row mb-6">
+                                            <textarea class="form-control form-control-lg form-control-solid" rows="10" type="text" wire:model.defer="description" placeholder="Detailed description of product"></textarea>
+                                            @error('description')
+                                            <span class="form-text text-danger">{{$message}}</span>
+                                            @enderror
+                                        </div>
+                                    </div>
+                                    <div class="col-md-12">
+                                        <div class="text-center mt-10">
+                                            <button type="submit" class="btn btn-lg btn-info btn-block fw-bolder me-3 my-2">
+                                                <span wire:loading.remove wire:target="addPlan">{{__('Submit Product')}}</span>
+                                                <span wire:loading wire:target="addPlan">{{__('Processing Request...')}}</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            @if($plans->count() > 0)
+            @foreach($plans as $val)
+            <div class="card mb-9 rounded-5">
+                <div class="card-body pt-9 pb-0">
+                    <div class="d-flex flex-wrap flex-sm-nowrap mb-6">
+                        <div class="symbol symbol-100px me-7 mb-4">
+                            <span class="symbol-label" style="background-image:url({{url('/').'/storage/app/'.$val->image}});"></span>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between align-items-start flex-wrap mb-2">
+                                <div class="d-flex flex-column">
+                                    <p class="text-dark fs-1 fw-boldest me-3 mb-2">{{substr($val->name, 0, 30)}}{{(Str::length($val->name) > 30) ? '...' : ''}}</p>
+                                    <p>
+                                        <span class="badge badge-light-info">{{$val->category->name}}</span>
+                                        <span class="badge badge-light-info">{{$val->duration.' Months'}}</span>
+                                        <span class="badge badge-light-info">{{($val->status == 1) ? 'Published' : 'Disabled'}}</span>
+                                        <span class="badge badge-light-info">{{($val->installment == 1) ? 'Installment' : 'No Installment'}}</span>
+                                    </p>
+                                </div>
+                                <div class="d-flex mb-4">
+                                    <button id="kt_edit_{{$val->id}}_button" class="btn btn-dark me-3">Edit</button>
+                                    <a href="#" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#delete{{$val->id}}">Delete</a>
+                                </div>
+                            </div>
+                            <div class="d-flex flex-wrap justify-content-start">
+                                <div class="border border-gray-300 border-dashed rounded min-w-125px py-3 px-4 me-6 mb-3">
+                                    <div class="fs-6 fw-boldest text-gray-700">{{$currency->currency_symbol.currencyFormat(number_format($val->amount))}}</div>
+                                    <div class="fw-bold text-gray-400">Amount</div>
+                                </div>
+                                <div class="border border-gray-300 border-dashed rounded min-w-125px py-3 px-4 me-6 mb-3">
+                                    <div class="fs-6 fw-boldest text-gray-700">{{$val->interest}}%</div>
+                                    <div class="fw-bold text-gray-400">Interest</div>
+                                </div>
+                                <div class="border border-gray-300 border-dashed rounded min-w-125px py-3 px-4 me-6 mb-3">
+                                    <div class="fs-6 fw-boldest text-gray-700">{{$val->failed_interest}}%</div>
+                                    <div class="fw-bold text-gray-400">Failed Interest</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            @endforeach
+            @if($plans->total() > 0 && $plans->count() < $plans->total())<button wire:click="loadMore" wire:loading.remove class="btn btn-secondary btn-block">{{__('See more')}}</button>@endif
+                @else
+                <div class="text-center mt-20">
+                    <img src="{{asset('asset/images/beneficiary.png')}}" style="height:auto; max-width:250px;" class="mb-6">
+                    <h3 class="text-dark">{{__('No Product Found')}}</h3>
+                    <p class="text-dark">{{__('We couldn\'t find any product ')}}</p>
+                </div>
+                @endif
+        </div>
+    </div>
+    @foreach($plans as $val)
+    <livewire:admin.loan.edit-product :val=$val :admin=$admin :wire:key="'kt_edit_'. $val->id">
+        @endforeach
+</div>
+
+
+@push('scripts')
+
+@endpush
+
+
+==================================================
+FILE: C:\xampp\htdocs\bank\resources\views\livewire\admin\loan\shipping.blade.php
+==================================================
+<div>
+    <div wire:ignore.self class="modal fade" id="filter" tabindex="-1" role="dialog" aria-labelledby="modal-form" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 class="modal-title">{{__('Filter Category')}}</h3>
+                    <div class="btn btn-icon btn-sm btn-active-light-primary ms-2" data-bs-dismiss="modal" aria-label="Close">
+                        <span class="svg-icon svg-icon-1">
+                            <i class="fal fa-times"></i>
+                        </span>
+                    </div>
+                </div>
+                <div class="modal-body">
+                    <div class="fv-row mb-6">
+                        <label class="form-label fs-6 fw-bolder text-dark">{{__('Sort by')}}</label>
+                        <select class="form-select form-select-solid" wire:model="sortBy">
+                            <option value="asc">{{__('ASC')}}</option>
+                            <option value="desc">{{__('DESC')}}</option>
+                        </select>
+                    </div>
+                    <div class="fv-row mb-6">
+                        <label class="form-label fs-6 fw-bolder text-dark">{{__('Order by')}}</label>
+                        <select class="form-select form-select-solid" wire:model="orderBy">
+                            <option value="created_at">{{__('Date')}}</option>
+                        </select>
+                    </div>
+                    <div class="fv-row mb-6">
+                        <label class="form-label fs-6 fw-bolder text-dark">{{__('Per page')}}</label>
+                        <select class="form-select form-select-solid" wire:model="perPage">
+                            <option value="10">{{__('10')}}</option>
+                            <option value="25">{{__('25')}}</option>
+                            <option value="50">{{__('50')}}</option>
+                            <option value="100">{{__('100')}}</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div wire:ignore.self id="kt_category" class="bg-white" data-kt-drawer="true" data-kt-drawer-activate="true" data-kt-drawer-toggle="#kt_category_button" data-kt-drawer-close="#kt_category_close" data-kt-drawer-width="{'md': '500px'}">
+        <div class="card w-100">
+            <div class="card-header pe-5 border-0">
+                <div class="card-title">
+                    <div class="d-flex justify-content-center flex-column me-3">
+                        <div class="fs-4 fw-bolder text-gray-900 text-hover-primary me-1 lh-1">{{__('Create an Address')}}</div>
+                    </div>
+                </div>
+                <div class="card-toolbar">
+                    <div class="btn btn-sm btn-icon btn-icon-dark btn-active-light-primary" data-kt-drawer-dismiss="true" id="kt_category_close">
+                        <span class="svg-icon svg-icon-2">
+                            <i class="fal fa-times"></i>
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body text-wrap">
+                <div class="btn-wrapper text-center mb-3">
+                    <div class="symbol symbol-100px symbol-circle me-5 mb-10">
+                        <div class="symbol-label fs-1 text-dark">
+                            <i class="fal fa-layer-group fa-2x"></i>
+                        </div>
+                    </div>
+                    <p>This is needed for physical products</p>
+                </div>
+                <div class="pb-5 mt-10 position-relative zindex-1">
+                    <form class="form w-100 mb-10" wire:submit.prevent="addAddress" method="post">
+                        <div class="fv-row mb-6">
+                            <select class="form-select form-select-solid" wire:model.defer="state" required>
+                                <option value="">Select State</option>
+                                @foreach($user->getState() as $val)
+                                <option value="{{$val->id}}">{{$val->name}}</option>
+                                @endforeach
+                            </select>
+                            @error('state')
+                            <span class="form-text text-danger">{{$message}}</span>
+                            @enderror
+                        </div>
+                        <div class="fv-row mb-6">
+                            <label class="col-form-label">{{__('Amount')}}</label>
+                            <div class="input-group">
+                                <span class="input-group-text border-0">{{$currency->currency_symbol}}</span>
+                                <input type="number" wire:model.defer="amount" steps="any" class="form-control form-control-lg form-control-solid" required placeholder="0.00">
+                            </div>
+                            @error('amount')
+                            <span class="form-text text-danger">{{$message}}</span>
+                            @enderror
+                        </div>
+                        <div class="text-center mt-10">
+                            <button type="submit" class="btn btn-lg btn-info btn-block fw-bolder me-3 my-2">
+                                <span wire:loading.remove wire:target="addAddress">{{__('Create Address')}}</span>
+                                <span wire:loading wire:target="addAddress">{{__('Processing Request...')}}</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="post fs-6 d-flex flex-column-fluid min-vh-100" id="kt_post">
+        <div class="container">
+            <div class="row g-xl-8">
+                <div class="col-md-6">
+                    <div class="d-flex flex-column align-items-start justify-content-center flex-wrap me-2">
+                        <div class="input-group input-group-solid mb-5 rounded-4">
+                            <span class="input-group-text" id="basic-addon1"><i class="fal fa-search"></i></span>
+                            <input type="search" class="form-control form-control-solid text-dark" wire:model="search" placeholder="{{__('Search address')}}" />
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 text-end">
+                    <button data-bs-toggle="modal" data-bs-target="#filter" class="btn btn-white text-dark me-4"><i class="fal fa-filter-list"></i> {{__('Filter')}}</button>
+                    <button id="kt_category_button" class="btn btn-dark me-4"><i class="fal fa-plus"></i> {{__('Address')}}</button>
+                </div>
+            </div>
+            @if($address->count() > 0)
+            <div class="table-responsive">
+                <table id="kt_datatable_zero_configuration" class="table table-row-bordered gy-5" wire:loading.class.delay="opacity-50" wire:target="search, status, sortBy, orderBy, perPage, loadMore">
+                    <thead>
+                        <tr class="fw-semibold fs-6 text-muted">
+                            <th class="min-w-20px">{{__('S/N')}}</th>
+                            <th class="min-w-100px">{{__('Name')}}</th>
+                            <th class="min-w-100px">{{__('Amount')}}</th>
+                            <th class="min-w-150px">{{__('Created')}}</th>
+                            <th class="scope"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($address as $val)
+                        <tr>
+                            <td>{{$loop->iteration}}.</td>
+                            <td>{{$val->state->name}}</td>
+                            <td>{{$currency->currency_symbol.currencyFormat(number_format($val->amount, 2))}}</td>
+                            <td>{{date("Y/m/d h:i:A", strtotime($val->created_at))}}</td>
+                            <td class="text-center">
+                                <button id="kt_category_{{$val->id}}_button" class="btn btn-sm btn-light-info">Edit</button>
+                                <a data-bs-toggle="modal" data-bs-target="#delete{{$val->id}}" class="btn btn-sm btn-danger">Delete</a>
+                            </td>
+                        </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+                @if($address->total() > 0 && $address->count() < $address->total())<button wire:click="loadMore" wire:loading.remove class="btn btn-secondary btn-block">{{__('See more')}}</button>@endif
+            </div>
+            @else
+            <div class="text-center mt-20">
+                <img src="{{asset('asset/images/beneficiary.png')}}" style="height:auto; max-width:250px;" class="mb-6">
+                <h3 class="text-dark">{{__('No Address Found')}}</h3>
+                <p class="text-dark">{{__('We couldn\'t find any shipping address')}}</p>
+            </div>
+            @endif
+        </div>
+    </div>
+    @foreach($address as $val)
+    <livewire:admin.loan.edit-shipping :val=$val :admin=$admin :wire:key="'kt_category_'. $val->id">
+        @endforeach
+</div>
+
+
+==================================================
+FILE: C:\xampp\htdocs\bank\resources\views\livewire\admin\loan\layouts\universal-cam.blade.php

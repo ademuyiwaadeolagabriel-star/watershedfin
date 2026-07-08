@@ -1,0 +1,1419 @@
+FILE: C:\xampp\htdocs\bank\resources\views\admin\loan\pdf\cam_memo.blade.php
+==================================================
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Credit Appraisal Memo</title>
+    <style>
+        body { font-family: 'DejaVu Sans', sans-serif; font-size: 10px; color: #333; line-height: 1.4; }
+        .header-table { width: 100%; border-bottom: 2px solid #004085; padding-bottom: 10px; margin-bottom: 20px; }
+        .logo { width: 150px; }
+        .title { text-align: right; font-size: 18px; font-weight: bold; color: #004085; text-transform: uppercase; }
+        .ref { text-align: right; font-size: 10px; color: #666; }
+        
+        .section-title { 
+            background-color: #f0f2f5; 
+            padding: 5px 10px; 
+            font-weight: bold; 
+            text-transform: uppercase; 
+            border-left: 4px solid #004085; 
+            margin-top: 20px; 
+            margin-bottom: 10px;
+            font-size: 11px;
+        }
+        
+        .grid-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+        .grid-table th, .grid-table td { border: 1px solid #ddd; padding: 6px; }
+        .grid-table th { background-color: #f8f9fa; text-align: left; width: 30%; font-weight: bold; }
+        
+        .financial-table { width: 100%; border-collapse: collapse; font-size: 9px; }
+        .financial-table th { background-color: #004085; color: white; padding: 5px; text-align: right; }
+        .financial-table td { border-bottom: 1px solid #eee; padding: 5px; text-align: right; }
+        .financial-table td:first-child { text-align: left; font-weight: bold; color: #555; }
+        .total-row { background-color: #e9ecef; font-weight: bold; }
+        
+        .verdict-box { border: 2px solid #333; padding: 10px; margin-top: 20px; page-break-inside: avoid; }
+        .grade-a { color: green; } .grade-b { color: blue; } .grade-c { color: orange; } .grade-d { color: red; }
+        
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .text-danger { color: red; }
+    </style>
+</head>
+<body>
+
+    {{-- HEADER --}}
+    <table class="header-table">
+        <tr>
+            <td>
+                {{-- Replace with your logo path or Base64 --}}
+                <h1 style="margin:0; color:#004085;">BANK LOGO</h1> 
+            </td>
+            <td>
+                <div class="title">Credit Appraisal Memorandum</div>
+                <div class="ref">Ref: {{ $loan->application_ref }}</div>
+                <div class="ref">Date: {{ now()->format('d M Y') }}</div>
+            </td>
+        </tr>
+    </table>
+
+    {{-- 1. EXECUTIVE SUMMARY --}}
+    <div class="section-title">1. Executive Summary</div>
+    <table class="grid-table">
+        <tr>
+            <th>Applicant Name</th>
+            <td>{{ $user->first_name }} {{ $user->last_name }}</td>
+            <th>Business Name</th>
+            <td>{{ $business->name ?? 'N/A' }}</td>
+        </tr>
+        <tr>
+            <th>Facility Amount</th>
+            <td>â‚¦{{ number_format((float)($data['recommendation']['suggested_amount'] ?? $loan->amount)) }}</td>
+            <th>Tenure</th>
+            <td>{{ $data['recommendation']['suggested_tenor'] ?? $loan->duration }} Months</td>
+        </tr>
+        <tr>
+            <th>Purpose</th>
+            <td colspan="3">{{ $loan->reason }}</td>
+        </tr>
+        <tr>
+            <th>Repayment Source</th>
+            <td colspan="3">Operational Cashflow from {{ $business->business_type ?? 'Business' }}</td>
+        </tr>
+    </table>
+
+    {{-- 2. FORENSIC FINANCIAL ANALYSIS --}}
+    <div class="section-title">2. Forensic Financial Analysis</div>
+    <table class="financial-table">
+        <thead>
+            <tr>
+                <th style="text-align: left;">Line Item</th>
+                <th>Monthly (â‚¦)</th>
+                <th>Annualized (â‚¦)</th>
+            </tr>
+        </thead>
+        <tbody>
+            @php 
+                $forensics = $data['engine']['forensics'] ?? [];
+                $fins = $data['engine']['financials'] ?? [];
+                $sales = (float)($forensics['considered_sales'] ?? 0);
+                $cogs = (float)($data['engine']['purchases']['derived_cogs'] ?? 0);
+                $gross = $sales - $cogs;
+                $expenses = (float)($fins['total_expenses'] ?? 0);
+                $net = $fins['net_cashflow_before_loan'] ?? 0;
+            @endphp
+            <tr>
+                <td>Turnover (Triangulated)</td>
+                <td>{{ number_format($sales) }}</td>
+                <td>{{ number_format($sales * 12) }}</td>
+            </tr>
+            <tr>
+                <td>Cost of Sales (Margin Derived)</td>
+                <td class="text-danger">({{ number_format($cogs) }})</td>
+                <td class="text-danger">({{ number_format($cogs * 12) }})</td>
+            </tr>
+            <tr class="total-row">
+                <td>Gross Profit</td>
+                <td>{{ number_format($gross) }}</td>
+                <td>{{ number_format($gross * 12) }}</td>
+            </tr>
+            <tr>
+                <td>Operating Expenses (w/ Buffer)</td>
+                <td class="text-danger">({{ number_format($expenses) }})</td>
+                <td class="text-danger">({{ number_format($expenses * 12) }})</td>
+            </tr>
+            <tr class="total-row" style="background-color: #d1ecf1;">
+                <td>Net Disposable Income</td>
+                <td>{{ number_format($net) }}</td>
+                <td>{{ number_format($net * 12) }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div style="margin-top: 10px; font-size: 9px; font-style: italic; color: #555;">
+        <strong>Forensic Note:</strong> Sales validated using "{{ $forensics['source_used'] ?? 'N/A' }}" methodology. 
+        Variance vs Claim: {{ number_format($forensics['variance_percent'] ?? 0, 1) }}%.
+    </div>
+
+    {{-- 3. RATIOS & RISK GRADING --}}
+    <div class="section-title">3. Risk Ratios & Grading</div>
+    <table class="grid-table" style="font-size: 9px;">
+        <tr>
+            <th>Debt Service Ratio (DSR)</th>
+            <td>{{ number_format(($data['engine']['dsr'] ?? 0) * 100, 2) }}% (Limit: 45%)</td>
+            <th>DSCR (Coverage)</th>
+            <td>{{ number_format($data['engine']['dscr'] ?? 0, 2) }}x (Target: >1.25x)</td>
+        </tr>
+        <tr>
+            <th>Gearing Ratio</th>
+            <td>{{ number_format(($data['engine']['gearing_ratio'] ?? 0) * 100, 2) }}%</td>
+            <th>Net Worth</th>
+            <td>â‚¦{{ number_format($data['balance_sheet']['totals']['net_worth'] ?? 0) }}</td>
+        </tr>
+    </table>
+
+    {{-- 4. COLLATERAL SCHEDULE --}}
+    <div class="section-title">4. Security Pledged</div>
+    <table class="financial-table">
+        <thead>
+            <tr>
+                <th style="text-align: left;">Asset Description</th>
+                <th>Type</th>
+                <th>Market Value (â‚¦)</th>
+                <th>Forced Sale Value (â‚¦)</th>
+            </tr>
+        </thead>
+        <tbody>
+            @php $totalFSV = 0; @endphp
+            @foreach($data['security']['collaterals'] ?? [] as $col)
+                @php $totalFSV += (float)str_replace(',', '', $col['fsv'] ?? 0); @endphp
+                <tr>
+                    <td style="text-align: left;">{{ $col['description'] }}</td>
+                    <td style="text-align: left;">{{ $col['type'] }}</td>
+                    <td>{{ number_format((float)str_replace(',', '', $col['market_value'] ?? 0)) }}</td>
+                    <td>{{ number_format((float)str_replace(',', '', $col['fsv'] ?? 0)) }}</td>
+                </tr>
+            @endforeach
+            <tr class="total-row">
+                <td colspan="3" style="text-align: right;">Total Security Coverage:</td>
+                <td>â‚¦{{ number_format($totalFSV) }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    {{-- 5. RECOMMENDATION --}}
+    <div class="verdict-box">
+        <table width="100%">
+            <tr>
+                <td width="70%" valign="top">
+                    <div style="font-size: 12px; font-weight: bold; margin-bottom: 5px;">Credit Officer's Recommendation:</div>
+                    <div style="font-style: italic;">
+                        "{{ $data['recommendation']['details'] ?? 'No recommendation provided.' }}"
+                    </div>
+                </td>
+                <td width="30%" align="center" style="border-left: 2px solid #333;">
+                    <div style="font-size: 10px; font-weight: bold; text-transform: uppercase;">Engine Verdict</div>
+                    @php $grade = $data['engine']['rating']['grade'] ?? 'U'; @endphp
+                    <div style="font-size: 30px; font-weight: bold; margin: 5px 0;" class="grade-{{ strtolower($grade) }}">
+                        {{ $grade }}
+                    </div>
+                    <div style="font-size: 10px;">Score: {{ $data['engine']['rating']['score'] ?? 0 }}/100</div>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    {{-- 6. APPROVAL SIGNATURES --}}
+    <div style="margin-top: 40px;">
+        <table width="100%" style="margin-top: 30px;">
+            <tr>
+                <td width="33%" align="center">
+                    <div style="border-top: 1px solid #000; width: 80%; margin: 0 auto; padding-top: 5px;">
+                        <strong>Loan Officer</strong><br>
+                        {{ now()->format('d M Y') }}
+                    </div>
+                </td>
+                <td width="33%" align="center">
+                    <div style="border-top: 1px solid #000; width: 80%; margin: 0 auto; padding-top: 5px;">
+                        <strong>Head of Credit</strong><br>
+                        (Signature & Date)
+                    </div>
+                </td>
+                <td width="33%" align="center">
+                    <div style="border-top: 1px solid #000; width: 80%; margin: 0 auto; padding-top: 5px;">
+                        <strong>MD / Approver</strong><br>
+                        (Signature & Date)
+                    </div>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+</body>
+</html>
+
+
+==================================================
+FILE: C:\xampp\htdocs\bank\resources\views\admin\loan\pdf\offer_letter.blade.php
+==================================================
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Offer Letter & Security Agreement</title>
+    <style>
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 12px; color: #333; line-height: 1.5; }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .fw-bold { font-weight: bold; }
+        .mb-10 { margin-bottom: 10px; }
+        .mb-20 { margin-bottom: 20px; }
+        .mt-20 { margin-top: 20px; }
+        .page-break { page-break-after: always; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        .table-bordered th, .table-bordered td { border: 1px solid #000; padding: 5px; text-align: left; }
+        .header-logo { max-width: 150px; margin-bottom: 20px; }
+        .section-title { font-size: 14px; font-weight: bold; text-decoration: underline; margin-top: 20px; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+    {{-- ========================================================= --}}
+    {{-- DOCUMENT 1: PROVISIONAL OFFER LETTER                      --}}
+    {{-- ========================================================= --}}
+    
+    <div class="text-center mb-20">
+        <h2>WATERSHED FINANCE LIMITED</h2>
+        <h3 style="text-decoration: underline;">PROVISIONAL OFFER LETTER</h3>
+    </div>
+
+    <div class="mb-20">
+        <p><strong>Date:</strong> {{ $date }}</p>
+        <p><strong>Borrower's Name:</strong> {{ $customer_name }} @if(!empty($business_name)) (Trading under the name and style of {{ $business_name }}) @endif</p>
+        <p><strong>Borrower's Address:</strong> {{ $address }}</p>
+    </div>
+
+    <p>Dear Sir/Madam,</p>
+    <p>We are pleased to offer you a loan. Below is the Summary of the Loan Offer:</p>
+
+    <table class="table-bordered">
+        <tbody>
+            <tr><td width="40%" class="fw-bold">Borrowers Facility</td><td>Business Loan</td></tr>
+            <tr><td class="fw-bold">Type Facility</td><td>Business Loan</td></tr>
+            <tr><td class="fw-bold">Loan Amount</td><td>â‚¦{{ number_format($amount, 2) }} ({{ $amount_words }})</td></tr>
+            <tr><td class="fw-bold">Tenor</td><td>{{ $tenure }}</td></tr>
+            <tr><td class="fw-bold">Purpose</td><td>{{ $loan->reason ?? 'To Purchase more Stocks' }}</td></tr>
+            <tr><td class="fw-bold">Repayment Source</td><td>Business Proceeds</td></tr>
+            <tr><td class="fw-bold">Repayment Date</td><td>Every 30 days</td></tr>
+            <tr><td class="fw-bold">Interest rate</td><td>{{ $rate }} (Variable interest rates may change)</td></tr>
+            <tr><td class="fw-bold">Repayment amount</td><td>â‚¦{{ number_format($repayment_sum / intval($tenure), 2) }} (Amount you will need to repay on due date)</td></tr>
+        </tbody>
+    </table>
+
+    <div class="section-title">General Terms and Conditions</div>
+    <p>These terms and conditions apply to and regulate the provision of credit facilities advanced by Watershed Finance Limited. These Standard Terms and Conditions, together with the Loan Application Form sets out the terms governing this Loan Agreement. It is important that you read these terms and conditions carefully and keep them for future reference.</p>
+
+    <p><strong>1. Advance and Repayment</strong><br>
+    a. Watershed Finance Limited agrees to advance the Loan and the Obligor agrees to take the loan subject to the terms and conditions as set out in the loan application form and herein in this offer letter.<br>
+    b. The Obligor agrees to repay the Loan (principal plus accrued interest) in accordance with the terms and conditions of this letter.</p>
+
+    <p><strong>2. Penalties and Additional Requirements</strong><br>
+    Late Payment: If a repayment is more than 2 days later than the due date, you will be charged 0.03% per day on the outstanding sums on the overdue amount.</p>
+    
+    <p><strong>3. Payments</strong><br>
+    The Borrower hereby agrees that payments shall be made in accordance with the attached repayment schedule and any variation shall first be communicated in writing to Watershed Finance Limited for consent.</p>
+
+    <p><em>...[Clauses 4 through 12 of Watershed Finance Limited Terms]...</em></p>
+
+    <p class="mt-20"><strong>DISCLAIMER:</strong> As required by law, Watershed Finance Limited is mandated to disclose the status of defaulting loans to relevant local and/or international credit bureaus, credit monitoring agencies, and regulatory bodies.</p>
+
+    <div class="mt-20">
+        <p>Yours faithfully,<br><strong>For: WATERSHED FINANCE LIMITED</strong></p>
+        <br><br>
+        <table style="border: none;">
+            <tr>
+                <td style="border: none;">______________________________<br><strong>Ebere OBI-AKINWOLE</strong><br>Legal</td>
+                <td style="border: none; text-align: right;">_________________________<br><strong>Olumuyiwa OLANREWAJU Ph.D</strong><br>Director</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="page-break"></div>
+
+    {{-- ========================================================= --}}
+    {{-- REPAYMENT SCHEDULE                                        --}}
+    {{-- ========================================================= --}}
+    <h3 class="text-center section-title">Loan Repayment Schedule</h3>
+    <table class="table-bordered text-center">
+        <thead>
+            <tr style="background-color: #f2f2f2;">
+                <th>S/N</th>
+                <th>Date</th>
+                <th>Balance (â‚¦)</th>
+                <th>Monthly Instalment (â‚¦)</th>
+                <th>Interest (â‚¦)</th>
+                <th>Principal (â‚¦)</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach($schedule as $index => $row)
+            <tr>
+                <td>{{ $index + 1 }}</td>
+                <td>{{ $row['date'] }}</td>
+                <td>{{ number_format($row['balance'], 2) }}</td>
+                <td>{{ number_format($row['installment'], 2) }}</td>
+                <td>{{ number_format($row['interest'], 2) }}</td>
+                <td>{{ number_format($row['principal'], 2) }}</td>
+            </tr>
+            @endforeach
+        </tbody>
+    </table>
+
+    <div class="page-break"></div>
+
+    {{-- ========================================================= --}}
+    {{-- DOCUMENT 2: LOAN AND SECURITY AGREEMENT                   --}}
+    {{-- ========================================================= --}}
+    
+    <h3 class="text-center" style="text-decoration: underline;">LOAN AND SECURITY AGREEMENT</h3>
+
+    <p>This Loan and Security Agreement, is made this <strong>{{ date('dS') }}</strong> of <strong>{{ date('F, Y') }}</strong></p>
+
+    <p><strong>BETWEEN</strong><br>
+    <strong>{{ $customer_name }}</strong> @if(!empty($business_name)) (Trading under the name and style of {{ $business_name }}) @endif of {{ $address }} (herein referred to as â€œthe BORROWERâ€ which expression shall where the context admits, include his heirs, successors-in-title, personal representatives and assigns) of the ONE PART.</p>
+
+    <p><strong>AND</strong><br>
+    <strong>WATERSHED FINANCE LIMITED</strong>, a company incorporated in Nigeria and having its registered office at No 8, Jubilee/CMD Road (By Magodo GRA II 2nd gate), opposite secretariat Alausa, Magodo GRA II, Lagos (hereinafter referred to as â€œthe LENDERâ€ which expression shall where the context so requires or admits include its successors-in-title, legal representatives and assigns) of the SECOND PART.</p>
+
+    <div class="section-title">PART I: DEFINITIONS</div>
+    <p>1) "Borrower" means {{ $customer_name }} of {{ $address }}.</p>
+    <p>2) "Collateral" means the assets pledged by the Borrower, including but not limited to: 
+        @forelse($collateral as $col)
+            {{ $col['description'] ?? 'Asset' }} (Value: â‚¦{{ number_format($col['fsv'] ?? 0) }}), 
+        @empty
+            Assets as captured in the loan application,
+        @endforelse
+    owned by {{ $customer_name }}.</p>
+    
+    <div class="section-title">PART V: TERMS OF THE LOAN</div>
+    <p>A) This Loan is in the Principal amount of <strong>â‚¦{{ number_format($amount, 2) }} ({{ $amount_words }})</strong>, at {{ $rate }} interest per month. This Loan shall be for a tenor of {{ $tenure }}.</p>
+
+    <p><em>...[Parts VII through XII of your Security Agreement]...</em></p>
+
+    <div class="section-title">PART XIII. Authorization</div>
+    <p>The Borrower hereby agrees and authorizes the Lender to auction any or all of its stock in trade to recover its loan in the event the borrower defaults and or refuses to pay back itâ€™s loan.</p>
+
+    {{-- ========================================================= --}}
+    {{-- DIGITAL SIGNATURE STAMP (AUTO-GENERATED AFTER OTP)        --}}
+    {{-- ========================================================= --}}
+    <div style="margin-top: 50px; padding: 20px; border: 2px dashed #28a745; background-color: #f8fff9;">
+        <h3 style="color: #28a745; margin-top: 0;">CRYPTOGRAPHIC ELECTRONIC SIGNATURE</h3>
+        @if(!empty($loan->digital_signature))
+            @php $sig = json_decode($loan->digital_signature, true); @endphp
+            <p><strong>Status:</strong> <span style="color: green; font-weight: bold;">SIGNED AND ACCEPTED</span></p>
+            <p><strong>Signatory:</strong> {{ $customer_name }} (BVN Verified)</p>
+            <p><strong>Authentication Method:</strong> {{ $sig['method'] ?? 'Secure OTP' }}</p>
+            <p><strong>Timestamp:</strong> {{ \Carbon\Carbon::parse($sig['timestamp'] ?? now())->format('l, jS F Y @ H:i:s') }}</p>
+            <p><strong>IP Address:</strong> {{ $sig['ip_address'] ?? 'Recorded' }}</p>
+            <p style="font-size: 10px; color: #666; margin-top: 10px;">*This electronic signature is legally binding under the provisions of the Evidence Act and Cybercrimes Act of the Federal Republic of Nigeria.</p>
+        @else
+            <p style="color: #dc3545; font-weight: bold;">PENDING CUSTOMER OTP AUTHORIZATION</p>
+        @endif
+    </div>
+
+</body>
+</html>
+
+
+==================================================
+FILE: C:\xampp\htdocs\bank\resources\views\admin\loan\print\offer-letter.blade.php
+==================================================
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Offer Letter - {{ $loan->first_name }}</title>
+    <style>
+        body { font-family: 'Times New Roman', serif; padding: 40px; line-height: 1.6; }
+        .header { text-align: center; margin-bottom: 40px; }
+        .title { font-weight: bold; text-decoration: underline; font-size: 18px; margin-bottom: 20px; }
+        .content { margin-bottom: 30px; }
+        .terms-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        .terms-table td { border: 1px solid #000; padding: 8px; }
+        .signature { margin-top: 50px; display: flex; justify-content: space-between; }
+    </style>
+</head>
+<body onload="window.print()">
+    <div class="header">
+        <h2>LOAN COMPANY LTD</h2>
+        <p>123 Finance Street, Lagos, Nigeria</p>
+    </div>
+
+    <p>Date: {{ date('d M, Y') }}</p>
+    <p>To: {{ $loan->first_name }} {{ $loan->last_name }}<br>
+       {{ $loan->address }}</p>
+
+    <div class="title">OFFER OF LOAN FACILITY</div>
+
+    <div class="content">
+        <p>Dear Sir/Ma,</p>
+        <p>Following your application, we are pleased to offer you a loan facility under the following terms and conditions:</p>
+
+        <table class="terms-table">
+            <tr><td><strong>Amount</strong></td><td>â‚¦{{ number_format($loan->amount_requested, 2) }}</td></tr>
+            <tr><td><strong>Tenure</strong></td><td>{{ $loan->tenure_requested }} Months</td></tr>
+            <tr><td><strong>Interest Rate</strong></td><td>5% Flat Monthly</td></tr>
+            <tr><td><strong>Purpose</strong></td><td>{{ $loan->description ?? 'Business/Personal' }}</td></tr>
+        </table>
+
+        <p>Please sign the duplicate copy of this letter as a token of your acceptance.</p>
+    </div>
+
+    <div class="signature">
+        <div>
+            ____________________<br>
+            Authorized Signatory
+        </div>
+        <div style="float:right">
+            ____________________<br>
+            Customer Signature
+        </div>
+    </div>
+</body>
+</html>
+
+
+==================================================
+FILE: C:\xampp\htdocs\bank\resources\views\admin\mcc\index.blade.php
+==================================================
+@extends('admin.menu')
+
+@section('css')
+<style>
+    .mcc-stat-card {
+        border-radius: 1rem;
+        padding: 1.5rem;
+        background: #FFFFFF;
+        border: 1px solid #E4E6EF;
+        transition: all 0.3s ease;
+    }
+    .mcc-stat-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.1);
+    }
+    .mcc-stat-icon {
+        width: 60px;
+        height: 60px;
+        border-radius: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .mcc-customer-link {
+        color: #181C32;
+        text-decoration: none;
+        font-weight: 600;
+    }
+    .mcc-customer-link:hover {
+        color: #3699FF;
+    }
+</style>
+@endsection
+
+@section('content')
+<div class="d-flex flex-column flex-column-fluid">
+    
+    {{-- Page Header --}}
+    <div class="app-toolbar py-3 py-lg-6">
+        <div class="app-container container-xxl d-flex flex-stack">
+            <div>
+                <h1 class="page-heading d-flex text-gray-900 fw-bolder fs-3 flex-column justify-content-center my-0">
+                    MCC Decision - Approval Governance
+                </h1>
+                <span class="text-muted fs-7 fw-semibold">
+                    View all MCC decisions and approval chain for credit applications
+                </span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <a href="{{ route('admin.loan') }}" class="btn btn-light-primary">
+                    <i class="fas fa-arrow-left me-2"></i> Back to Loans
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    {{-- Main Content --}}
+    <div class="app-container container-xxl">
+        
+        {{-- Stats Cards --}}
+        <div class="row g-5 mb-5">
+            <div class="col-md-4">
+                <div class="mcc-stat-card">
+                    <div class="d-flex align-items-center">
+                        <div class="mcc-stat-icon bg-light-primary me-4">
+                            <i class="fas fa-file-alt text-primary fs-2"></i>
+                        </div>
+                        <div>
+                            <span class="text-muted fs-7 text-uppercase fw-semibold">Total MCC Records</span>
+                            <h2 class="fw-bolder text-gray-900 mb-0">{{ $stats['total'] }}</h2>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="mcc-stat-card">
+                    <div class="d-flex align-items-center">
+                        <div class="mcc-stat-icon bg-light-warning me-4">
+                            <i class="fas fa-clock text-warning fs-2"></i>
+                        </div>
+                        <div>
+                            <span class="text-muted fs-7 text-uppercase fw-semibold">Pending Review</span>
+                            <h2 class="fw-bolder text-gray-900 mb-0">{{ $stats['pending'] }}</h2>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="mcc-stat-card">
+                    <div class="d-flex align-items-center">
+                        <div class="mcc-stat-icon bg-light-success me-4">
+                            <i class="fas fa-check-circle text-success fs-2"></i>
+                        </div>
+                        <div>
+                            <span class="text-muted fs-7 text-uppercase fw-semibold">Approved</span>
+                            <h2 class="fw-bolder text-gray-900 mb-0">{{ $stats['approved'] }}</h2>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        {{-- Applications Table --}}
+        <div class="card">
+            <div class="card-header border-0 pt-6">
+                <div class="card-title">
+                    <h3 class="fw-bolder text-gray-900">Applications with MCC Decisions</h3>
+                </div>
+                <div class="card-toolbar">
+                    <form method="GET" class="d-flex align-items-center gap-2">
+                        <input type="text" name="search" class="form-control form-control-solid w-200px" 
+                               placeholder="Search by ref or name..." value="{{ request('search') }}">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="card-body pt-0">
+                @if($applications->count() > 0)
+                <div class="table-responsive">
+                    <table class="table table-row-bordered table-row-gray-300 gy-4 gs-4">
+                        <thead>
+                            <tr class="fw-bold fs-6 text-gray-800 border-bottom border-gray-200">
+                                <th class="min-w-120px">Application Ref</th>
+                                <th class="min-w-150px">Customer Name</th>
+                                <th class="min-w-100px">Business</th>
+                                <th class="min-w-120px text-end">Requested</th>
+                                <th class="min-w-100px text-end">MCC Amount</th>
+                                <th class="min-w-80px text-center">Decisions</th>
+                                <th class="min-w-120px">Current Stage</th>
+                                <th class="min-w-80px">Last Update</th>
+                                <th class="min-w-100px text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($applications as $app)
+                            <tr>
+                                <td>
+                                    <span class="badge badge-light-primary fs-7 fw-bold">
+                                        {{ $app->application_ref }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="{{ route('admin.mcc.show', $app->id) }}" class="mcc-customer-link">
+                                        {{ $app->user->first_name ?? '' }} {{ $app->user->last_name ?? '' }}
+                                    </a>
+                                </td>
+                                <td>
+                                    <span class="text-gray-700">
+                                        {{ Str::limit($app->user->business->name ?? '-', 20) }}
+                                    </span>
+                                </td>
+                                <td class="text-end">
+                                    <span class="font-monospace text-gray-800">
+                                        â‚¦{{ number_format($app->amount, 2) }}
+                                    </span>
+                                </td>
+                                <td class="text-end">
+                                    @php $mccAmount = $app->mccDecisions->last()?->recommended_amount; @endphp
+                                    @if($mccAmount)
+                                        <span class="font-monospace {{ $mccAmount != $app->amount ? 'text-warning fw-bold' : 'text-gray-800' }}">
+                                            â‚¦{{ number_format($mccAmount, 2) }}
+                                        </span>
+                                    @else
+                                        <span class="text-muted">-</span>
+                                    @endif
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge badge-light-info">
+                                        {{ $app->mccDecisions->count() }} / 8
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge badge-light-{{ $app->status === 'running' ? 'success' : ($app->status === 'processing' ? 'warning' : 'secondary') }}">
+                                        {{ $app->current_step }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="text-muted fs-7">
+                                        {{ $app->updated_at->format('d-M-y') }}
+                                    </span>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ route('admin.mcc.show', $app->id) }}" 
+                                       class="btn btn-sm btn-light-primary" 
+                                       data-bs-toggle="tooltip" title="View MCC Decision Table">
+                                        <i class="fas fa-gavel me-1"></i> View MCC
+                                    </a>
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="mt-5">
+                    {{ $applications->appends(request()->query())->links() }}
+                </div>
+                
+                @else
+                <div class="text-center py-15">
+                    <div class="symbol symbol-100px symbol-circle mb-5">
+                        <div class="symbol-label bg-light-primary">
+                            <i class="fas fa-gavel text-primary fs-1"></i>
+                        </div>
+                    </div>
+                    <h3 class="fw-bolder text-gray-900 mb-3">No MCC Decisions Yet</h3>
+                    <p class="text-muted fs-6">
+                        No applications have MCC decisions recorded. 
+                        MCC decisions are created when loan officers and managers submit their recommendations.
+                    </p>
+                    <a href="{{ route('admin.loan') }}" class="btn btn-primary mt-3">
+                        <i class="fas fa-arrow-left me-2"></i> Go to Loan Applications
+                    </a>
+                </div>
+                @endif
+            </div>
+        </div>
+        
+    </div>
+</div>
+@endsection
+
+@push('scripts')
+<script>
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+</script>
+@endpush
+
+
+==================================================
+FILE: C:\xampp\htdocs\bank\resources\views\admin\mcc\show.blade.php
+==================================================
+@extends('admin.menu')
+@section('css')
+<link rel="stylesheet" href="{{ asset('css/cam-governance.css') }}">
+<style>
+    .mcc-header-gradient {
+        background: linear-gradient(135deg, #1A4C8B 0%, #3699FF 50%, #50CD89 100%);
+    }
+    .mcc-table-container {
+        border-radius: 1rem;
+        overflow: hidden;
+        box-shadow: 0 0 2rem rgba(0, 0, 0, 0.1);
+    }
+    .mcc-summary-card {
+        border-radius: 1rem;
+        padding: 1.5rem;
+        text-align: center;
+    }
+    .mcc-progress-bar {
+        height: 8px;
+        border-radius: 4px;
+        background: #E4E6EF;
+        overflow: hidden;
+    }
+    .mcc-progress-fill {
+        height: 100%;
+        border-radius: 4px;
+        transition: width 0.5s ease;
+    }
+    .mcc-timeline {
+        position: relative;
+        padding-left: 30px;
+    }
+    .mcc-timeline::before {
+        content: '';
+        position: absolute;
+        left: 10px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: #E4E6EF;
+    }
+    .mcc-timeline-item {
+        position: relative;
+        padding-bottom: 1.5rem;
+    }
+    .mcc-timeline-item::before {
+        content: '';
+        position: absolute;
+        left: -24px;
+        top: 5px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #50CD89;
+        border: 2px solid #FFFFFF;
+    }
+</style>
+@endsection
+
+@section('content')
+<div class="d-flex flex-column flex-column-fluid">
+    
+    {{-- Page Header --}}
+    <div class="app-toolbar py-3 py-lg-6">
+        <div class="app-container container-xxl d-flex flex-stack">
+            <div class="d-flex align-items-center gap-3">
+                <a href="{{ route('admin.mcc.index') }}" class="btn btn-icon btn-light">
+                    <i class="fas fa-arrow-left"></i>
+                </a>
+                <div>
+                    <h1 class="page-heading d-flex text-gray-900 fw-bolder fs-3 flex-column justify-content-center my-0">
+                        MCC Decision Table
+                    </h1>
+                    <span class="text-muted fs-7 fw-semibold">
+                        {{ $loan->application_ref }} - {{ $loan->customer_name }}
+                    </span>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                @if(Route::has('admin.loan.process'))
+                <a href="{{ route('admin.loan.process', $loan->id) }}" class="btn btn-light-primary">
+                    <i class="fas fa-file-alt me-2"></i> View Application
+                </a>
+                @elseif(Route::has('admin.loan.show'))
+                <a href="{{ route('admin.loan.show', $loan->id) }}" class="btn btn-light-primary">
+                    <i class="fas fa-file-alt me-2"></i> View Application
+                </a>
+                @else
+                <a href="{{ url('admin/loan/' . $loan->id) }}" class="btn btn-light-primary">
+                    <i class="fas fa-file-alt me-2"></i> View Application
+                </a>
+                @endif
+                <a href="{{ route('admin.mcc.export', $loan->id) }}" class="btn btn-success" target="_blank">
+                    <i class="fas fa-file-pdf me-2"></i> Export PDF
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    {{-- Main Content --}}
+    <div class="app-container container-xxl">
+        
+        {{-- Customer Info Card --}}
+        <div class="card mb-5">
+            <div class="card-body p-0">
+                <div class="row g-0">
+                    <div class="col-md-8 p-6">
+                        <div class="d-flex align-items-center mb-4">
+                            <div class="symbol symbol-60px me-4">
+                                <div class="symbol-label bg-light-primary">
+                                    <i class="fas fa-user text-primary fs-1"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <h3 class="fw-bolder text-gray-900 mb-1">{{ $loan->customer_name }}</h3>
+                                <span class="text-muted">{{ $loan->user->email ?? '-' }}</span>
+                            </div>
+                        </div>
+                        <div class="row g-4">
+                            <div class="col-md-4">
+                                <span class="text-muted fs-8 text-uppercase d-block">Business Name</span>
+                                <span class="fw-bold text-gray-900">{{ $loan->user->business->name ?? '-' }}</span>
+                            </div>
+                            <div class="col-md-4">
+                                <span class="text-muted fs-8 text-uppercase d-block">Phone</span>
+                                <span class="fw-bold text-gray-900">{{ $loan->user->phone ?? '-' }}</span>
+                            </div>
+                            <div class="col-md-4">
+                                <span class="text-muted fs-8 text-uppercase d-block">Sector</span>
+                                <span class="fw-bold text-gray-900">{{ $loan->user->business->sector->name ?? '-' }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 bg-light-primary p-6 d-flex flex-column justify-content-center">
+                        <span class="text-muted fs-8 text-uppercase">Requested Amount</span>
+                        <h2 class="fw-bolder text-primary mb-0">â‚¦{{ number_format($loan->amount, 2) }}</h2>
+                        <span class="text-muted fs-7 mt-2">{{ $loan->duration ?? 0 }} months tenure</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        {{-- MCC Decision Table --}}
+        <div class="card mb-5">
+            <div class="card-header border-0 mcc-header-gradient py-4 px-6">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <h3 class="card-title fw-bolder text-white fs-4 mb-1">
+                            MCC Decision Table
+                        </h3>
+                        <span class="text-white text-opacity-75 fs-7">
+                            Approval Governance Record
+                        </span>
+                    </div>
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="badge badge-light-warning px-4 py-2">
+                            <i class="fas fa-users me-1"></i> {{ $mccDecisions->count() }} Decisions
+                        </span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card-body p-0">
+                @if($mccDecisions->count() > 0)
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover mcc-table mb-0">
+                        <thead>
+                            <tr class="bg-gray-100">
+                                <th class="w-50px text-center">S/N</th>
+                                <th class="min-w-150px">NAME</th>
+                                <th class="w-100px text-center">DESIGNATION</th>
+                                <th class="min-w-120px text-end">AMOUNT</th>
+                                <th class="w-80px text-center">DURATION</th>
+                                <th class="w-80px text-center">CCD%</th>
+                                <th class="w-80px text-center">UPFRONT%</th>
+                                <th class="w-80px text-center">INTEREST%</th>
+                                <th class="min-w-200px">COMMENT</th>
+                                <th class="w-100px text-center">DATE</th>
+                                <th class="w-60px text-center">SIGN</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @php $sn = 1; @endphp
+                            @foreach($mccDecisions as $decision)
+                            <tr class="{{ $sn === $mccDecisions->count() ? 'mcc-row-current' : '' }}">
+                                <td class="text-center fw-bold text-gray-600">{{ $sn++ }}</td>
+                                <td class="fw-bold text-gray-900">{{ $decision->approver_name }}</td>
+                                <td class="text-center">
+                                    <span class="mcc-badge mcc-badge-{{ strtolower($decision->approver_role) }}">
+                                        {{ $decision->approver_role }}
+                                    </span>
+                                </td>
+                                <td class="text-end font-monospace">
+                                    @if($decision->recommended_amount)
+                                        <span class="fw-bold {{ $decision->recommended_amount != $loan->amount ? 'text-warning' : 'text-gray-800' }}">
+                                            â‚¦{{ number_format($decision->recommended_amount, 2) }}
+                                        </span>
+                                    @else
+                                        <span class="text-muted">-</span>
+                                    @endif
+                                </td>
+                                <td class="text-center">
+                                    @if($decision->duration)
+                                        <span class="fw-bold">{{ $decision->duration }}</span>
+                                        <span class="text-muted fs-8">mths</span>
+                                    @else
+                                        <span class="text-muted">-</span>
+                                    @endif
+                                </td>
+                                <td class="text-center">
+                                    @if($decision->ccd_percentage)
+                                        <span class="fw-bold">{{ number_format($decision->ccd_percentage, 2) }}</span>%
+                                    @else
+                                        <span class="text-muted">-</span>
+                                    @endif
+                                </td>
+                                <td class="text-center">
+                                    @if($decision->upfront_fee_percentage)
+                                        <span class="fw-bold">{{ number_format($decision->upfront_fee_percentage, 2) }}</span>%
+                                    @else
+                                        <span class="text-muted">-</span>
+                                    @endif
+                                </td>
+                                <td class="text-center">
+                                    @if($decision->interest_rate_percentage)
+                                        <span class="fw-bold">{{ number_format($decision->interest_rate_percentage, 2) }}</span>%
+                                    @else
+                                        <span class="text-muted">-</span>
+                                    @endif
+                                </td>
+                                <td>
+                                    @if($decision->comment)
+                                        <span class="fs-7 text-gray-700">
+                                            {{ Str::limit($decision->comment, 80) }}
+                                        </span>
+                                        @if(strlen($decision->comment) > 80)
+                                            <a href="#" class="fs-7 text-primary" 
+                                               data-bs-toggle="tooltip" 
+                                               title="{{ $decision->comment }}">
+                                                [...more]
+                                            </a>
+                                        @endif
+                                    @else
+                                        <span class="text-muted fs-7">No comment</span>
+                                    @endif
+                                </td>
+                                <td class="text-center">
+                                    <span class="text-gray-700 fw-bold">
+                                        {{ $decision->decision_date->format('d-M-y') }}
+                                    </span>
+                                </td>
+                                <td class="text-center">
+                                    <i class="fas fa-check-circle text-success fs-4"></i>
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+                @else
+                <div class="text-center py-15">
+                    <div class="symbol symbol-100px symbol-circle mb-5">
+                        <div class="symbol-label bg-light-warning">
+                            <i class="fas fa-exclamation-triangle text-warning fs-1"></i>
+                        </div>
+                    </div>
+                    <h3 class="fw-bolder text-gray-900 mb-3">No MCC Decisions Recorded</h3>
+                    <p class="text-muted fs-6">
+                        This application has not gone through MCC approval process yet.
+                    </p>
+                </div>
+                @endif
+            </div>
+        </div>
+        
+        {{-- Summary Cards --}}
+        @if($mccDecisions->count() > 0)
+        <div class="row g-5 mb-5">
+            <div class="col-md-3">
+                <div class="mcc-summary-card bg-light-primary">
+                    <span class="text-muted fs-8 text-uppercase fw-bold d-block mb-2">Initial Request</span>
+                    <h2 class="fw-bolder text-primary mb-0">â‚¦{{ number_format($summary['initial_amount'], 2) }}</h2>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="mcc-summary-card bg-light-{{ $summary['amount_change'] <= 0 ? 'danger' : 'success' }}">
+                    <span class="text-muted fs-8 text-uppercase fw-bold d-block mb-2">Final MCC Amount</span>
+                    <h2 class="fw-bolder text-{{ $summary['amount_change'] <= 0 ? 'danger' : 'success' }} mb-0">
+                        â‚¦{{ number_format($summary['final_amount'], 2) }}
+                    </h2>
+                    @if($summary['amount_change'] != 0)
+                    <span class="fs-7 text-muted">
+                        {{ $summary['amount_change'] > 0 ? '+' : '' }}{{ number_format($summary['amount_change_percent'], 1) }}% change
+                    </span>
+                    @endif
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="mcc-summary-card bg-light-info">
+                    <span class="text-muted fs-8 text-uppercase fw-bold d-block mb-2">Approval Progress</span>
+                    <h2 class="fw-bolder text-info mb-2">
+                        {{ $summary['decision_count'] }} / {{ $summary['total_levels'] }}
+                    </h2>
+                    <div class="mcc-progress-bar">
+                        <div class="mcc-progress-fill bg-info" style="width: {{ $summary['progress_percent'] }}%"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="mcc-summary-card bg-light-{{ $summary['is_complete'] ? 'success' : 'warning' }}">
+                    <span class="text-muted fs-8 text-uppercase fw-bold d-block mb-2">Status</span>
+                    @if($summary['is_complete'])
+                        <h2 class="fw-bolder text-success mb-0">
+                            <i class="fas fa-check-circle me-2"></i>Complete
+                        </h2>
+                    @else
+                        <h2 class="fw-bolder text-warning mb-0">
+                            <i class="fas fa-clock me-2"></i>In Progress
+                        </h2>
+                    @endif
+                </div>
+            </div>
+        </div>
+        
+        {{-- Latest Rates --}}
+        @if($summary['latest_rates']['interest'])
+        <div class="card mb-5">
+            <div class="card-header border-0 bg-light py-3">
+                <h3 class="card-title fw-bold text-gray-900 fs-6">Latest Approved Terms</h3>
+            </div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <div class="col-md-4 text-center">
+                        <span class="text-muted fs-7 text-uppercase d-block mb-1">CCD Percentage</span>
+                        <h3 class="fw-bolder text-gray-900 mb-0">
+                            {{ number_format($summary['latest_rates']['ccd'] ?? 0, 2) }}%
+                        </h3>
+                    </div>
+                    <div class="col-md-4 text-center border-start border-end">
+                        <span class="text-muted fs-7 text-uppercase d-block mb-1">Upfront Fee</span>
+                        <h3 class="fw-bolder text-gray-900 mb-0">
+                            {{ number_format($summary['latest_rates']['upfront'] ?? 0, 2) }}%
+                        </h3>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <span class="text-muted fs-7 text-uppercase d-block mb-1">Interest Rate</span>
+                        <h3 class="fw-bolder text-gray-900 mb-0">
+                            {{ number_format($summary['latest_rates']['interest'] ?? 0, 2) }}%
+                        </h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+        @endif
+        @endif
+        
+    </div>
+</div>
+@endsection
+
+@push('scripts')
+<script>
+    // Initialize tooltips
+    document.addEventListener('DOMContentLoaded', function() {
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    });
+</script>
+@endpush
+
+
+==================================================
+FILE: C:\xampp\htdocs\bank\resources\views\admin\message\index.blade.php
+==================================================
+@extends('admin.menu')
+@section('content')
+@livewire('admin.message.header', ['type' => $type, 'admin' => $admin])
+@livewire('admin.message.'.$type, ['type' => $type, 'admin' => $admin])
+@stop
+
+
+==================================================
+FILE: C:\xampp\htdocs\bank\resources\views\admin\payout\index.blade.php
+==================================================
+@extends('admin.menu')
+@section('content')
+@livewire('admin.payout.header', ['type' => $type, 'admin' => $admin])
+@livewire('admin.payout.index', ['base' => $type, 'admin' => $admin, 'set' => $set])
+@stop
+@section('script')
+<script>
+    $(function() {
+
+        var start = moment().subtract(29, 'days');
+        var end = moment();
+
+        function cb(start, end) {
+            $('#range').val(start.format('MMMM D, YYYY') + ' - ' + end.format('MMMM D, YYYY'));
+        }
+
+        $('input[id="range"]').daterangepicker({
+            startDate: start,
+            endDate: end,
+            ranges: {
+                'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+                'This Month': [moment().startOf('month'), moment().endOf('month')],
+                'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+            }
+        }, cb);
+
+        cb(start, end);
+
+    });
+
+    window.livewire.on('drawer', data => {
+        KTDrawer.createInstances();
+    });
+</script>
+@endsection
+
+
+==================================================
+FILE: C:\xampp\htdocs\bank\resources\views\admin\reports\offer_letter.blade.php
+==================================================
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Offer of Credit Facility - {{ $ref }}</title>
+    <style>
+        body { font-family: 'Times New Roman', serif; font-size: 11pt; line-height: 1.4; }
+        .header { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+        .logo { font-size: 24px; font-weight: bold; }
+        .confidential { color: red; font-weight: bold; text-align: right; font-size: 9pt; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #000; padding: 6px; vertical-align: top; }
+        th { background-color: #f0f0f0; width: 30%; }
+        .signature-box { margin-top: 60px; display: block; width: 100%; }
+        .sig { width: 45%; display: inline-block; vertical-align: top; }
+        .footer { position: fixed; bottom: 0; left: 0; width: 100%; font-size: 8pt; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="confidential">PRIVATE & CONFIDENTIAL</div>
+    
+    <div class="header">
+        <div class="logo">{{ config('app.name') }} LIMITED</div>
+        <div>123, Herbert Macaulay Way, Ebute-Metta, Lagos.</div>
+    </div>
+
+    <p>{{ $date }}</p>
+    <p><strong>{{ $customer_name }}</strong><br>{{ $address }}</p>
+
+    <h3 style="text-align: center; text-decoration: underline;">OFFER OF CREDIT FACILITY</h3>
+
+    <p>Dear Sir/Ma,</p>
+    <p>Following your application and subsequent approval by our Management Credit Committee, we are pleased to offer you a credit facility under the terms and conditions stated below:</p>
+
+    <table>
+        <tr>
+            <th>LENDER</th>
+            <td>{{ config('app.name') }} LIMITED</td>
+        </tr>
+        <tr>
+            <th>BORROWER</th>
+            <td>{{ $customer_name }}</td>
+        </tr>
+        <tr>
+            <th>FACILITY TYPE</th>
+            <td>SME WORKING CAPITAL LOAN</td>
+        </tr>
+        <tr>
+            <th>AMOUNT</th>
+            <td><strong>â‚¦{{ number_format($amount, 2) }}</strong><br>({{ $amount_words }})</td>
+        </tr>
+        <tr>
+            <th>PURPOSE</th>
+            <td>{{ $purpose }}</td>
+        </tr>
+        <tr>
+            <th>TENURE</th>
+            <td>{{ $tenure }} Months</td>
+        </tr>
+        <tr>
+            <th>INTEREST RATE</th>
+            <td>{{ $rate }}% Flat per month.</td>
+        </tr>
+        <tr>
+            <th>FEES (UPFRONT)</th>
+            <td>
+                Commission on Credit Deployment (CCD): {{ $ccd }}%<br>
+                Administrative/Upfront Fee: {{ $upfront }}%
+            </td>
+        </tr>
+        <tr>
+            <th>SECURITY</th>
+            <td>
+                @foreach($collateral as $col)
+                - {{ $col['type'] }}: {{ $col['description'] }} (Val: â‚¦{{ number_format($col['market_value']) }})<br>
+                @endforeach
+            </td>
+        </tr>
+    </table>
+
+    <h4>REPAYMENT SCHEDULE</h4>
+    <p>Please find attached the detailed repayment schedule. Failure to meet any installment may attract a penal charge of 1% flat per day on the overdue amount.</p>
+
+    <div class="signature-box">
+        <div class="sig">
+            __________________________<br>
+            <strong>Authorized Signatory</strong><br>
+            For: {{ config('app.name') }}
+        </div>
+        <div class="sig">
+            __________________________<br>
+            <strong>Authorized Signatory</strong><br>
+            For: {{ config('app.name') }}
+        </div>
+    </div>
+
+    <div style="margin-top: 40px; border-top: 1px dashed #000; padding-top: 20px;">
+        <p><strong>ACCEPTANCE</strong></p>
+        <p>I, <strong>{{ $customer_name }}</strong>, hereby accept this offer and agree to be bound by the terms and conditions contained herein.</p>
+        <br><br>
+        __________________________<br>
+        Signature & Date
+    </div>
+
+    <div class="footer">
+        {{ config('app.name') }} is licensed and regulated by the Central Bank of Nigeria (CBN).
+    </div>
+</body>
+</html>
+
+
+==================================================
+FILE: C:\xampp\htdocs\bank\resources\views\admin\savings\index.blade.php
+==================================================
+@extends('admin.menu')
+@section('content')
+@livewire('admin.savings.header', ['type' => $type, 'admin' => $admin])
+@livewire('admin.savings.'.$type, ['type' => $type, 'admin' => $admin, 'settings' => $set])
+@stop
+
+
+==================================================
+FILE: C:\xampp\htdocs\bank\resources\views\admin\savings\manage.blade.php
+==================================================
+@extends('admin.menu')
+
+@section('content')
+
+@livewire('admin.savings.manage', ['admin' => $admin, 'settings' => $set, 'plan' => $plan])
+
+@stop
+
+
+==================================================
+FILE: C:\xampp\htdocs\bank\resources\views\admin\settings\email.blade.php
+==================================================
+@extends('admin.menu')
+
+@section('content')
+<div class="toolbar" id="kt_toolbar">
+    <div class="container-fluid d-flex flex-stack flex-wrap flex-sm-nowrap">
+        <div class="d-flex flex-column align-items-start justify-content-center flex-wrap me-2">
+            <h1 class="text-dark fw-bolder my-1 fs-2 mb-6">{{__('Email')}}</h1>
+            <ul class="nav nav-tabs nav-line-tabs nav-line-tabs-2x mb-5 fs-6 border-gray-300" id="tabs-icons-text" role="tablist">
+                <li class="nav-item">
+                    <a class="nav-link text-dark @if(route('email.settings', ['type' => 'settings'])==url()->current()) active @endif" id="tabs-icons-text-1-tab" href="{{route('email.settings', ['type' => 'settings'])}}" role="tab" aria-controls="tabs-icons-text-1" aria-selected="true">{{__('Configuration')}}</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link text-dark @if(route('email.settings', ['type' => 'template'])==url()->current()) active @endif" id="tabs-icons-text-2-tab" href="{{route('email.settings', ['type' => 'template'])}}" role="tab" aria-controls="tabs-icons-text-2" aria-selected="false">{{__('Template')}}</a>
+                </li>
+            </ul>
+        </div>
+    </div>
+    <div class="post fs-6 d-flex flex-column-fluid min-vh-100" id="kt_post">
+        <div class="container">
+            <div class="tab-content" id="myTabContent">
+                <div class="tab-pane fade @if(route('email.settings', ['type' => 'settings'])==url()->current())show active @endif" id="tabs-icons-text-1" role="tabpanel" aria-labelledby="tabs-icons-text-1-tab">
+                    <div class="card mb-10">
+                        <div class="card-body">
+                            <h5>{{__('SMTP Credentials')}}</h5>
+                            <p class="mb-1">Table shows value of your env email configuration, ensure what is dispalyed here matches your email service smtp configuration, if it doesn't, navigate to .env file to edit this</p>
+                            <div class="table-responsive mb-5">
+                                <table class="table table-bordered">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>PARAMETER</th>
+                                            <th>VALUE</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td> 1 </td>
+                                            <td> MAIL_HOST</td>
+                                            <td> {{env('MAIL_HOST')}}</td>
+                                        </tr>
+                                        <tr>
+                                            <td> 2 </td>
+                                            <td> MAIL_PORT </td>
+                                            <td> {{env('MAIL_PORT')}}</td>
+                                        </tr>
+                                        <tr>
+                                            <td> 3 </td>
+                                            <td> MAIL_USERNAME </td>
+                                            <td> {{env('MAIL_FROM_ADDRESS')}}</td>
+                                        </tr>
+                                        <tr>
+                                            <td> 4 </td>
+                                            <td> MAIL_PASSWORD </td>
+                                            <td> {{env('MAIL_PASSWORD')}}</td>
+                                        </tr>
+                                        <tr>
+                                            <td> 5 </td>
+                                            <td> MAIL_ENCRYPTION </td>
+                                            <td> {{env('MAIL_ENCRYPTION')}}</td>
+                                        </tr>
+                                        <tr>
+                                            <td> 6 </td>
+                                            <td> MAIL_FROM_ADDRESS </td>
+                                            <td> {{env('MAIL_FROM_ADDRESS')}}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card mb-10">
+                        <div class="card-body">
+                            <form action="{{route('admin.settings.update', ['type' => 'system'])}}" method="post">
+                                @csrf
+                                <h5>Template Configuration</h5>
+                                <div class="table-responsive mb-5">
+                                    <table class="table table-bordered">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>CODE</th>
+                                                <th>DESCRIPTION</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td> 1 </td>
+                                                <td> &#123;&#123;message&#125;&#125;</td>
+                                                <td> Details Text From the Script</td>
+                                            </tr>
+                                            <tr>
+                                                <td> 2 </td>
+                                                <td> &#123;&#123;logo&#125;&#125; </td>
+                                                <td> Platform logo. Will be Pulled From Database</td>
+                                            </tr>
+                                            <tr>
+                                                <td> 3 </td>
+                                                <td> &#123;&#123;site_name&#125;&#125; </td>
+                                                <td> Website Name. Will be Pulled From Database</td>
+                                            </tr>
+                                            <tr>
+                                                <td> 4 </td>
+                                                <td> &#123;&#123;unsubscribe&#125;&#125; </td>
+                                                <td> Unsubscribe link for promotional emails. Will be Pulled From Database</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="fv-row mb-6 mb-6">
+                                    <div class="col-lg-12">
+                                        <textarea type="text" name="email_template" rows="4" class="form-control tinymce">{{$set->email_template}}</textarea>
+                                    </div>
+                                </div>
+                                <div class="text-end">
+                                    <button type="submit" class="btn btn-info">{{__('Save')}}</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="tab-pane fade @if(route('email.settings', ['type' => 'template'])==url()->current())show active @endif" id="tabs-icons-text-2" role="tabpanel" aria-labelledby="tabs-icons-text-2-tab">
+                    <div class="card mb-10">
+                        <div class="card-body">
+                            @foreach($admin->emailTemplate() as $val)
+                            <form action="{{route('email.template.settings', ['type' => $val->type])}}" method="post">
+                                @csrf
+                                <p class="fs-5 text-dark fw-bold">{{$val->type}}</p>
+                                <div class="fv-row mb-6">
+                                    <label class="form-label fs-6 fw-bolder text-dark">{{__('Subject')}}</label>
+                                    <input type="text" name="subject" class="form-control form-control-lg form-control-solid" value="{{$val->subject}}">
+                                </div>
+                                <div class="fv-row mb-6">
+                                    <label class="form-label fs-6 fw-bolder text-dark">{{__('Body')}}</label>
+                                    <textarea type="text" name="body" rows="10" class="form-control form-control-lg form-control-solid tinymce">{{$val->body}}</textarea>
+                                </div>
+                                <div class="text-end">
+                                    <button type="submit" class="btn btn-lg btn-info fw-bolder me-3 my-2">{{__('Update')}}</a>
+                                </div>
+                            </form>
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+@stop
+@section('script')
+<script src="{{asset('asset/tinymce/init-tinymce.js')}}"></script>

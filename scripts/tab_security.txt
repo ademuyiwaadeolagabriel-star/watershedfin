@@ -1,0 +1,2070 @@
+FILE: C:\xampp\htdocs\bank\resources\views\livewire\admin\loan\partials\tab-security.blade.php
+==================================================
+{{-- ===================================================================== --}}
+{{-- TAB: COLLATERAL & SECURITY - Modern Financial UI                      --}}
+{{-- Sections: 1. Collateral Registry, 2. Mix & Coverage,                  --}}
+{{--           3. Guarantors & Pledges, 4. Reference Checks                --}}
+{{-- ===================================================================== --}}
+
+<div x-data="{
+    // HELPER: Format display values with commas
+    formatDisplay(val) {
+        if (!val) return '';
+        return val.toString().replace(/[^0-9.]/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    },
+    // HELPER: Strip commas for backend
+    formatRaw(val) {
+        return val.toString().replace(/,/g, '');
+    },
+    // LOGIC: Auto-Calculate FSV based on Type & Market Value
+    calculateFSV(index, type, mv) {
+        let rawMV = parseFloat(this.formatRaw(mv));
+        if (isNaN(rawMV)) rawMV = 0;
+        
+        let fsv = 0;
+        if (type === 'MOVABLE') {
+            fsv = rawMV * 0.8; // 20% Depreciation (Retain 80%)
+        } else if (type === 'IMMOVABLE') {
+            fsv = rawMV * 0.6; // 40% Depreciation (Retain 60%)
+        } else {
+            fsv = rawMV; // Cash/Stock = 100% Value
+        }
+        
+        // Update the FSV field in Livewire
+        @this.set('collaterals.' + index + '.fsv', fsv);
+    }
+}">
+
+    {{-- ==================== HEADER SECTION ==================== --}}
+    <div class="mb-8">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+            <div>
+                <h2 class="fw-bolder text-dark mb-1 fs-2hx d-flex align-items-center">
+                    <span class="symbol symbol-50px symbol-circle me-3" style="background: linear-gradient(135deg, #0d6efd 0%, #6610f2 100%);">
+                        <i class="fas fa-shield-alt text-white fs-2"></i>
+                    </span>
+                    Collateral & Security Management
+                </h2>
+                <p class="text-muted fs-6 mb-0">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Manage pledged assets, guarantors, and reference verification
+                </p>
+            </div>
+        </div>
+    </div>
+
+    {{-- ========================================================= --}}
+    {{-- SECTION 1: DETAILED COLLATERAL REGISTRY                   --}}
+    {{-- ========================================================= --}}
+    <div class="card border-0 shadow-lg mb-8 overflow-hidden">
+        <div class="card-header border-0 py-4 px-6" style="background: linear-gradient(135deg, #0d6efd 0%, #0056b3 100%);">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    <span class="symbol symbol-45px symbol-circle bg-white bg-opacity-20 me-3">
+                        <i class="fas fa-landmark text-white fs-3"></i>
+                    </span>
+                    <div>
+                        <h3 class="text-white fw-bolder mb-0 fs-5">Section 1: Collateral Pledged</h3>
+                        <span class="text-white text-opacity-75 fs-7">Detailed inventory of pledged assets with valuations</span>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                    <span class="badge badge-light badge-pill px-4 py-2 me-2">
+                        <span class="badge badge-primary badge-circle me-2">20%</span>
+                        <span class="text-gray-700">Movable Dep</span>
+                    </span>
+                    <span class="badge badge-light badge-pill px-4 py-2">
+                        <span class="badge badge-warning badge-circle me-2">40%</span>
+                        <span class="text-gray-700">Immovable Dep</span>
+                    </span>
+                    <button wire:click="addCollateral" class="btn btn-light-primary fw-bold px-4">
+                        <i class="fas fa-plus me-2"></i>Add Asset
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            @php 
+                $totalMV = 0; 
+                $totalFSV = 0; 
+                
+                // Mix Buckets for Summary
+                $movableTotal = 0;
+                $immovableTotal = 0;
+                $cashTotal = 0;
+                
+                // CLEANUP: Ensure Stock Value is float
+                $stockRaw = str_replace(',', '', $assets['short_term']['stock_value'] ?? 0);
+                $stockTotal = (float)$stockRaw;
+
+                // CLEANUP: Ensure Loan Amount is float for calculations
+                // Use HOC amount if in structuring mode, else standard
+                $targetAmount = ($mode === 'structuring') ? $hoc_structure_amount : $suggested_amount;
+                $loanAmountRaw = str_replace(',', '', $targetAmount ?? 0);
+                $loanBase = (float)$loanAmountRaw > 0 ? (float)$loanAmountRaw : 1;
+                
+                // Get WFL Installment for display
+                $wflInstallment = $this->projectedInstallment ?? 0;
+            @endphp
+            
+            @if(count($collaterals ?? []) > 0)
+            <div class="table-responsive">
+                <table class="table align-middle table-row-dashed gy-4 mb-0">
+                    <thead class="bg-light-primary">
+                        <tr class="text-gray-700 fw-bold text-uppercase fs-7">
+                            <th class="ps-6 min-w-120px rounded-start">Type & Category</th>
+                            <th class="min-w-220px">Brief Description</th>
+                            <th class="min-w-160px">Asset Specs (ID/Size)</th>
+                            <th class="min-w-160px">Title Documents</th>
+                            <th class="min-w-140px text-end">Market Value</th>
+                            <th class="min-w-140px text-end">Forced Sale (FSV)</th>
+                            
+                            {{-- [NEW] HOC STRESS TEST COLUMN --}}
+                            @if($mode === 'structuring')
+                                <th class="min-w-120px text-end text-primary">HOC Haircut</th>
+                            @endif
+                            
+                            <th class="min-w-50px rounded-end text-center"></th>
+                        </tr>
+                    </thead>
+                    <tbody class="fw-semibold text-gray-600 fs-6">
+                        @foreach($collaterals as $index => $item)
+                        @php
+                            // CLEANUP: Strip commas from individual items
+                            $mv = (float) str_replace(',', '', $item['market_value'] ?? 0);
+                            $fsv = (float) str_replace(',', '', $item['fsv'] ?? 0);
+                            
+                            // [NEW] APPLY HOC OVERRIDE IF EXISTS
+                            $overridePercent = 0;
+                            if($mode === 'structuring' && isset($hoc_collateral_overrides[$index])) {
+                                $overridePercent = (float)$hoc_collateral_overrides[$index];
+                            }
+                            
+                            // Calculate Effective FSV (FSV - Haircut)
+                            $effectiveFsv = $fsv * ((100 - $overridePercent) / 100);
+
+                            $totalMV += $mv;
+                            $totalFSV += $effectiveFsv; // Sum the stressed value
+                            
+                            // Categorize for Mix Table using Effective FSV
+                            $type = $item['type'] ?? 'MOVABLE';
+                            if($type == 'MOVABLE') $movableTotal += $effectiveFsv;
+                            elseif($type == 'IMMOVABLE') $immovableTotal += $effectiveFsv;
+                            elseif($type == 'CASH') $cashTotal += $effectiveFsv;
+                            
+                            // Type badge color
+                            $typeColor = $type == 'MOVABLE' ? 'success' : ($type == 'IMMOVABLE' ? 'warning' : 'info');
+                            $typeIcon = $type == 'MOVABLE' ? 'car' : ($type == 'IMMOVABLE' ? 'building' : 'money-bill-wave');
+                        @endphp
+                        <tr wire:key="col-{{ $index }}" class="hover-bg-light transition-all">
+                            {{-- TYPE & OWNER --}}
+                            <td class="ps-6">
+                                <select wire:model="collaterals.{{$index}}.type" 
+                                        x-on:change="calculateFSV({{$index}}, $el.value, $wire.collaterals[{{$index}}].market_value)"
+                                        class="form-select form-select-solid border-0 fw-bold mb-2">
+                                    <option value="MOVABLE">ðŸš— Movable</option>
+                                    <option value="IMMOVABLE">ðŸ¢ Immovable</option>
+                                    <option value="CASH">ðŸ’µ Cash/Other</option>
+                                </select>
+                                <select wire:model.lazy="collaterals.{{$index}}.ownership" class="form-select form-select-solid form-select-sm border-0">
+                                    <option value="Borrower">ðŸ‘¤ Borrower</option>
+                                    <option value="Guarantor">ðŸ¤ Guarantor</option>
+                                    <option value="3rd Party">ðŸ‘¥ 3rd Party</option>
+                                </select>
+                            </td>
+
+                            {{-- DESCRIPTION --}}
+                            <td>
+                                <input type="text" wire:model.lazy="collaterals.{{$index}}.description" 
+                                       class="form-control form-control-solid border-0 mb-2 fw-bold text-dark" 
+                                       placeholder="Brief Description / Name">
+                                <textarea wire:model.lazy="collaterals.{{$index}}.address" rows="2" 
+                                          class="form-control form-control-solid border-0 fs-7" 
+                                          placeholder="ðŸ“ Location Address"></textarea>
+                            </td>
+
+                            {{-- SPECIFICS (Dynamic based on Type) --}}
+                            <td>
+                                {{-- Movable: Show Chassis --}}
+                                <div x-show="$wire.collaterals[{{$index}}].type == 'MOVABLE'">
+                                    <input type="text" wire:model.lazy="collaterals.{{$index}}.chassis_number" 
+                                           class="form-control form-control-solid form-control-sm border-0 mb-2" 
+                                           placeholder="ðŸ”§ Vehicle Chassis No.">
+                                    <input type="text" wire:model.lazy="collaterals.{{$index}}.year" 
+                                           class="form-control form-control-solid form-control-sm border-0" 
+                                           placeholder="ðŸ“… Year (e.g 2020)">
+                                </div>
+                                {{-- Immovable: Show Land Size --}}
+                                <div x-show="$wire.collaterals[{{$index}}].type == 'IMMOVABLE'">
+                                    <input type="text" wire:model.lazy="collaterals.{{$index}}.land_measurement" 
+                                           class="form-control form-control-solid form-control-sm border-0" 
+                                           placeholder="ðŸ“ Measurement (e.g. 648sqm)">
+                                </div>
+                            </td>
+
+                            {{-- DOCUMENTS --}}
+                            <td>
+                                <input type="text" wire:model.lazy="collaterals.{{$index}}.title_type" 
+                                       class="form-control form-control-solid form-control-sm border-0 mb-2" 
+                                       placeholder="ðŸ“„ Doc Type (C of O, Receipt)">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text border-0 bg-light-warning text-warning fw-bold">
+                                        <i class="fas fa-calendar-alt"></i>
+                                    </span>
+                                    <input type="date" wire:model.lazy="collaterals.{{$index}}.document_expiry" 
+                                           class="form-control form-control-solid border-0">
+                                </div>
+                            </td>
+
+                            {{-- MARKET VALUE (Input triggers Calculation) --}}
+                            <td>
+                                <div class="input-group">
+                                    <span class="input-group-text border-0 bg-light-primary text-primary fw-bold">â‚¦</span>
+                                    <input type="text" class="form-control form-control-solid border-0 text-end fw-bold text-dark fs-5" 
+                                           value="{{ number_format($mv) }}"
+                                           x-on:keyup="$el.value = formatDisplay($el.value)"
+                                           x-on:blur="@this.set('collaterals.{{$index}}.market_value', formatRaw($el.value)); calculateFSV({{$index}}, $wire.collaterals[{{$index}}].type, $el.value)">
+                                </div>
+                            </td>
+
+                            {{-- FSV (Auto-Calculated) --}}
+                            <td>
+                                <div class="input-group">
+                                    <span class="input-group-text border-0 bg-light-success text-success fw-bold">â‚¦</span>
+                                    <input type="text" class="form-control form-control-solid border-0 text-end fw-bolder text-success fs-5" 
+                                           value="{{ number_format($fsv) }}"
+                                           readonly
+                                           title="Auto-calculated based on depreciation policy">
+                                </div>
+                                @php 
+                                    // Individual Coverage Calculation based on Effective FSV
+                                    $cov = ($effectiveFsv / $loanBase) * 100; 
+                                @endphp
+                                <div class="text-end mt-2">
+                                    <span class="badge badge-{{ $cov >= 100 ? 'success' : 'warning' }} badge-pill px-3 py-1">
+                                        <i class="fas fa-percentage me-1"></i>{{ number_format($cov, 0) }}% Coverage
+                                    </span>
+                                </div>
+                            </td>
+
+                            {{-- [NEW] HOC STRESS TEST INPUT --}}
+                            @if($mode === 'structuring')
+                            <td>
+                                <div class="input-group input-group-solid border border-primary border-dashed rounded overflow-hidden">
+                                    <input type="number" class="form-control text-end text-primary fw-bolder border-0" 
+                                           wire:model.lazy="hoc_collateral_overrides.{{$index}}" 
+                                           placeholder="0" min="0" max="100">
+                                    <span class="input-group-text text-primary fw-bold border-0 bg-transparent">%</span>
+                                </div>
+                                @if($overridePercent > 0)
+                                    <div class="text-end mt-2">
+                                        <span class="badge badge-light-danger">
+                                            Value: â‚¦{{ number_format($effectiveFsv/1000000, 2) }}M
+                                        </span>
+                                    </div>
+                                @else
+                                    <div class="text-end mt-2 text-muted fs-8">No Haircut</div>
+                                @endif
+                            </td>
+                            @endif
+
+                            <td class="text-center">
+                                <button wire:click="removeCollateral({{$index}})" 
+                                        wire:confirm="Are you sure you want to remove this collateral?"
+                                        class="btn btn-icon btn-light-danger btn-hover-light w-35px h-35px">
+                                    <i class="fas fa-trash-alt text-danger"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        @endforeach
+                    </tbody>
+                    <tfoot>
+                        <tr class="bg-dark">
+                            <td colspan="4" class="ps-6 py-4">
+                                <span class="fw-bolder text-white fs-5 text-uppercase">Total Collateral Value</span>
+                            </td>
+                            <td class="text-end py-4">
+                                <span class="fw-bolder text-white fs-4">â‚¦{{ number_format($totalMV) }}</span>
+                            </td>
+                            <td class="text-end py-4">
+                                <span class="fw-bolder text-success fs-4">â‚¦{{ number_format($totalFSV) }}</span>
+                            </td>
+                            @if($mode === 'structuring')
+                            <td colspan="2"></td>
+                            @else
+                            <td></td>
+                            @endif
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            @else
+            {{-- Empty State --}}
+            <div class="text-center py-15">
+                <div class="symbol symbol-100px symbol-circle bg-light-primary mb-5">
+                    <i class="fas fa-folder-open text-primary fs-1"></i>
+                </div>
+                <h4 class="text-dark fw-bolder mb-2">No Collateral Added</h4>
+                <p class="text-muted mb-6">Start by adding collateral assets to secure this loan</p>
+                <button wire:click="addCollateral" class="btn btn-primary fw-bold px-6">
+                    <i class="fas fa-plus me-2"></i>Add First Collateral
+                </button>
+            </div>
+            @endif
+        </div>
+    </div>
+
+    {{-- ========================================================= --}}
+    {{-- SECTION 2: COLLATERAL MIX (SUMMARY TABLE)                 --}}
+    {{-- ========================================================= --}}
+    <div class="row g-6 mb-8">
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm h-100 overflow-hidden">
+                <div class="card-header border-0 py-4 px-6" style="background: linear-gradient(135deg, #198754 0%, #0f5132 100%);">
+                    <div class="d-flex align-items-center">
+                        <span class="symbol symbol-45px symbol-circle bg-white bg-opacity-20 me-3">
+                            <i class="fas fa-chart-pie text-white fs-3"></i>
+                        </span>
+                        <div>
+                            <h3 class="text-white fw-bolder mb-0 fs-5">Section 2: Collateral Mix & Coverage</h3>
+                            <span class="text-white text-opacity-75 fs-7">Summary breakdown by asset category</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    @php 
+                        // 1. STOCK LOGIC: 10% Haircut
+                        $stockCollateralValue = $stockTotal * 0.10; 
+
+                        // 2. TOTALS (Uses stressed values calculated in loop above)
+                        $grandTotalFSV = $movableTotal + $immovableTotal + $cashTotal + $stockCollateralValue;
+                        $totalCoverage = ($grandTotalFSV / $loanBase) * 100;
+                        $coverageStatus = $totalCoverage >= 150 ? 'excellent' : ($totalCoverage >= 100 ? 'good' : ($totalCoverage >= 75 ? 'moderate' : 'weak'));
+                    @endphp
+                    
+                    {{-- Summary Cards --}}
+                    <div class="row g-0 border-bottom">
+                        {{-- Movable --}}
+                        <div class="col-md-3 p-4 border-end">
+                            <div class="d-flex align-items-center mb-3">
+                                <div class="symbol symbol-40px symbol-circle bg-success me-3">
+                                    <i class="fas fa-car text-white fs-4"></i>
+                                </div>
+                                <div>
+                                    <span class="text-muted fs-8 text-uppercase fw-bold">Movable</span>
+                                    <h4 class="text-dark fw-bolder mb-0 fs-5">â‚¦{{ number_format($movableTotal, 0) }}</h4>
+                                </div>
+                            </div>
+                            <div class="progress h-6px rounded-pill">
+                                <div class="progress-bar bg-success" style="width: {{ min(($movableTotal / $loanBase) * 100, 100) }}%"></div>
+                            </div>
+                            <span class="text-muted fs-8 mt-1 d-block">{{ number_format(($movableTotal / $loanBase) * 100, 0) }}% of loan</span>
+                        </div>
+                        
+                        {{-- Immovable --}}
+                        <div class="col-md-3 p-4 border-end">
+                            <div class="d-flex align-items-center mb-3">
+                                <div class="symbol symbol-40px symbol-circle bg-warning me-3">
+                                    <i class="fas fa-building text-white fs-4"></i>
+                                </div>
+                                <div>
+                                    <span class="text-muted fs-8 text-uppercase fw-bold">Immovable</span>
+                                    <h4 class="text-dark fw-bolder mb-0 fs-5">â‚¦{{ number_format($immovableTotal, 0) }}</h4>
+                                </div>
+                            </div>
+                            <div class="progress h-6px rounded-pill">
+                                <div class="progress-bar bg-warning" style="width: {{ min(($immovableTotal / $loanBase) * 100, 100) }}%"></div>
+                            </div>
+                            <span class="text-muted fs-8 mt-1 d-block">{{ number_format(($immovableTotal / $loanBase) * 100, 0) }}% of loan</span>
+                        </div>
+                        
+                        {{-- Cash --}}
+                        <div class="col-md-3 p-4 border-end">
+                            <div class="d-flex align-items-center mb-3">
+                                <div class="symbol symbol-40px symbol-circle bg-info me-3">
+                                    <i class="fas fa-money-bill-wave text-white fs-4"></i>
+                                </div>
+                                <div>
+                                    <span class="text-muted fs-8 text-uppercase fw-bold">Cash</span>
+                                    <h4 class="text-dark fw-bolder mb-0 fs-5">â‚¦{{ number_format($cashTotal, 0) }}</h4>
+                                </div>
+                            </div>
+                            <div class="progress h-6px rounded-pill">
+                                <div class="progress-bar bg-info" style="width: {{ min(($cashTotal / $loanBase) * 100, 100) }}%"></div>
+                            </div>
+                            <span class="text-muted fs-8 mt-1 d-block">{{ number_format(($cashTotal / $loanBase) * 100, 0) }}% of loan</span>
+                        </div>
+                        
+                        {{-- Stock --}}
+                        <div class="col-md-3 p-4">
+                            <div class="d-flex align-items-center mb-3">
+                                <div class="symbol symbol-40px symbol-circle bg-primary me-3">
+                                    <i class="fas fa-boxes text-white fs-4"></i>
+                                </div>
+                                <div>
+                                    <span class="text-muted fs-8 text-uppercase fw-bold">Stock (10%)</span>
+                                    <h4 class="text-dark fw-bolder mb-0 fs-5">â‚¦{{ number_format($stockCollateralValue, 0) }}</h4>
+                                </div>
+                            </div>
+                            <div class="progress h-6px rounded-pill">
+                                <div class="progress-bar bg-primary" style="width: {{ min(($stockCollateralValue / $loanBase) * 100, 100) }}%"></div>
+                            </div>
+                            <span class="text-muted fs-8 mt-1 d-block">{{ number_format(($stockCollateralValue / $loanBase) * 100, 0) }}% of loan</span>
+                        </div>
+                    </div>
+                    
+                    {{-- Total Coverage Bar --}}
+                    <div class="p-5">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <span class="text-muted fs-7 text-uppercase fw-bold">Total Coverage vs Loan Amount</span>
+                                <h3 class="text-dark fw-bolder mb-0">â‚¦{{ number_format($grandTotalFSV, 0) }}</h3>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge badge-{{ $coverageStatus === 'excellent' ? 'success' : ($coverageStatus === 'good' ? 'primary' : ($coverageStatus === 'moderate' ? 'warning' : 'danger')) }} badge-lg px-5 py-3">
+                                    <span class="fs-2hx fw-bolder">{{ number_format($totalCoverage, 0) }}%</span>
+                                    <span class="d-block fs-7">{{ ucfirst($coverageStatus) }}</span>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="progress h-12px rounded-pill overflow-hidden">
+                            <div class="progress-bar bg-{{ $coverageStatus === 'excellent' ? 'success' : ($coverageStatus === 'good' ? 'primary' : ($coverageStatus === 'moderate' ? 'warning' : 'danger')) }}" 
+                                 style="width: {{ min($totalCoverage, 100) }}%"></div>
+                        </div>
+                        <div class="d-flex justify-content-between mt-2">
+                            <span class="text-muted fs-8">Target: â‚¦{{ number_format($loanBase, 0) }}</span>
+                            <span class="text-muted fs-8">
+                                {{ $totalCoverage >= 100 ? 'âœ“ Adequate' : 'âš  Insufficient' }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        {{-- NCR & Info Panel --}}
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body p-5">
+                    {{-- NCR Registration --}}
+                    <div class="mb-5">
+                        <label class="form-label fw-bold fs-6 text-dark">
+                            <i class="fas fa-certificate text-primary me-2"></i>NCR Registration ID
+                        </label>
+                        <div class="input-group input-group-solid">
+                            <span class="input-group-text border-0">
+                                <i class="fas fa-hashtag text-muted"></i>
+                            </span>
+                            <input type="text" wire:model.lazy="ncr_registration_id" 
+                                   class="form-control border-0" 
+                                   placeholder="Enter NCR Registration ID">
+                        </div>
+                    </div>
+                    
+                    {{-- Coverage Logic Info --}}
+                    <div class="alert alert-primary d-flex align-items-start p-4 mb-0 rounded-3">
+                        <i class="fas fa-info-circle text-primary fs-2hx me-3 mt-1"></i>
+                        <div>
+                            <h5 class="text-dark fw-bolder mb-2">Coverage Logic</h5>
+                            <span class="text-gray-700 fs-7 d-block mb-2">
+                                Percentages calculated against <strong>Loan Amount (â‚¦{{ number_format($loanBase) }})</strong>
+                            </span>
+                            <ul class="list-unstyled mb-0 fs-7">
+                                <li class="mb-1">
+                                    <span class="badge badge-success badge-circle me-2">20%</span>
+                                    Movable Depreciation
+                                </li>
+                                <li class="mb-1">
+                                    <span class="badge badge-warning badge-circle me-2">40%</span>
+                                    Immovable Depreciation
+                                </li>
+                                <li>
+                                    <span class="badge badge-primary badge-circle me-2">10%</span>
+                                    Stock Value Applied
+                                </li>
+                            </ul>
+                            @if($mode === 'structuring')
+                            <div class="mt-3 pt-3 border-top border-primary border-opacity-25">
+                                <span class="text-danger fw-bold fs-7">
+                                    <i class="fas fa-exclamation-triangle me-1"></i>
+                                    HOC Stress Test haircuts applied to totals
+                                </span>
+                            </div>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- ========================================================= --}}
+    {{-- SECTION 3: GUARANTOR PROFILES (DETAILED WITH DSR)         --}}
+    {{-- ========================================================= --}}
+    <div class="card border-0 shadow-lg mb-8 overflow-hidden">
+        <div class="card-header border-0 py-4 px-6" style="background: linear-gradient(135deg, #fd7e14 0%, #dc3545 100%);">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    <span class="symbol symbol-45px symbol-circle bg-white bg-opacity-20 me-3">
+                        <i class="fas fa-users text-white fs-3"></i>
+                    </span>
+                    <div>
+                        <h3 class="text-white fw-bolder mb-0 fs-5">Section 3: Guarantors & Pledges</h3>
+                        <span class="text-white text-opacity-75 fs-7">Guarantor profiles with DSR financial analysis</span>
+                    </div>
+                </div>
+                <button wire:click="addGuarantor" class="btn btn-light-warning fw-bold px-4">
+                    <i class="fas fa-user-plus me-2"></i>Add Guarantor
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-6">
+            @if(count($guarantors ?? []) > 0)
+            <div class="row g-6">
+                @foreach($guarantors as $index => $guarantor)
+                @php
+                    // Use the Trait's DSR analysis method if available, else null
+                    $analysis = method_exists($this, 'getGuarantorDsrAnalysisProperty') ? $this->getGuarantorDsrAnalysisProperty() : [];
+                    $guarantorDsr = $analysis[$index] ?? null;
+                    $dsrColor = $guarantorDsr['status_color'] ?? 'secondary';
+                @endphp
+                <div class="col-xl-12" wire:key="guarantor-{{ $index }}">
+                    <div class="card border border-gray-300 border-dashed h-100 mb-0">
+                        
+                        {{-- Header --}}
+                        <div class="card-header bg-light py-3 px-4 d-flex justify-content-between align-items-center">
+                            <div class="d-flex align-items-center">
+                                <span class="symbol symbol-40px symbol-circle me-3" style="background: linear-gradient(135deg, #fd7e14 0%, #dc3545 100%);">
+                                    <span class="text-white fw-bolder fs-4">{{ $index + 1 }}</span>
+                                </span>
+                                <span class="fw-bolder fs-5 text-dark">
+                                    Guarantor #{{ $index + 1 }}
+                                </span>
+                                @if($guarantorDsr && $guarantorDsr['monthly_sales'] > 0)
+                                    <span class="badge badge-light-{{ $dsrColor }} ms-3 px-4 py-2">
+                                        <i class="fas fa-percentage me-1"></i>DSR: {{ $guarantorDsr['dsr_percent'] }}%
+                                    </span>
+                                @endif
+                            </div>
+                            <button wire:click="removeGuarantor({{$index}})" 
+                                    wire:confirm="Remove this guarantor?"
+                                    class="btn btn-icon btn-light-danger btn-hover-light">
+                                <i class="fas fa-times text-danger"></i>
+                            </button>
+                        </div>
+
+                        <div class="card-body p-4">
+                            <div class="row g-5">
+                                {{-- LEFT: Photo & Basic Identity --}}
+                                <div class="col-md-3 text-center border-end border-gray-300">
+                                    <div class="image-input image-input-outline mb-3 mx-auto" data-kt-image-input="true" style="width: 130px; height: 130px;">
+                                        @php
+                                            $passport = $guarantor['passport'] ?? null;
+                                            $bgImage = asset('assets/media/svg/avatars/blank.svg');
+                                            if (is_object($passport) && method_exists($passport, 'temporaryUrl')) {
+                                                $bgImage = $passport->temporaryUrl();
+                                            } elseif (is_string($passport) && !empty($passport)) {
+                                                $bgImage = asset('storage/' . $passport);
+                                            }
+                                        @endphp
+                                        <div class="image-input-wrapper w-100 h-100 rounded border border-2 border-primary shadow-sm"
+                                             style="background-image: url('{{ $bgImage }}'); background-size: cover;">
+                                        </div>
+                                        <label class="btn btn-icon btn-circle btn-active-color-primary w-30px h-30px bg-body shadow" 
+                                               data-bs-toggle="tooltip" title="Upload Photo">
+                                            <i class="fas fa-camera text-primary"></i>
+                                            <input type="file" wire:model="guarantors.{{$index}}.passport" accept=".png, .jpg, .jpeg">
+                                        </label>
+                                    </div>
+                                    
+                                    <input type="text" wire:model.lazy="guarantors.{{$index}}.name" 
+                                           class="form-control form-control-solid border-0 text-center fw-bold text-dark fs-5 mb-2" 
+                                           placeholder="Full Name">
+                                    <input type="text" wire:model.lazy="guarantors.{{$index}}.phone" 
+                                           class="form-control form-control-solid border-0 text-center mb-2" 
+                                           placeholder="ðŸ“ž Phone Number">
+                                    
+                                    {{-- IRON GATE: BVN & NIN --}}
+                                    <div class="bg-light-danger rounded p-2 mb-2">
+                                        <input type="text" wire:model.lazy="guarantors.{{$index}}.bvn" 
+                                               class="form-control form-control-sm text-center fw-bolder border border-danger text-danger mb-1" 
+                                               placeholder="ðŸ”’ BVN (11 Digits) *" maxlength="11" 
+                                               title="Iron Gate: Mandatory">
+                                        <input type="text" wire:model.lazy="guarantors.{{$index}}.nin" 
+                                               class="form-control form-control-sm text-center border-0" 
+                                               placeholder="ðŸªª NIN Number *">
+                                    </div>
+
+                                    <select wire:model.lazy="guarantors.{{$index}}.marital_status" 
+                                            class="form-select form-select-solid form-select-sm border-0 mb-2 text-center">
+                                        <option value="">Marital Status</option>
+                                        <option value="Married">ðŸ’ Married</option>
+                                        <option value="Single">å•èº« Single</option>
+                                        <option value="Divorced">ðŸ’” Divorced</option>
+                                        <option value="Widowed">ðŸª¦ Widowed</option>
+                                    </select>
+                                    <input type="text" wire:model.lazy="guarantors.{{$index}}.religion" 
+                                           class="form-control form-control-solid form-control-sm border-0 text-center" 
+                                           placeholder="â›ª Religion">
+                                </div>
+
+                                {{-- CENTER: Demographics & Employment --}}
+                                <div class="col-md-5">
+                                    <h6 class="text-primary fw-bold fs-7 text-uppercase border-bottom border-primary pb-2 mb-3">
+                                        <i class="fas fa-briefcase me-2"></i>Work & Residence
+                                    </h6>
+                                    <div class="row g-2">
+                                        <div class="col-12">
+                                            <input type="text" wire:model.lazy="guarantors.{{$index}}.address" 
+                                                   class="form-control form-control-solid border-0 mb-2" 
+                                                   placeholder="ðŸ  Home Address">
+                                        </div>
+                                        <div class="col-6">
+                                            <select wire:model.lazy="guarantors.{{$index}}.ownership_status" 
+                                                    class="form-select form-select-solid form-select-sm border-0">
+                                                <option value="">ðŸ  House Status</option>
+                                                <option value="Owned">âœ… Owned</option>
+                                                <option value="Rented">ðŸ  Rented</option>
+                                                <option value="Family">ðŸ‘¨â€ðŸ‘©â€ðŸ‘§ Family</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6">
+                                            <input type="text" wire:model.lazy="guarantors.{{$index}}.relationship" 
+                                                   class="form-control form-control-solid form-control-sm border-0" 
+                                                   placeholder="ðŸ¤ Relationship to Borrower">
+                                        </div>
+                                        <div class="col-12">
+                                            <input type="text" wire:model.lazy="guarantors.{{$index}}.business_name" 
+                                                   class="form-control form-control-solid border-0 mb-2" 
+                                                   placeholder="ðŸ¢ Business/Company Name">
+                                        </div>
+                                        <div class="col-12">
+                                            <input type="text" wire:model.lazy="guarantors.{{$index}}.business_address" 
+                                                   class="form-control form-control-solid border-0 mb-2" 
+                                                   placeholder="ðŸ“ Business Address">
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="input-group">
+                                                <span class="input-group-text border-0 bg-light-success text-success fw-bold">ðŸ’° Salary</span>
+                                                <input type="text" class="form-control form-control-solid border-0 text-end fw-bold" 
+                                                       value="{{ number_format((float) str_replace(',', '', $guarantor['salary'] ?? 0)) }}"
+                                                       x-on:keyup="$el.value = formatDisplay($el.value)"
+                                                       x-on:blur="@this.set('guarantors.{{$index}}.salary', formatRaw($el.value))">
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="input-group">
+                                                <span class="input-group-text border-0 bg-light-info text-info">ðŸ“… Yrs Known</span>
+                                                <input type="text" class="form-control form-control-solid border-0 text-center" 
+                                                       wire:model.lazy="guarantors.{{$index}}.years_known" placeholder="0">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {{-- RIGHT: Financial Capacity & DSR Calculation --}}
+                                <div class="col-md-4 bg-light-info rounded p-4 border border-info border-dashed">
+                                    <h6 class="text-info fw-bold fs-7 text-uppercase border-bottom border-info pb-2 mb-3">
+                                        <i class="fas fa-chart-line me-2"></i>Financial Analysis & DSR
+                                    </h6>
+                                    
+                                    {{-- DEBUG/CONTROL: WFL Installment Amount --}}
+                                    <div class="mb-3 p-3 bg-white rounded border border-danger border-dashed">
+                                        <label class="fs-7 fw-bold text-danger">WFL Installment (Auto)</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text border-0 bg-light-danger text-danger fw-bold">â‚¦</span>
+                                            <input type="text" class="form-control form-control-solid border-0 text-end fw-bold text-danger fs-5" 
+                                                   value="{{ number_format($wflInstallment, 2) }}" readonly>
+                                        </div>
+                                        <small class="text-muted fs-8">Used for DSR calculation</small>
+                                    </div>
+                                    
+                                    <div class="row g-2">
+                                        {{-- Row 1: Business Worth & Stock --}}
+                                        <div class="col-6">
+                                            <label class="fs-8 fw-bold text-dark">Business Worth</label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text border-0 bg-light">â‚¦</span>
+                                                <input type="text" class="form-control form-control-solid border-0 text-end fw-bold" 
+                                                       value="{{ number_format((float) str_replace(',', '', $guarantor['net_worth'] ?? 0)) }}"
+                                                       x-on:keyup="$el.value = formatDisplay($el.value)"
+                                                       x-on:blur="@this.set('guarantors.{{$index}}.net_worth', formatRaw($el.value))">
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="fs-8 fw-bold text-dark">Stock of Goods</label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text border-0 bg-light">â‚¦</span>
+                                                <input type="text" class="form-control form-control-solid border-0 text-end" 
+                                                       value="{{ number_format((float) str_replace(',', '', $guarantor['stock_value'] ?? 0)) }}"
+                                                       x-on:keyup="$el.value = formatDisplay($el.value)"
+                                                       x-on:blur="@this.set('guarantors.{{$index}}.stock_value', formatRaw($el.value))">
+                                            </div>
+                                        </div>
+                                        
+                                        {{-- Row 2: Monthly Sales & COGS --}}
+                                        <div class="col-6">
+                                            <label class="fs-8 fw-bold text-primary">Monthly Sales</label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text border-0 bg-light-primary text-primary">â‚¦</span>
+                                                <input type="text" class="form-control form-control-solid border-0 text-end text-primary fw-bold" 
+                                                       value="{{ number_format((float) str_replace(',', '', $guarantor['income'] ?? 0)) }}"
+                                                       x-on:keyup="$el.value = formatDisplay($el.value)"
+                                                       x-on:blur="@this.set('guarantors.{{$index}}.income', formatRaw($el.value))">
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="fs-8 fw-bold text-muted">COGS <span class="text-muted">(opt)</span></label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text border-0 bg-light">â‚¦</span>
+                                                <input type="text" class="form-control form-control-solid border-0 text-end" 
+                                                       value="{{ number_format((float) str_replace(',', '', $guarantor['cogs'] ?? 0)) }}"
+                                                       x-on:keyup="$el.value = formatDisplay($el.value)"
+                                                       x-on:blur="@this.set('guarantors.{{$index}}.cogs', formatRaw($el.value))">
+                                            </div>
+                                        </div>
+                                        
+                                        {{-- Row 3: Gross Profit & Operation Expenses --}}
+                                        <div class="col-6">
+                                            <label class="fs-8 fw-bold text-success">
+                                                Gross Profit
+                                                @if($guarantorDsr && (float) str_replace(',', '', $guarantor['gross_profit'] ?? 0) <= 0)
+                                                    <span class="badge badge-success badge-pill ms-1">Auto</span>
+                                                @endif
+                                            </label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text border-0 bg-light-success text-success">â‚¦</span>
+                                                <input type="text" class="form-control form-control-solid border-0 text-end bg-light-success fw-bold" 
+                                                       value="{{ number_format($guarantorDsr['gross_profit'] ?? ((float) str_replace(',', '', $guarantor['gross_profit'] ?? 0))) }}"
+                                                       x-on:keyup="$el.value = formatDisplay($el.value)"
+                                                       x-on:blur="@this.set('guarantors.{{$index}}.gross_profit', formatRaw($el.value))"
+                                                       placeholder="Auto or Input">
+                                            </div>
+                                            @if($guarantorDsr && (float) str_replace(',', '', $guarantor['gross_profit'] ?? 0) <= 0)
+                                            <small class="text-success fs-8">
+                                                <i class="fas fa-calculator me-1"></i>
+                                                Sales - COGS = {{ number_format($guarantorDsr['monthly_sales'] ?? 0) }} - {{ number_format($guarantorDsr['cogs'] ?? 0) }}
+                                            </small>
+                                            @endif
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="fs-8 fw-bold text-dark">Op/Family Exp</label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text border-0 bg-light">â‚¦</span>
+                                                <input type="text" class="form-control form-control-solid border-0 text-end" 
+                                                       value="{{ number_format((float) str_replace(',', '', $guarantor['operation_expenses'] ?? 0)) }}"
+                                                       x-on:keyup="$el.value = formatDisplay($el.value)"
+                                                       x-on:blur="@this.set('guarantors.{{$index}}.operation_expenses', formatRaw($el.value))">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {{-- DSR Result Box with Formula Breakdown (Excel Format) --}}
+                                    @if($guarantorDsr && $guarantorDsr['monthly_sales'] > 0)
+                                    <div class="mt-4 p-3 rounded bg-{{ $dsrColor }} bg-opacity-10 border border-{{ $dsrColor }}">
+                                        {{-- Formula Breakdown Section --}}
+                                        <div class="mb-3 pb-2 border-bottom border-{{ $dsrColor }} border-opacity-25">
+                                            <div class="fs-8 text-muted fw-bold mb-2">
+                                                <i class="fas fa-calculator me-1"></i>CALCULATION BREAKDOWN
+                                            </div>
+                                            <div class="row g-1 fs-8">
+                                                <div class="col-12 mb-1">
+                                                    <span class="text-dark fw-bold">Gross Profit</span> = 
+                                                    <span class="text-primary">Monthly Sales</span> - <span class="text-muted">COGS</span> = 
+                                                    <span class="text-success fw-bold">â‚¦{{ number_format($guarantorDsr['monthly_sales']) }} - â‚¦{{ number_format($guarantorDsr['cogs']) }} = â‚¦{{ number_format($guarantorDsr['gross_profit']) }}</span>
+                                                </div>
+                                                <div class="col-12 mb-1">
+                                                    <span class="text-dark fw-bold">Net Profit</span> = 
+                                                    <span class="text-success">Gross Profit</span> - <span class="text-muted">Op. Exp</span> = 
+                                                    <span class="text-dark fw-bold">â‚¦{{ number_format($guarantorDsr['gross_profit']) }} - â‚¦{{ number_format($guarantorDsr['operation_expenses']) }} = â‚¦{{ number_format($guarantorDsr['net_profit']) }}</span>
+                                                </div>
+                                                <div class="col-12 mb-1">
+                                                    <span class="text-dark fw-bold">Repayment Capacity</span> = 
+                                                    <span class="text-info">Net Profit</span> - <span class="text-danger">WFL Installment</span> = 
+                                                    <span class="text-dark fw-bold">â‚¦{{ number_format($guarantorDsr['net_profit']) }} - â‚¦{{ number_format($guarantorDsr['wfl_installment']) }} = â‚¦{{ number_format($guarantorDsr['repayment_capacity']) }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        {{-- Results Summary --}}
+                                        <div class="row g-2 text-center">
+                                            <div class="col-3">
+                                                <div class="fs-8 text-muted">Gross Profit</div>
+                                                <div class="fs-6 fw-bold text-success">â‚¦{{ number_format($guarantorDsr['gross_profit']) }}</div>
+                                            </div>
+                                            <div class="col-3 border-start border-end">
+                                                <div class="fs-8 text-muted">Net Profit</div>
+                                                <div class="fs-6 fw-bold text-dark">â‚¦{{ number_format($guarantorDsr['net_profit']) }}</div>
+                                            </div>
+                                            <div class="col-3">
+                                                <div class="fs-8 text-muted">Rep. Capacity</div>
+                                                <div class="fs-6 fw-bold text-info">â‚¦{{ number_format($guarantorDsr['repayment_capacity']) }}</div>
+                                            </div>
+                                            <div class="col-3">
+                                                <div class="fs-8 text-muted">DSR</div>
+                                                <div class="fs-4 fw-bolder text-{{ $dsrColor }}">{{ $guarantorDsr['dsr_percent'] }}%</div>
+                                            </div>
+                                        </div>
+                                        
+                                        {{-- DSR Formula --}}
+                                        <div class="text-center mt-2 pt-2 border-top border-{{ $dsrColor }} border-opacity-25">
+                                            <div class="fs-8 text-muted">
+                                                DSR = <span class="text-danger">â‚¦{{ number_format($guarantorDsr['wfl_installment']) }}</span> Ã· 
+                                                <span class="text-info">â‚¦{{ number_format($guarantorDsr['repayment_capacity']) }}</span> Ã— 100 = 
+                                                <span class="text-{{ $dsrColor }} fw-bold">{{ $guarantorDsr['dsr_percent'] }}%</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="text-center mt-2">
+                                            <span class="badge badge-light-{{ $dsrColor }} px-4 py-2 fs-7">
+                                                {{ $guarantorDsr['status'] }}
+                                            </span>
+                                            @if(!$guarantorDsr['is_acceptable'])
+                                                <div class="text-danger fs-7 mt-2 fw-bold">
+                                                    <i class="fas fa-exclamation-triangle me-1"></i>Exceeds 45% limit
+                                                </div>
+                                            @endif
+                                        </div>
+                                    </div>
+                                    @endif
+                                    
+                                    {{-- Checkboxes --}}
+                                    <div class="mt-4 pt-3 border-top border-info border-opacity-25">
+                                        <div class="form-check form-check-custom form-check-solid form-check-sm mb-2">
+                                            <input class="form-check-input" type="checkbox" wire:model.lazy="guarantors.{{$index}}.is_client" />
+                                            <label class="form-check-label fs-7 fw-bold text-dark">
+                                                <i class="fas fa-user-check text-primary me-1"></i>Is existing WFL client?
+                                            </label>
+                                        </div>
+                                        <div class="form-check form-check-custom form-check-solid form-check-sm">
+                                            <input class="form-check-input" type="checkbox" wire:model.lazy="guarantors.{{$index}}.pledge_signed" />
+                                            <label class="form-check-label fs-7 fw-bold text-dark">
+                                                <i class="fas fa-file-signature text-success me-1"></i>Pledge Signed?
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                @endforeach
+            </div>
+            @else
+            {{-- Empty State --}}
+            <div class="text-center py-15">
+                <div class="symbol symbol-100px symbol-circle bg-light-warning mb-5">
+                    <i class="fas fa-user-friends text-warning fs-1"></i>
+                </div>
+                <h4 class="text-dark fw-bolder mb-2">No Guarantors Added</h4>
+                <p class="text-muted mb-6">Add guarantors to strengthen the loan security</p>
+                <button wire:click="addGuarantor" class="btn btn-warning fw-bold px-6">
+                    <i class="fas fa-user-plus me-2"></i>Add Guarantor
+                </button>
+            </div>
+            @endif
+        </div>
+    </div>
+
+    {{-- ========================================================= --}}
+    {{-- SECTION 4: REFERENCE CHECKS                               --}}
+    {{-- ========================================================= --}}
+    <div class="card border-0 shadow-lg overflow-hidden">
+        <div class="card-header border-0 py-4 px-6" style="background: linear-gradient(135deg, #6c757d 0%, #495057 100%);">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    <span class="symbol symbol-45px symbol-circle bg-white bg-opacity-20 me-3">
+                        <i class="fas fa-address-book text-white fs-3"></i>
+                    </span>
+                    <div>
+                        <h3 class="text-white fw-bolder mb-0 fs-5">Section 4: Reference Checks</h3>
+                        <span class="text-white text-opacity-75 fs-7">Commercial, Neighborhood, and Family References</span>
+                    </div>
+                </div>
+                <button wire:click="addReference" class="btn btn-light-secondary fw-bold px-4">
+                    <i class="fas fa-users me-2"></i>Add Reference
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            @if(count($references ?? []) > 0)
+            {{-- Reference Type Summary --}}
+            @php
+                $familyRefs = collect($references)->where('type', 'FAMILY')->count();
+                $commercialRefs = collect($references)->where('type', 'COMMERCIAL')->count();
+                $neighborRefs = collect($references)->where('type', 'NEIGHBOR')->count();
+                $clergyRefs = collect($references)->where('type', 'CLERGY')->count();
+            @endphp
+            <div class="row g-0 border-bottom bg-light">
+                <div class="col-md-3 p-4 text-center border-end">
+                    <div class="symbol symbol-40px symbol-circle bg-primary mb-2 mx-auto">
+                        <i class="fas fa-home text-white fs-4"></i>
+                    </div>
+                    <h4 class="text-dark fw-bolder mb-0">{{ $familyRefs }}</h4>
+                    <span class="text-muted fs-7">Family</span>
+                </div>
+                <div class="col-md-3 p-4 text-center border-end">
+                    <div class="symbol symbol-40px symbol-circle bg-success mb-2 mx-auto">
+                        <i class="fas fa-briefcase text-white fs-4"></i>
+                    </div>
+                    <h4 class="text-dark fw-bolder mb-0">{{ $commercialRefs }}</h4>
+                    <span class="text-muted fs-7">Commercial</span>
+                </div>
+                <div class="col-md-3 p-4 text-center border-end">
+                    <div class="symbol symbol-40px symbol-circle bg-info mb-2 mx-auto">
+                        <i class="fas fa-users text-white fs-4"></i>
+                    </div>
+                    <h4 class="text-dark fw-bolder mb-0">{{ $neighborRefs }}</h4>
+                    <span class="text-muted fs-7">Neighbor</span>
+                </div>
+                <div class="col-md-3 p-4 text-center">
+                    <div class="symbol symbol-40px symbol-circle bg-warning mb-2 mx-auto">
+                        <i class="fas fa-church text-white fs-4"></i>
+                    </div>
+                    <h4 class="text-dark fw-bolder mb-0">{{ $clergyRefs }}</h4>
+                    <span class="text-muted fs-7">Clergy</span>
+                </div>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table align-middle table-row-dashed gy-4 mb-0">
+                    <thead class="bg-light">
+                        <tr class="text-gray-700 fw-bold text-uppercase fs-7">
+                            <th class="ps-6 min-w-120px rounded-start">Ref. Type</th>
+                            <th class="min-w-200px">Full Name & Address</th>
+                            <th class="min-w-180px">Business/Work Info</th>
+                            <th class="min-w-120px">Rel./Duration</th>
+                            <th class="min-w-120px">Contact Info</th>
+                            <th class="min-w-180px">LO Comment</th>
+                            <th class="min-w-50px rounded-end text-center"></th>
+                        </tr>
+                    </thead>
+                    <tbody class="fw-semibold text-gray-600 fs-6">
+                        @foreach($references as $index => $ref)
+                        <tr wire:key="ref-{{ $index }}" class="hover-bg-light transition-all">
+                            {{-- Type --}}
+                            <td class="ps-6">
+                                <select wire:model.lazy="references.{{$index}}.type" 
+                                        class="form-select form-select-solid border-0 fw-bold">
+                                    <option value="FAMILY">ðŸ‘¨â€ðŸ‘©â€ðŸ‘§ Family</option>
+                                    <option value="COMMERCIAL">ðŸ’¼ Commercial</option>
+                                    <option value="NEIGHBOR">ðŸ  Neighborhood</option>
+                                    <option value="CLERGY">â›ª Clergy</option>
+                                </select>
+                            </td>
+
+                            {{-- Name & Home --}}
+                            <td>
+                                <input type="text" wire:model.lazy="references.{{$index}}.name" 
+                                       class="form-control form-control-solid border-0 mb-2 fw-bold text-dark" 
+                                       placeholder="Full Name">
+                                <textarea wire:model.lazy="references.{{$index}}.home_address" rows="2" 
+                                          class="form-control form-control-solid border-0 fs-7" 
+                                          placeholder="ðŸ“ Home Address"></textarea>
+                            </td>
+
+                            {{-- Business Info --}}
+                            <td>
+                                <input type="text" wire:model.lazy="references.{{$index}}.business_name" 
+                                       class="form-control form-control-solid border-0 mb-2" 
+                                       placeholder="ðŸ¢ Business Name">
+                                <textarea wire:model.lazy="references.{{$index}}.business_address" rows="2" 
+                                          class="form-control form-control-solid border-0 fs-7" 
+                                          placeholder="ðŸ“ Business Address"></textarea>
+                            </td>
+
+                            {{-- Relationship --}}
+                            <td>
+                                <input type="text" wire:model.lazy="references.{{$index}}.relationship" 
+                                       class="form-control form-control-solid border-0 mb-2" 
+                                       placeholder="e.g. Wife">
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control form-control-solid border-0 text-center" 
+                                           wire:model.lazy="references.{{$index}}.years_known" placeholder="0">
+                                    <span class="input-group-text border-0 bg-light">Yrs</span>
+                                </div>
+                            </td>
+
+                            {{-- Contact --}}
+                            <td>
+                                <input type="text" wire:model.lazy="references.{{$index}}.phone" 
+                                       class="form-control form-control-solid border-0 mb-2" 
+                                       placeholder="ðŸ“ž Phone">
+                                <select wire:model.lazy="references.{{$index}}.sex" 
+                                        class="form-select form-select-solid form-select-sm border-0">
+                                    <option value="">Sex</option>
+                                    <option value="M">ðŸ‘¨ Male</option>
+                                    <option value="F">ðŸ‘© Female</option>
+                                </select>
+                            </td>
+
+                            {{-- Comment --}}
+                            <td>
+                                <textarea wire:model.lazy="references.{{$index}}.comment" rows="3" 
+                                          class="form-control form-control-solid border-0 border-success fs-7" 
+                                          placeholder="âœ… Reference Check Result..."></textarea>
+                            </td>
+
+                            <td class="text-center">
+                                <button wire:click="removeReference({{$index}})" 
+                                        wire:confirm="Remove this reference?"
+                                        class="btn btn-icon btn-light-danger btn-hover-light w-35px h-35px">
+                                    <i class="fas fa-trash-alt text-danger"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+            @else
+            {{-- Empty State --}}
+            <div class="text-center py-15">
+                <div class="symbol symbol-100px symbol-circle bg-light-secondary mb-5">
+                    <i class="fas fa-address-card text-secondary fs-1"></i>
+                </div>
+                <h4 class="text-dark fw-bolder mb-2">No References Added</h4>
+                <p class="text-muted mb-6">Add references for background verification</p>
+                <button wire:click="addReference" class="btn btn-secondary fw-bold px-6">
+                    <i class="fas fa-plus me-2"></i>Add Reference
+                </button>
+            </div>
+            @endif
+        </div>
+    </div>
+
+</div>
+
+{{-- ==================== STYLES ==================== --}}
+<style>
+    .hover-bg-light:hover {
+        background-color: rgba(13, 110, 253, 0.05) !important;
+    }
+    
+    .transition-all {
+        transition: all 0.3s ease;
+    }
+    
+    .form-control-solid {
+        background-color: #f5f8fa;
+        border-color: #f5f8fa;
+    }
+    
+    .form-control-solid:focus {
+        background-color: #ebf3f6;
+        border-color: #b0c5d0;
+    }
+    
+    .progress-bar {
+        transition: width 0.6s ease;
+    }
+    
+    .card-header [class*="bg-gradient-"] {
+        transition: filter 0.3s ease;
+    }
+    
+    .card-header:hover [class*="bg-gradient-"] {
+        filter: brightness(1.05);
+    }
+</style>
+
+
+==================================================
+FILE: C:\xampp\htdocs\bank\resources\views\livewire\admin\loan\partials\tab-structure.blade.php
+==================================================
+<div class="row g-6" x-data="{ 
+        formatDisplay(val) { 
+            if(!val) return ''; 
+            return val.toString().replace(/[^0-9.]/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, ','); 
+        },
+        showReturnPanel: false,
+        activeMetric: 'yield'
+    }">
+    
+    {{-- PREMIUM HEADER SECTION --}}
+    <div class="col-12 mb-4">
+        <div class="bg-gradient-to-r from-primary to-primary-dark rounded-3 overflow-hidden shadow-lg">
+            <div class="row g-0">
+                {{-- Left: Title & Context --}}
+                <div class="col-lg-7 p-5">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="symbol symbol-50px me-4">
+                            <div class="symbol-label bg-white bg-opacity-20 rounded-circle">
+                                <i class="fas fa-chart-pie text-white fs-2"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="fw-bolder text-white fs-2 mb-1">Credit Structuring & Mitigation</h3>
+                            <span class="text-white text-opacity-75 fs-7">
+                                @if(($is_hoc ?? false) && empty($assigned_analyst_id))
+                                    Assign this file to a Credit Analyst for structural review
+                                @elseif(($is_hoc ?? false) && $loan->current_step === 'ANALYST_STRUCTURING')
+                                    Waiting for the assigned analyst to complete the structure
+                                @elseif($is_hoc ?? false)
+                                    Review the Analyst's proposed structure and authorize the final facility parameters
+                                @else
+                                    Build the final facility parameters, apply stress tests, and verify profitability
+                                @endif
+                            </span>
+                        </div>
+                    </div>
+                    
+                    {{-- Progress Steps --}}
+                    <div class="d-flex gap-2 mt-4">
+                        <div class="d-flex align-items-center">
+                            <div class="symbol symbol-30px me-2">
+                                <div class="symbol-label bg-success">
+                                    <i class="fas fa-check text-white fs-8"></i>
+                                </div>
+                            </div>
+                            <span class="text-white text-opacity-75 fs-8 fw-bold">LO Origination</span>
+                        </div>
+                        <i class="fas fa-chevron-right text-white text-opacity-50 align-self-center fs-9"></i>
+                        <div class="d-flex align-items-center">
+                            <div class="symbol symbol-30px me-2">
+                                <div class="symbol-label bg-success">
+                                    <i class="fas fa-check text-white fs-8"></i>
+                                </div>
+                            </div>
+                            <span class="text-white text-opacity-75 fs-8 fw-bold">BM Vetting</span>
+                        </div>
+                        <i class="fas fa-chevron-right text-white text-opacity-50 align-self-center fs-9"></i>
+                        <div class="d-flex align-items-center">
+                            <div class="symbol symbol-30px me-2">
+                                <div class="symbol-label bg-white">
+                                    <i class="fas fa-cogs text-primary fs-8"></i>
+                                </div>
+                            </div>
+                            <span class="text-white fs-8 fw-bold">Structuring</span>
+                        </div>
+                        <i class="fas fa-chevron-right text-white text-opacity-50 align-self-center fs-9"></i>
+                        <div class="d-flex align-items-center opacity-50">
+                            <div class="symbol symbol-30px me-2">
+                                <div class="symbol-label bg-white bg-opacity-20">
+                                    <i class="fas fa-shield-alt text-white fs-8"></i>
+                                </div>
+                            </div>
+                            <span class="text-white fs-8 fw-bold">Risk Review</span>
+                        </div>
+                    </div>
+                </div>
+                
+                {{-- Right: Status Badge --}}
+                <div class="col-lg-5 p-5 border-start border-white border-opacity-10">
+                    @if(!empty($assigned_analyst_id))
+                        <div class="text-center text-lg-end">
+                            <span class="badge badge-light-{{ $mode === 'analyst' ? 'primary' : 'success' }} fs-7 fw-bolder py-3 px-5 rounded-pill mb-3">
+                                <i class="fas fa-{{ $mode === 'analyst' ? 'user-edit' : 'check-double' }} me-2"></i>
+                                {{ $mode === 'analyst' ? 'Active Maker: Analyst Workspace' : 'Active Checker: HOC Review' }}
+                            </span>
+                            <div class="text-white text-opacity-75 fs-8">
+                                <i class="fas fa-user-tie me-1"></i> 
+                                Assigned Analyst: <strong class="text-white">{{ App\Models\Admin::find($assigned_analyst_id)?->first_name ?? 'Unknown' }}</strong>
+                            </div>
+                        </div>
+                    @else
+                        <div class="text-center text-lg-end">
+                            <span class="badge badge-light-warning fs-7 fw-bolder py-3 px-5 rounded-pill mb-3">
+                                <i class="fas fa-clock me-2"></i> Awaiting Assignment
+                            </span>
+                            <div class="text-white text-opacity-75 fs-8">
+                                <i class="fas fa-info-circle me-1"></i> 
+                                No analyst assigned yet
+                            </div>
+                        </div>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- ========================================================= --}}
+    {{-- 1. HOC ASSIGNMENT DASHBOARD (If Unassigned)               --}}
+    {{-- ========================================================= --}}
+    @if(($is_hoc ?? false) && empty($assigned_analyst_id))
+        <div class="col-12 mb-4">
+            <div class="card border-0 shadow-lg overflow-hidden">
+                <div class="row g-0">
+                    {{-- Visual Panel --}}
+                    <div class="col-lg-5 bg-gradient-to-br from-primary via-primary to-info p-8 d-flex flex-column justify-content-center align-items-center text-center">
+                        <div class="symbol symbol-80px mb-4">
+                            <div class="symbol-label bg-white bg-opacity-20 rounded-circle">
+                                <i class="fas fa-sitemap text-white fs-1"></i>
+                            </div>
+                        </div>
+                        <h2 class="text-white fw-bolder mb-2">Dispatch to Credit Analyst</h2>
+                        <p class="text-white text-opacity-75 fs-6">
+                            This file has passed BM Vetting and is ready for structural analysis
+                        </p>
+                        <div class="d-flex gap-2 mt-3">
+                            <span class="badge badge-light-white bg-white bg-opacity-20 text-white px-4 py-2">
+                                <i class="fas fa-check-circle me-1"></i> Verified
+                            </span>
+                            <span class="badge badge-light-white bg-white bg-opacity-20 text-white px-4 py-2">
+                                <i class="fas fa-map-marker-alt me-1"></i> GPS Captured
+                            </span>
+                        </div>
+                    </div>
+                    
+                    {{-- Action Panel --}}
+                    <div class="col-lg-7 p-6">
+                        <div class="mb-5">
+                            <h4 class="fw-bolder text-gray-900 mb-2">Select Available Analyst</h4>
+                            <p class="text-muted fs-7">Choose a credit analyst to handle the financial modeling and profitability assessment</p>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <select class="form-select form-select-lg form-select-solid border-2 border-gray-300 fw-bold text-dark fs-6" wire:model.defer="assigned_analyst_id">
+                                <option value="">Choose Analyst...</option>
+                                @foreach($available_analysts ?? [] as $analyst)
+                                    <option value="{{ $analyst->id }}">{{ $analyst->first_name }} {{ $analyst->last_name }}</option>
+                                @endforeach
+                            </select>
+                            @error('assigned_analyst_id') 
+                                <div class="mt-2 p-2 bg-light-danger rounded">
+                                    <span class="text-danger fs-8 fw-bold"><i class="fas fa-exclamation-circle me-1"></i> {{ $message }}</span>
+                                </div>
+                            @enderror
+                        </div>
+                        
+                        <div class="d-flex gap-3 mb-4">
+                            <button class="btn btn-primary btn-lg flex-grow-1 fw-bold shadow-sm" wire:click="assignAnalyst" wire:loading.attr="disabled">
+                                <span wire:loading.remove wire:target="assignAnalyst">
+                                    <i class="fas fa-paper-plane me-2"></i> Dispatch to Analyst
+                                </span>
+                                <span wire:loading wire:target="assignAnalyst">
+                                    <span class="spinner-border spinner-border-sm me-2"></span> Dispatching...
+                                </span>
+                            </button>
+                        </div>
+                        
+                        {{-- Divider --}}
+                        <div class="d-flex align-items-center my-5">
+                            <div class="border-bottom border-gray-300 flex-grow-1"></div>
+                            <span class="px-4 text-muted fs-8 fw-bold text-uppercase">Alternative Option</span>
+                            <div class="border-bottom border-gray-300 flex-grow-1"></div>
+                        </div>
+                        
+                        <button class="btn btn-outline btn-outline-primary btn-lg w-100 fw-bold border-2 border-dashed" wire:click="pullToHocDesk">
+                            <i class="fas fa-hand-holding-heart me-2"></i> Take Over File (Structure Myself)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    {{-- ========================================================= --}}
+    {{-- 2. HOC WAITING SCREEN (If Analyst is currently working)   --}}
+    {{-- ========================================================= --}}
+    @elseif(($is_hoc ?? false) && !empty($assigned_analyst_id) && $loan->current_step === 'ANALYST_STRUCTURING')
+        <div class="col-12 mb-4">
+            <div class="card border-0 shadow-lg bg-gradient-to-br from-gray-100 to-gray-50">
+                <div class="card-body p-12 text-center">
+                    <div class="mb-5 position-relative">
+                        <div class="symbol symbol-100px">
+                            <div class="symbol-label bg-light-primary rounded-circle">
+                                <i class="fas fa-cogs text-primary fs-1"></i>
+                            </div>
+                        </div>
+                        <span class="position-absolute top-0 end-0 translate-middle badge badge-success badge-circle fs-4 animate__animated animate__pulse animate__infinite">
+                            <i class="fas fa-spinner fa-spin"></i>
+                        </span>
+                    </div>
+                    
+                    <h2 class="fw-bolder text-gray-900 mb-3">Analyst is Structuring...</h2>
+                    <p class="text-muted fs-5 mb-5 mx-auto" style="max-width: 500px;">
+                        The assigned analyst is currently building the financial model, running stress tests, and preparing the profitability analysis. This file will appear here once submitted.
+                    </p>
+                    
+                    <div class="d-flex justify-content-center gap-3">
+                        <button class="btn btn-primary fw-bold px-6" onclick="location.reload()">
+                            <i class="fas fa-sync-alt me-2"></i> Refresh Status
+                        </button>
+                        <a href="{{ route('admin.loan') }}" class="btn btn-light fw-bold px-6">
+                            <i class="fas fa-list me-2"></i> View All Loans
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    {{-- ========================================================= --}}
+    {{-- 3. THE STRUCTURING WORKSPACE (Analyst Maker / HOC Review) --}}
+    {{-- ========================================================= --}}
+    @elseif(!empty($assigned_analyst_id))
+        @php 
+            $isAnalystWorking = ($mode === 'analyst');
+            $isHocReviewing = (($mode === 'structuring' || $is_hoc) && in_array($loan->current_step, ['HOC_APPROVAL', 'HOC_STRUCTURING']));
+            $isReadOnly = $isHocReviewing; 
+        @endphp
+
+        {{-- RETURN REASON ALERT FOR ANALYST --}}
+        @if($mode === 'analyst' && $loan->status === 'queried' && !empty($loan->cac_status_comment))
+            <div class="col-12 mb-4">
+                <div class="card border border-danger border-2 shadow-sm">
+                    <div class="card-body p-0">
+                        <div class="bg-light-danger d-flex align-items-center p-5">
+                            <div class="symbol symbol-50px me-4">
+                                <div class="symbol-label bg-danger">
+                                    <i class="fas fa-exclamation-triangle text-white fs-2"></i>
+                                </div>
+                            </div>
+                            <div class="flex-grow-1">
+                                <h4 class="text-danger fw-bolder mb-1">File Returned for Correction</h4>
+                                <p class="text-dark fs-7 mb-0 fst-italic">
+                                    "{{ str_replace('HOC QUERY: ', '', $loan->cac_status_comment) }}"
+                                </p>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge badge-danger fs-8 fw-bold">
+                                    <i class="fas fa-clock me-1"></i> Action Required
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        @endif
+
+        {{-- ======================================================= --}}
+        {{-- MCC DECISION PANEL - Credit Analyst Submission          --}}
+        {{-- ======================================================= --}}
+        @if($mode === 'analyst')
+            <div class="col-12 mb-4">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header border-0 py-4 px-5" style="background: linear-gradient(135deg, #50CD89 0%, #0BB7AF 100%);">
+                        <div class="d-flex align-items-center">
+                            <div class="symbol symbol-45px me-3">
+                                <div class="symbol-label bg-white bg-opacity-20 rounded-circle">
+                                    <i class="fas fa-gavel text-white fs-3"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="card-title text-white fw-bolder mb-0">MCC Decision - Credit Analyst (Level 3)</h4>
+                                <span class="text-white text-opacity-75 fs-8">Record your Management Credit Committee decision</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body p-5">
+                        <div class="row g-4">
+                            <div class="col-md-4">
+                                <label class="form-label text-gray-700 fw-bold fs-8 text-uppercase">Recommended Amount</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-success text-white fw-bold border-0">â‚¦</span>
+                                    <input type="text" class="form-control border-2 border-success fw-bolder" 
+                                           wire:model.defer="mcc_ca_recommended_amount"
+                                           x-on:keyup="$el.value = formatDisplay($el.value)">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label text-gray-700 fw-bold fs-8 text-uppercase">Duration (Months)</label>
+                                <input type="number" class="form-control border-2 border-success fw-bold" 
+                                       wire:model.defer="mcc_ca_duration">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label text-gray-700 fw-bold fs-8 text-uppercase">Decision Type</label>
+                                <select class="form-select border-2 border-success fw-bold" wire:model="mcc_ca_decision_type">
+                                    <option value="approved">Approved</option>
+                                    <option value="declined">Declined</option>
+                                    <option value="deferred">Deferred</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label text-gray-700 fw-bold fs-8 text-uppercase">Interest Rate %</label>
+                                <div class="input-group">
+                                    <input type="number" step="0.01" class="form-control border-2 border-gray-300 fw-bold" 
+                                           wire:model.defer="mcc_ca_interest_rate_percentage">
+                                    <span class="input-group-text bg-gray-200 fw-bold">%</span>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label text-gray-700 fw-bold fs-8 text-uppercase">CCD %</label>
+                                <div class="input-group">
+                                    <input type="number" step="0.01" class="form-control border-2 border-gray-300 fw-bold" 
+                                           wire:model.defer="mcc_ca_ccd_percentage">
+                                    <span class="input-group-text bg-gray-200 fw-bold">%</span>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label text-gray-700 fw-bold fs-8 text-uppercase">Upfront Fee %</label>
+                                <div class="input-group">
+                                    <input type="number" step="0.01" class="form-control border-2 border-gray-300 fw-bold" 
+                                           wire:model.defer="mcc_ca_upfront_fee_percentage">
+                                    <span class="input-group-text bg-gray-200 fw-bold">%</span>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label text-gray-700 fw-bold fs-8 text-uppercase">Decision</label>
+                                <div class="btn-group w-100" role="group">
+                                    <input type="radio" class="btn-check" id="ca_approve" value="approved" wire:model="mcc_ca_decision_type">
+                                    <label class="btn btn-outline-success fw-bold" for="ca_approve"><i class="fas fa-check me-1"></i>Approve</label>
+                                    
+                                    <input type="radio" class="btn-check" id="ca_decline" value="declined" wire:model="mcc_ca_decision_type">
+                                    <label class="btn btn-outline-danger fw-bold" for="ca_decline"><i class="fas fa-times me-1"></i>Decline</label>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label text-gray-700 fw-bold fs-8 text-uppercase">MCC Comment / Justification</label>
+                                <textarea class="form-control border-2 border-gray-300" rows="2" 
+                                          wire:model.defer="mcc_ca_comment" 
+                                          placeholder="Provide your justification for this MCC decision..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        @endif
+
+        {{-- ======================================================= --}}
+        {{-- LEFT COLUMN: The Financial Architect                    --}}
+        {{-- ======================================================= --}}
+        <div class="col-xl-7 d-flex flex-column gap-5">
+            
+            {{-- A. Analyst Proposed Structure --}}
+            <div class="card border-0 shadow-sm overflow-hidden">
+                <div class="card-header border-0 py-4 px-5" style="background: linear-gradient(135deg, #3699FF 0%, #1A4C8B 100%);">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center">
+                            <div class="symbol symbol-45px me-3">
+                                <div class="symbol-label bg-white bg-opacity-20 rounded-circle">
+                                    <i class="fas fa-sliders-h text-white fs-3"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="card-title text-white fw-bolder mb-0">Analyst Proposed Structure</h4>
+                                <span class="text-white text-opacity-75 fs-8">Set the facility parameters</span>
+                            </div>
+                        </div>
+                        @if($isReadOnly)
+                            <span class="badge badge-light-danger px-4 py-2 fs-8 fw-bold">
+                                <i class="fas fa-lock me-1"></i> Read Only
+                            </span>
+                        @endif
+                    </div>
+                </div>
+                <div class="card-body p-6">
+                    <div class="row g-5">
+                        {{-- Amount --}}
+                        <div class="col-md-6">
+                            <div class="position-relative">
+                                <label class="form-label text-gray-700 fw-bold fs-8 text-uppercase">Proposed Amount</label>
+                                <div class="input-group input-group-lg">
+                                    <span class="input-group-text bg-primary text-white fw-bold border-0">â‚¦</span>
+                                    <input type="text" class="form-control border-2 border-gray-300 fw-bolder fs-4 text-primary text-end {{ $isReadOnly ? 'bg-gray-100' : 'bg-white' }}" 
+                                           wire:model.debounce.500ms="analyst_recommended_amount"
+                                           x-on:keyup="$el.value = formatDisplay($el.value)" 
+                                           {{ $isReadOnly ? 'readonly' : '' }}>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {{-- Tenor --}}
+                        <div class="col-md-6">
+                            <label class="form-label text-gray-700 fw-bold fs-8 text-uppercase">Tenor</label>
+                            <div class="input-group input-group-lg">
+                                <input type="number" class="form-control border-2 border-gray-300 fw-bolder fs-4 text-primary text-end {{ $isReadOnly ? 'bg-gray-100' : 'bg-white' }}" 
+                                       wire:model.debounce.500ms="analyst_recommended_tenor" 
+                                       {{ $isReadOnly ? 'readonly' : '' }}>
+                                <span class="input-group-text bg-primary text-white fw-bold border-0">Months</span>
+                            </div>
+                        </div>
+                        
+                        {{-- Interest Rate --}}
+                        <div class="col-md-6">
+                            <label class="form-label text-gray-700 fw-bold fs-8 text-uppercase">Interest Rate (p.a)</label>
+                            <div class="input-group">
+                                <input type="number" step="0.01" class="form-control border-2 border-gray-300 fw-bold fs-5 {{ $isReadOnly ? 'bg-gray-100' : 'bg-white' }}" 
+                                       wire:model.debounce.500ms="analyst_interest_rate" 
+                                       {{ $isReadOnly ? 'readonly' : '' }}>
+                                <span class="input-group-text bg-gray-200 text-gray-700 fw-bold border-2 border-gray-300 border-start-0">% per annum</span>
+                            </div>
+                        </div>
+                        
+                        {{-- Repayment Cycle --}}
+                        <div class="col-md-6">
+                            <label class="form-label text-gray-700 fw-bold fs-8 text-uppercase">Repayment Cycle</label>
+                            <select wire:model="analyst_repayment_cycle" class="form-select form-select-lg border-2 border-gray-300 fw-bold {{ $isReadOnly ? 'bg-gray-100' : 'bg-white' }}" {{ $isReadOnly ? 'disabled' : '' }}>
+                                <option value="monthly">Monthly (Reducing Balance)</option>
+                                <option value="weekly">Weekly (Flat Rate)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {{-- B. Cashflow Shock Variables --}}
+            <div class="card border-0 shadow-sm overflow-hidden">
+                <div class="card-header border-0 py-4 px-5" style="background: linear-gradient(135deg, #F64E60 0%, #EE2D41 100%);">
+                    <div class="d-flex align-items-center">
+                        <div class="symbol symbol-45px me-3">
+                            <div class="symbol-label bg-white bg-opacity-20 rounded-circle">
+                                <i class="fas fa-bolt text-white fs-3"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="card-title text-white fw-bolder mb-0">Cashflow Shock Variables</h4>
+                            <span class="text-white text-opacity-75 fs-8">Stress test the repayment capacity</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-6">
+                    <div class="alert bg-light-danger border border-danger border-dashed rounded-3 p-4 mb-5">
+                        <div class="d-flex align-items-center">
+                            <div class="symbol symbol-40px me-3">
+                                <div class="symbol-label bg-danger">
+                                    <i class="fas fa-exclamation text-white"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <span class="fs-7 text-dark fw-bold">Apply expense buffering to simulate adverse scenarios and test DSR resilience.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-5">
+                        <div class="col-md-6">
+                            <label class="form-label text-gray-700 fw-bold fs-8 text-uppercase">Expense Shock Buffer</label>
+                            <div class="input-group input-group-lg">
+                                <input type="number" step="0.05" min="0" max="2" class="form-control border-2 border-danger fw-bolder fs-4 text-danger text-end {{ $isReadOnly ? 'bg-gray-100' : 'bg-white' }}" 
+                                       wire:model.lazy="unforeseen_buffer_rate" 
+                                       {{ $isReadOnly ? 'readonly' : '' }}>
+                                <span class="input-group-text bg-danger text-white fw-bold border-0">Decimal</span>
+                            </div>
+                            <span class="fs-9 text-muted mt-2 d-block">Example: 0.30 = 30% buffer increase</span>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="bg-gray-50 rounded-3 p-4 border border-gray-200 h-100">
+                                <div class="d-flex justify-content-between mb-3 pb-3 border-bottom border-gray-200">
+                                    <span class="fs-7 fw-bold text-gray-600">Base Expenses:</span>
+                                    <span class="fs-6 fw-bolder text-dark">â‚¦{{ number_format(($total_business_expenses + $total_family_expenses) + $other_bank_installments) }}</span>
+                                </div>
+                                <div class="d-flex justify-content-between mb-3 pb-3 border-bottom border-gray-200">
+                                    <span class="fs-7 fw-bold text-gray-600">Buffer Applied:</span>
+                                    <span class="fs-6 fw-bolder text-warning">{{ ($unforeseen_buffer_rate ?? 0.2) * 100 }}%</span>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <span class="fs-7 fw-bold text-danger">Shocked Total:</span>
+                                    <span class="fs-5 fw-bolder text-danger">â‚¦{{ number_format($total_buffered_expenses) }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {{-- C. Real-Time Profitability Engine --}}
+            <div class="card border-0 shadow-sm overflow-hidden">
+                <div class="card-header border-0 py-4 px-5 bg-dark">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center">
+                            <div class="symbol symbol-45px me-3">
+                                <div class="symbol-label bg-success rounded-circle">
+                                    <i class="fas fa-chart-line text-white fs-3"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="card-title text-white fw-bolder mb-0">Bank Profitability Engine</h4>
+                                <span class="text-white text-opacity-75 fs-8">Real-time yield calculation</span>
+                            </div>
+                        </div>
+                        <span class="badge badge-success px-4 py-2 fs-8 fw-bold animate__animated animate__pulse animate__infinite">
+                            <i class="fas fa-broadcast-tower me-1"></i> LIVE
+                        </span>
+                    </div>
+                </div>
+                <div class="card-body p-6 bg-dark">
+                    <div class="row g-4">
+                        {{-- Gross Income --}}
+                        <div class="col-md-4">
+                            <div class="bg-white bg-opacity-5 rounded-3 p-5 border border-gray-700 h-100 text-center">
+                                <i class="fas fa-plus-circle text-success fs-1 mb-3 opacity-75"></i>
+                                <span class="fs-9 fw-bold text-gray-400 text-uppercase d-block mb-2">Gross Income</span>
+                                <span class="fs-2hx fw-bolder text-white d-block mb-2">â‚¦{{ number_format($profitability_metrics['gross_income'] ?? 0) }}</span>
+                                <span class="fs-9 text-gray-500">Interest + Processing Fees</span>
+                            </div>
+                        </div>
+                        
+                        {{-- Total Costs --}}
+                        <div class="col-md-4">
+                            <div class="bg-white bg-opacity-5 rounded-3 p-5 border border-gray-700 h-100 text-center">
+                                <i class="fas fa-minus-circle text-danger fs-1 mb-3 opacity-75"></i>
+                                <span class="fs-9 fw-bold text-gray-400 text-uppercase d-block mb-2">Total Costs</span>
+                                <span class="fs-2hx fw-bolder text-danger d-block mb-2">(â‚¦{{ number_format($profitability_metrics['total_cost'] ?? 0) }})</span>
+                                <div class="d-flex justify-content-center gap-3 mt-2">
+                                    <span class="fs-9 text-gray-500">Funds: â‚¦{{ number_format($profitability_metrics['costs']['funds'] ?? 0) }}</span>
+                                    <span class="fs-9 text-gray-500">Admin: â‚¦{{ number_format($profitability_metrics['costs']['admin'] ?? 0) }}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- Net Yield --}}
+                        <div class="col-md-4">
+                            @php $yield = $profitability_metrics['net_yield_percent'] ?? 0; @endphp
+                            <div class="rounded-3 p-5 h-100 text-center position-relative overflow-hidden {{ $yield >= 15 ? 'bg-success' : ($yield > 0 ? 'bg-warning' : 'bg-danger') }}">
+                                <i class="fas fa-percentage position-absolute text-white opacity-10" style="font-size: 8rem; right: -20px; bottom: -20px;"></i>
+                                <div class="position-relative z-index-1">
+                                    <i class="fas fa-trophy text-white fs-1 mb-3 opacity-75"></i>
+                                    <span class="fs-9 fw-bold text-white text-opacity-75 text-uppercase d-block mb-2">Net Yield (ROI)</span>
+                                    <span class="fs-1 fw-bolder text-white d-block mb-2">{{ number_format($yield, 2) }}%</span>
+                                    <span class="badge badge-white text-white bg-white bg-opacity-25 fs-8 fw-bold">
+                                        {{ $yield >= 15 ? 'â­ Highly Profitable' : ($yield > 0 ? 'âš–ï¸ Marginal' : 'âš ï¸ Loss Making') }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {{-- Income Breakdown --}}
+                    <div class="mt-5 pt-5 border-top border-gray-700">
+                        <h5 class="text-white fw-bolder mb-4 fs-7">Income Breakdown</h5>
+                        <div class="row g-3">
+                            <div class="col-4">
+                                <div class="d-flex align-items-center">
+                                    <div class="symbol symbol-35px me-2">
+                                        <div class="symbol-label bg-primary bg-opacity-25">
+                                            <i class="fas fa-percentage text-primary fs-4"></i>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <span class="fs-9 text-gray-400 d-block">Interest</span>
+                                        <span class="fs-6 fw-bolder text-white">â‚¦{{ number_format($profitability_metrics['income_breakdown']['interest'] ?? 0) }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="d-flex align-items-center">
+                                    <div class="symbol symbol-35px me-2">
+                                        <div class="symbol-label bg-info bg-opacity-25">
+                                            <i class="fas fa-file-invoice text-info fs-4"></i>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <span class="fs-9 text-gray-400 d-block">Processing</span>
+                                        <span class="fs-6 fw-bolder text-white">â‚¦{{ number_format($profitability_metrics['income_breakdown']['processing'] ?? 0) }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="d-flex align-items-center">
+                                    <div class="symbol symbol-35px me-2">
+                                        <div class="symbol-label bg-success bg-opacity-25">
+                                            <i class="fas fa-piggy-bank text-success fs-4"></i>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <span class="fs-9 text-gray-400 d-block">CCD</span>
+                                        <span class="fs-6 fw-bolder text-white">â‚¦{{ number_format($profitability_metrics['income_breakdown']['ccd'] ?? 0) }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            {{-- D. Collateral Stress Testing --}}
+            <div class="card border-0 shadow-sm overflow-hidden">
+                <div class="card-header border-0 py-4 px-5" style="background: linear-gradient(135deg, #FFA800 0%, #FF8A00 100%);">
+                    <div class="d-flex align-items-center">
+                        <div class="symbol symbol-45px me-3">
+                            <div class="symbol-label bg-white bg-opacity-20 rounded-circle">
+                                <i class="fas fa-compress-alt text-white fs-3"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="card-title text-white fw-bolder mb-0">Asset Stress Test (Haircuts)</h4>
+                            <span class="text-white text-opacity-75 fs-8">Apply forced-sale value discounts</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-5 bg-light-warning bg-opacity-25">
+                    @forelse($collaterals as $index => $col)
+                        <div class="bg-white rounded-3 p-5 border border-gray-200 shadow-sm mb-4">
+                            <div class="row align-items-center">
+                                <div class="col-lg-4">
+                                    <div class="d-flex align-items-center">
+                                        <div class="symbol symbol-50px me-3">
+                                            <div class="symbol-label bg-warning bg-opacity-25">
+                                                <i class="fas fa-building text-warning fs-2"></i>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <span class="fs-7 fw-bolder text-gray-800 d-block">{{ $col['type'] ?? 'Asset' }}</span>
+                                            <span class="fs-8 text-muted">{{ $col['location'] ?? 'Location not specified' }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-lg-3 text-center">
+                                    <span class="fs-9 text-muted text-uppercase d-block">Open Market Value</span>
+                                    <span class="fs-4 fw-bolder text-primary">â‚¦{{ number_format($col['market_value'] ?? 0) }}</span>
+                                </div>
+                                <div class="col-lg-2">
+                                    <label class="fs-9 text-muted text-uppercase d-block mb-1">Haircut %</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" wire:model.lazy="hoc_collateral_overrides.{{ $index }}" 
+                                               class="form-control border-2 border-warning fw-bolder text-center {{ $isReadOnly ? 'bg-gray-100' : 'bg-white' }}" 
+                                               placeholder="30" 
+                                               {{ $isReadOnly ? 'readonly' : '' }}>
+                                        <span class="input-group-text bg-warning text-white fw-bold">%</span>
+                                    </div>
+                                </div>
+                                <div class="col-lg-3 text-center">
+                                    @php 
+                                        $override = $hoc_collateral_overrides[$index] ?? 0;
+                                        $fsv = $col['market_value'] * (1 - ($override / 100));
+                                    @endphp
+                                    <span class="fs-9 text-muted text-uppercase d-block">Final FSV</span>
+                                    <span class="fs-4 fw-bolder text-success">â‚¦{{ number_format($fsv) }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    @empty
+                        <div class="text-center py-8">
+                            <div class="symbol symbol-70px mb-4">
+                                <div class="symbol-label bg-gray-200">
+                                    <i class="fas fa-inbox text-gray-400 fs-1"></i>
+                                </div>
+                            </div>
+                            <h5 class="fw-bolder text-gray-600">No Collaterals Logged</h5>
+                            <span class="text-muted fs-7">No assets available for stress testing</span>
+                        </div>
+                    @endforelse
+                </div>
+            </div>
+        </div>
+
+        {{-- ======================================================= --}}
+        {{-- RIGHT COLUMN: Risk Detective & HOC Actions              --}}
+        {{-- ======================================================= --}}
+        <div class="col-xl-5 d-flex flex-column gap-5">
+            
+            {{-- A. Automated Risk Flags --}}
+            <div class="card border-0 shadow-sm overflow-hidden">
+                <div class="card-header border-0 py-4 px-5 bg-gray-800">
+                    <div class="d-flex align-items-center">
+                        <div class="symbol symbol-45px me-3">
+                            <div class="symbol-label bg-primary rounded-circle">
+                                <i class="fas fa-robot text-white fs-3"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="card-title text-white fw-bolder mb-0">System Risk Detective</h4>
+                            <span class="text-white text-opacity-75 fs-8">Automated red flag scanner</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-0" style="max-height: 350px; overflow-y: auto;">
+                    @forelse($automated_risk_flags ?? [] as $flag)
+                        <div class="p-4 border-bottom border-gray-200 hover-bg-light transition-all">
+                            <div class="d-flex align-items-start">
+                                <div class="symbol symbol-45px me-3 flex-shrink-0">
+                                    <div class="symbol-label {{ $flag['type'] === 'risk' ? 'bg-light-danger' : ($flag['type'] === 'warning' ? 'bg-light-warning' : 'bg-light-info') }}">
+                                        <i class="fas fa-{{ $flag['type'] === 'risk' ? 'exclamation-triangle text-danger' : ($flag['type'] === 'warning' ? 'exclamation-circle text-warning' : 'info-circle text-info') }} fs-3"></i>
+                                    </div>
+                                </div>
+                                <div class="flex-grow-1">
+                                    <h6 class="fs-7 fw-bolder text-gray-800 mb-1">{{ $flag['title'] }}</h6>
+                                    <span class="fs-8 text-gray-600">{{ $flag['message'] }}</span>
+                                    @if($flag['requires_comment'] ?? false)
+                                        <span class="badge badge-light-danger fs-9 mt-2 fw-bold">
+                                            <i class="fas fa-comment-dots me-1"></i> Requires Justification
+                                        </span>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                    @empty
+                        <div class="p-8 text-center">
+                            <div class="symbol symbol-80px mb-4">
+                                <div class="symbol-label bg-light-success">
+                                    <i class="fas fa-shield-alt text-success fs-1"></i>
+                                </div>
+                            </div>
+                            <h5 class="fw-bolder text-gray-800 mb-2">Clean Bill of Health</h5>
+                            <span class="text-muted fs-7">No systemic red flags detected in this application</span>
+                        </div>
+                    @endforelse
+                </div>
+            </div>
+
+            {{-- B. Audit Trail --}}
+            @if(!empty($governance_audits['structure']['threads']))
+                <div class="card border-0 shadow-sm overflow-hidden">
+                    <div class="card-header border-0 py-3 px-5 bg-light">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-history text-primary me-2 fs-4"></i>
+                            <h4 class="card-title text-gray-800 fs-7 fw-bolder mb-0 text-uppercase">Structuring Audit Trail</h4>
+                        </div>
+                    </div>
+                    <div class="card-body p-4" style="max-height: 250px; overflow-y: auto;">
+                        @foreach($governance_audits['structure']['threads'] as $thread)
+                            <div class="bg-light rounded-2 p-3 mb-3 border border-gray-200">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="fs-8 fw-bolder {{ str_contains(strtolower($thread['role']), 'head') ? 'text-danger' : 'text-primary' }}">
+                                        <i class="fas fa-user-tie me-1"></i> {{ $thread['author'] }}
+                                    </span>
+                                    <span class="fs-9 text-muted">{{ $thread['timestamp'] }}</span>
+                                </div>
+                                <span class="fs-8 text-gray-700 fst-italic">"{{ $thread['comment'] }}"</span>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
+            {{-- ======================================================= --}}
+            {{-- ANALYST SUBMISSION PANEL (For HOC Review)               --}}
+            {{-- ======================================================= --}}
+            @if($isHocReviewing)
+                {{-- MCC Decision Panel - HOC --}}
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header border-0 py-4 px-5" style="background: linear-gradient(135deg, #7239EA 0%, #5014B0 100%);">
+                        <div class="d-flex align-items-center">
+                            <div class="symbol symbol-45px me-3">
+                                <div class="symbol-label bg-white bg-opacity-20 rounded-circle">
+                                    <i class="fas fa-gavel text-white fs-3"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="card-title text-white fw-bolder mb-0">MCC Decision - HOC (Level 4)</h4>
+                                <span class="text-white text-opacity-75 fs-8">Record your Management Credit Committee decision</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body p-5">
+                        <div class="row g-4">
+                            <div class="col-md-6">
+                                <label class="form-label text-gray-700 fw-bold fs-8 text-uppercase">Recommended Amount</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-purple text-white fw-bold border-0">â‚¦</span>
+                                    <input type="text" class="form-control border-2 border-purple fw-bolder" 
+                                           wire:model.defer="mcc_hoc_recommended_amount"
+                                           x-on:keyup="$el.value = formatDisplay($el.value)">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label text-gray-700 fw-bold fs-8 text-uppercase">Duration (Months)</label>
+                                <input type="number" class="form-control border-2 border-purple fw-bold" 
+                                       wire:model.defer="mcc_hoc_duration">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label text-gray-700 fw-bold fs-8 text-uppercase">Interest Rate %</label>
+                                <div class="input-group">
+                                    <input type="number" step="0.01" class="form-control border-2 border-gray-300 fw-bold" 
+                                           wire:model.defer="mcc_hoc_interest_rate_percentage">
+                                    <span class="input-group-text bg-gray-200 fw-bold">%</span>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label text-gray-700 fw-bold fs-8 text-uppercase">CCD %</label>
+                                <div class="input-group">
+                                    <input type="number" step="0.01" class="form-control border-2 border-gray-300 fw-bold" 
+                                           wire:model.defer="mcc_hoc_ccd_percentage">
+                                    <span class="input-group-text bg-gray-200 fw-bold">%</span>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label text-gray-700 fw-bold fs-8 text-uppercase">Upfront Fee %</label>
+                                <div class="input-group">
+                                    <input type="number" step="0.01" class="form-control border-2 border-gray-300 fw-bold" 
+                                           wire:model.defer="mcc_hoc_upfront_fee_percentage">
+                                    <span class="input-group-text bg-gray-200 fw-bold">%</span>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label text-gray-700 fw-bold fs-8 text-uppercase">MCC Comment / Justification</label>
+                                <textarea class="form-control border-2 border-gray-300" rows="2" 
+                                          wire:model.defer="mcc_hoc_comment" 
+                                          placeholder="Provide your justification for this MCC decision..."></textarea>
+                            </div>
+                            <div class="col-12">
+                                <div class="btn-group w-100" role="group">
+                                    <input type="radio" class="btn-check" id="hoc_approve" value="approved" wire:model="mcc_hoc_decision_type">
+                                    <label class="btn btn-outline-success fw-bold" for="hoc_approve"><i class="fas fa-check me-1"></i>Approve</label>
+                                    
+                                    <input type="radio" class="btn-check" id="hoc_decline" value="declined" wire:model="mcc_hoc_decision_type">
+                                    <label class="btn btn-outline-danger fw-bold" for="hoc_decline"><i class="fas fa-times me-1"></i>Decline</label>
+                                    
+                                    <input type="radio" class="btn-check" id="hoc_defer" value="deferred" wire:model="mcc_hoc_decision_type">
+                                    <label class="btn btn-outline-warning fw-bold" for="hoc_defer"><i class="fas fa-clock me-1"></i>Defer</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- HOC Final Authorization Panel --}}
+                <div class="card border-0 shadow-sm overflow-hidden">
+                    <div class="card-header border-0 py-4 px-5" style="background: linear-gradient(135deg, #1BC5BD 0%, #0BB7AF 100%);">
+                        <div class="d-flex align-items-center">
+                            <div class="symbol symbol-45px me-3">
+                                <div class="symbol-label bg-white bg-opacity-20 rounded-circle">
+                                    <i class="fas fa-check-double text-white fs-3"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="card-title text-white fw-bolder mb-0">HOC Final Authorization</h4>
+                                <span class="text-white text-opacity-75 fs-8">Approve or return this structure</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body p-5 bg-light-success bg-opacity-10">
+                        
+                        {{-- Analyst Summary --}}
+                        @php 
+                            $analystSnap = is_string($appraisalModel->analyst_snapshot ?? null) ? json_decode($appraisalModel->analyst_snapshot, true) : ($appraisalModel->analyst_snapshot ?? []);
+                        @endphp
+                        @if(!empty($analystSnap['analyst_executive_summary']))
+                            <div class="bg-white rounded-3 p-4 border border-gray-200 shadow-sm mb-4">
+                                <div class="d-flex align-items-center mb-2">
+                                    <div class="symbol symbol-35px me-2">
+                                        <div class="symbol-label bg-primary">
+                                            <i class="fas fa-user-edit text-white fs-4"></i>
+                                        </div>
+                                    </div>
+                                    <span class="fs-8 fw-bolder text-primary">Analyst Executive Summary</span>
+                                </div>
+                                <div class="fs-8 text-gray-700 fst-italic border-start border-3 border-primary ps-3">
+                                    "{!! nl2br(e($analystSnap['analyst_executive_summary'])) !!}"
+                                </div>
+                            </div>
+                        @endif
+
+                        <div class="alert bg-white border border-success p-4 rounded-3 mb-4">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-info-circle text-success fs-2 me-3"></i>
+                                <span class="fs-8 text-dark fw-bold">You are the final authority. Lock in the Analyst's proposal or override with your own figures before sending to Risk.</span>
+                            </div>
+                        </div>
+
+                        {{-- Final Amount Inputs --}}
+                        <div class="row g-4 mb-5">
+                            <div class="col-6">
+                                <label class="form-label text-dark fw-bolder fs-8 text-uppercase">Final Approved Amount</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-success text-white fw-bold border-0">â‚¦</span>
+                                    <input type="text" class="form-control border-2 border-success fw-bolder fs-4 text-success text-end bg-white" 
+                                           wire:model.debounce.500ms="hoc_approved_amount" x-on:keyup="$el.value = formatDisplay($el.value)">
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label text-dark fw-bolder fs-8 text-uppercase">Final Tenor</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control border-2 border-success fw-bolder fs-4 text-success text-end bg-white" 
+                                           wire:model.debounce.500ms="hoc_approved_tenor">
+                                    <span class="input-group-text bg-success text-white fw-bold border-0">Mths</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- Action Buttons --}}
+                        <div class="d-flex flex-column gap-3">
+                            <button class="btn btn-success btn-lg fw-bolder shadow-sm" wire:click="approveStructure" wire:loading.attr="disabled">
+                                <span wire:loading.remove wire:target="approveStructure">
+                                    <i class="fas fa-paper-plane me-2"></i> Lock Structure & Send to CRO
+                                </span>
+                                <span wire:loading wire:target="approveStructure">
+                                    <span class="spinner-border spinner-border-sm me-2"></span> Processing Authorization...
+                                </span>
+                            </button>
+                            
+                            <button class="btn btn-light-danger fw-bold border border-danger border-dashed" x-show="!showReturnPanel" @click="showReturnPanel = true">
+                                <i class="fas fa-undo-alt me-2"></i> Reject / Return File
+                            </button>
+
+                            <div x-show="showReturnPanel" x-transition class="bg-white p-4 rounded-3 border border-danger shadow-sm">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <label class="fs-7 fw-bolder text-danger text-uppercase">Reason for Return</label>
+                                    <button class="btn btn-icon btn-sm btn-light" @click="showReturnPanel = false">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                                <textarea class="form-control form-control-solid border-gray-300 mb-3" rows="3" wire:model.defer="active_query_note" placeholder="Explain what needs to be fixed..."></textarea>
+                                
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-danger flex-grow-1 fw-bold" wire:click="returnTo('analyst')" wire:loading.attr="disabled">
+                                        <i class="fas fa-user-edit me-1"></i> Return to Analyst
+                                    </button>
+                                    <button class="btn btn-warning flex-grow-1 fw-bold text-dark" wire:click="returnTo('bm')" wire:loading.attr="disabled">
+                                        <i class="fas fa-building me-1"></i> Return to BM
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            @endif
+
+            {{-- ======================================================= --}}
+            {{-- ANALYST SUBMISSION PANEL                                --}}
+            {{-- ======================================================= --}}
+            @if($mode === 'analyst')
+                <div class="card border-0 shadow-sm overflow-hidden">
+                    <div class="card-header border-0 py-4 px-5 bg-primary">
+                        <div class="d-flex align-items-center">
+                            <div class="symbol symbol-45px me-3">
+                                <div class="symbol-label bg-white bg-opacity-20 rounded-circle">
+                                    <i class="fas fa-paper-plane text-white fs-3"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="card-title text-white fw-bolder mb-0">Submit to HOC</h4>
+                                <span class="text-white text-opacity-75 fs-8">Finalize your structuring and submit</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body p-5">
+                        <div class="mb-4">
+                            <label class="form-label text-gray-700 fw-bold fs-8 text-uppercase">Executive Summary</label>
+                            <textarea class="form-control border-2 border-gray-300" rows="4" 
+                                      wire:model.defer="analyst_summary_comment" 
+                                      placeholder="Provide a comprehensive summary of your structuring logic, risk assessment, and recommendation for the HOC..."></textarea>
+                            @error('analyst_summary_comment')
+                                <span class="text-danger fs-8 mt-1">{{ $message }}</span>
+                            @enderror
+                        </div>
+                        
+                        <button class="btn btn-primary btn-lg w-100 fw-bolder shadow-sm" wire:click="submitToHoc" wire:loading.attr="disabled">
+                            <span wire:loading.remove wire:target="submitToHoc">
+                                <i class="fas fa-check-circle me-2"></i> Submit Structure to HOC
+                            </span>
+                            <span wire:loading wire:target="submitToHoc">
+                                <span class="spinner-border spinner-border-sm me-2"></span> Submitting...
+                            </span>
+                        </button>
+                    </div>
+                </div>
+            @endif
+        </div>
+    @endif
+</div>
+
+<style>
+    .bg-gradient-to-r {
+        background: linear-gradient(to right, var(--tw-gradient-from), var(--tw-gradient-to));
+    }
+    .bg-gradient-to-br {
+        background: linear-gradient(to bottom right, var(--tw-gradient-from), var(--tw-gradient-to));
+    }
+    .from-primary { --tw-gradient-from: #3699FF; }
+    .to-primary-dark { --tw-gradient-to: #1A4C8B; }
+    .via-primary { --tw-gradient-via: #3699FF; }
+    .to-info { --tw-gradient-to: #1BC5BD; }
+    .from-gray-100 { --tw-gradient-from: #f3f4f6; }
+    .to-gray-50 { --tw-gradient-to: #f9fafb; }
+    .border-purple { border-color: #7239EA !important; }
+    .bg-purple { background-color: #7239EA !important; }
+    
+    .transition-all {
+        transition: all 0.3s ease;
+    }
+    
+    .hover-bg-light:hover {
+        background-color: #f8f9fa !important;
+    }
+</style>
+
+
+==================================================
+FILE: C:\xampp\htdocs\bank\resources\views\livewire\admin\loan\partials\tab-swot.blade.php
