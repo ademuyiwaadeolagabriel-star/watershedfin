@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowRight, CheckCircle2, AlertCircle } from 'lucide-react';
 import { CustomerHeader } from './customer-loans';
+import { authFetch } from '@/lib/auth-client';
 
 export function CustomerApplyLoan() {
   const { currentUser, setView } = useAppStore();
@@ -27,7 +28,7 @@ export function CustomerApplyLoan() {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    fetch('/api/loan-plans').then(r => r.json()).then(d => setPlans(d.plans || d || [])).catch(() => {});
+    authFetch('/api/loan-plans').then(r => r.json()).then(d => setPlans(d.plans || d || [])).catch(() => {});
   }, []);
 
   const handleSubmit = async () => {
@@ -42,7 +43,7 @@ export function CustomerApplyLoan() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/customer/apply-loan', {
+      const res = await authFetch('/api/customer/apply-loan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

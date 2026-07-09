@@ -24,6 +24,7 @@ import {
   Camera, RotateCcw, ShieldCheck, Clock, XCircle, Home, Image as ImageIcon,
   Building2, IdCard, MapPin,
 } from 'lucide-react';
+import { authFetch } from '@/lib/auth-client';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -89,7 +90,7 @@ export function CustomerKycView() {
     if (!currentUser) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/customer/kyc?userId=${currentUser.id}`);
+      const res = await authFetch(`/api/customer/kyc?userId=${currentUser.id}`);
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || 'Failed to load KYC status');
       setKyc({
@@ -167,7 +168,7 @@ export function CustomerKycView() {
     }
     setSubmitting(true);
     try {
-      const res = await fetch('/api/customer/kyc', {
+      const res = await authFetch('/api/customer/kyc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -216,7 +217,7 @@ export function CustomerKycView() {
     }
     setSubmitting(true);
     try {
-      const res = await fetch('/api/customer/kyc', {
+      const res = await authFetch('/api/customer/kyc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -251,7 +252,7 @@ export function CustomerKycView() {
     }
     setSubmitting(true);
     try {
-      const res = await fetch('/api/customer/kyc', {
+      const res = await authFetch('/api/customer/kyc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -279,7 +280,7 @@ export function CustomerKycView() {
   const uploadFiles = async (files: Record<string, File>) => {
     const fd = new FormData();
     Object.entries(files).forEach(([k, f]) => fd.append(k, f));
-    const res = await fetch('/api/customer/kyc/upload', { method: 'POST', body: fd });
+    const res = await authFetch('/api/customer/kyc/upload', { method: 'POST', body: fd });
     const d = await res.json();
     if (!res.ok) throw new Error(d.error || 'Upload failed');
     return d.paths as Record<string, string>;

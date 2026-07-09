@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getAuthFromRequest } from '@/lib/auth';
 import { KYC_STATUSES } from '@/lib/constants';
 import { createNotification } from '@/lib/notifications';
 
@@ -18,7 +19,11 @@ export async function POST(
   try {
     const { userId } = await params;
     const body = await req.json();
-    const { adminId, action, reason } = body as {
+    // A1 FIX: Get adminId from JWT
+    const authPayload = getAuthFromRequest(req);
+    if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    const adminId = authPayload.id;
+    const { action, reason } = body as {
       adminId: string;
       action: 'approve' | 'decline' | 'resubmit';
       reason?: string;

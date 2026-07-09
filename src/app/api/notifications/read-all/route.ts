@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getAuthFromRequest } from '@/lib/auth';
 
 /**
  * POST /api/notifications/read-all
@@ -9,7 +10,11 @@ import { db } from '@/lib/db';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const { userId, adminId } = body as { userId?: string; adminId?: string };
+    // A1 FIX: Get identity from JWT
+    const authPayload = getAuthFromRequest(req);
+    if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    const userId = authPayload.type === 'customer' ? authPayload.id : undefined;
+    const adminId = authPayload.type === 'admin' ? authPayload.id : undefined;
 
     if (!userId && !adminId) {
       return NextResponse.json({ error: 'userId or adminId required' }, { status: 400 });

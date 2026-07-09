@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fmtNaira, fmtDate, fmtDateTime } from '@/lib/loan-calc';
+import { authFetch } from '@/lib/auth-client';
 
 export function CustomerPayBack() {
   const { currentUser, viewParams, setView } = useAppStore();
@@ -34,8 +35,8 @@ export function CustomerPayBack() {
       if (!loanId || !currentUser) return;
       try {
         const [breakdownRes, payoffRes] = await Promise.all([
-          fetch(`/api/customer/loan/${loanId}/breakdown?userId=${currentUser.id}`).then(r => r.json()),
-          fetch(`/api/customer/loan/${loanId}/early-payoff?userId=${currentUser.id}`).then(r => r.json()).catch(() => ({})),
+          authFetch(`/api/customer/loan/${loanId}/breakdown?userId=${currentUser.id}`).then(r => r.json()),
+          authFetch(`/api/customer/loan/${loanId}/early-payoff?userId=${currentUser.id}`).then(r => r.json()).catch(() => ({})),
         ]);
         setData(breakdownRes);
         setEarlyPayoff(payoffRes);
@@ -56,7 +57,7 @@ export function CustomerPayBack() {
     setPaying(true);
     setError('');
     try {
-      const res = await fetch(`/api/customer/loan/${loanId}/payment`, {
+      const res = await authFetch(`/api/customer/loan/${loanId}/payment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -70,7 +71,7 @@ export function CustomerPayBack() {
       setLastReceipt(d.receipt || null);
       setSuccess(true);
       // Refresh data
-      const refresh = await fetch(`/api/customer/loan/${loanId}/breakdown?userId=${currentUser.id}`).then(r => r.json());
+      const refresh = await authFetch(`/api/customer/loan/${loanId}/breakdown?userId=${currentUser.id}`).then(r => r.json());
       setData(refresh);
     } catch (e: any) {
       setError(e.message);

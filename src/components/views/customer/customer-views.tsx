@@ -11,6 +11,7 @@ import { PiggyBank, TrendingUp, Plus, ArrowRight, Receipt, Gift, LifeBuoy, User,
 import { CustomerHeader } from './customer-loans';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { authFetch } from '@/lib/auth-client';
 
 /* ------------------------------------------------------------------ */
 /* Notification Preferences — used inside CustomerProfile              */
@@ -65,7 +66,7 @@ function NotificationPreferencesCard({ userId }: { userId: string }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/customer/notification-preferences?userId=${userId}`);
+      const res = await authFetch(`/api/customer/notification-preferences?userId=${userId}`);
       if (res.ok) {
         const data = await res.json();
         if (data?.preferences) {
@@ -93,7 +94,7 @@ function NotificationPreferencesCard({ userId }: { userId: string }) {
   const save = async () => {
     setSaving(true);
     try {
-      const res = await fetch('/api/customer/notification-preferences', {
+      const res = await authFetch('/api/customer/notification-preferences', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, preferences: prefs }),
@@ -200,7 +201,7 @@ export function CustomerSavings() {
 
   useEffect(() => {
     if (!currentUser) return;
-    fetch(`/api/customer/dashboard?userId=${currentUser.id}`).then(r => r.json()).then(setData).catch(() => {});
+    authFetch(`/api/customer/dashboard?userId=${currentUser.id}`).then(r => r.json()).then(setData).catch(() => {});
   }, [currentUser]);
 
   const fmtNaira = (n: number) => '₦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
@@ -291,7 +292,7 @@ export function CustomerInvestments() {
 
   useEffect(() => {
     if (!currentUser) return;
-    fetch(`/api/customer/dashboard?userId=${currentUser.id}`).then(r => r.json()).then(setData).catch(() => {});
+    authFetch(`/api/customer/dashboard?userId=${currentUser.id}`).then(r => r.json()).then(setData).catch(() => {});
   }, [currentUser]);
 
   const fmtNaira = (n: number) => '₦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
@@ -354,7 +355,7 @@ export function CustomerTransactions() {
 
   useEffect(() => {
     if (!currentUser) return;
-    fetch(`/api/customer/dashboard?userId=${currentUser.id}`).then(r => r.json()).then(setData).catch(() => {});
+    authFetch(`/api/customer/dashboard?userId=${currentUser.id}`).then(r => r.json()).then(setData).catch(() => {});
   }, [currentUser]);
 
   const fmtNaira = (n: number) => '₦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });

@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/table';
 import { Plus, Check, X, Receipt } from 'lucide-react';
 import { fmtNaira, fmtDate } from '@/lib/format';
+import { authFetch } from '@/lib/auth-client';
 
 const CATEGORIES = ['Office', 'Travel', 'Utilities', 'Maintenance', 'Professional', 'Entertainment', 'Other'];
 
@@ -45,8 +46,8 @@ export function ExpenseManagement() {
     setLoading(true);
     try {
       const [e, a] = await Promise.all([
-        fetch('/api/accounting/expenses').then((r) => r.json()),
-        fetch('/api/accounting/coa').then((r) => r.json()),
+        authFetch('/api/accounting/expenses').then((r) => r.json()),
+        authFetch('/api/accounting/coa').then((r) => r.json()),
       ]);
       setExpenses(e.expenses || []);
       setAccounts((a.accounts || []).filter((x: any) => x.type === 'expense' || x.type === 'asset'));
@@ -58,7 +59,7 @@ export function ExpenseManagement() {
     if (!form.description || !form.amount || !form.expenseAccountId) return alert('Fill required fields');
     setSaving(true);
     try {
-      const r = await fetch('/api/accounting/expenses', {
+      const r = await authFetch('/api/accounting/expenses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, amount: Number(form.amount), createdById: currentAdmin?.id }),
@@ -73,7 +74,7 @@ export function ExpenseManagement() {
 
   const act = async (id: string, action: 'approve' | 'reject') => {
     try {
-      const r = await fetch(`/api/accounting/expenses/${id}`, {
+      const r = await authFetch(`/api/accounting/expenses/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, approvedById: currentAdmin?.id }),

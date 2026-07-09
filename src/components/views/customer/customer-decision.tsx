@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fmtNaira, fmtDate, fmtDateTime } from '@/lib/loan-calc';
+import { authFetch } from '@/lib/auth-client';
 
 export function CustomerDecisionTimeline() {
   const { currentUser, viewParams, setView } = useAppStore();
@@ -23,7 +24,7 @@ export function CustomerDecisionTimeline() {
     (async () => {
       if (!loanId || !currentUser) return;
       try {
-        const res = await fetch(`/api/customer/loan/${loanId}/decision?userId=${currentUser.id}`);
+        const res = await authFetch(`/api/customer/loan/${loanId}/decision?userId=${currentUser.id}`);
         const d = await res.json();
         setData(d);
       } catch (e) { console.error(e); }

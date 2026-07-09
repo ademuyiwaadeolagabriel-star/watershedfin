@@ -13,6 +13,7 @@ import {
   ClipboardCheck, CheckCircle2, Circle, AlertTriangle, FileText, Banknote, XCircle, ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { authFetch } from '@/lib/auth-client';
 
 const ITEM_ICONS: Record<string, any> = {
   allConditionsVerified: ShieldCheck,
@@ -37,7 +38,7 @@ export function ComplianceChecklistView() {
   const loadList = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/compliance/checklist');
+      const res = await authFetch('/api/compliance/checklist');
       const d = await res.json();
       setChecklists(d.checklists || []);
       if (d.checklists?.length && !selectedId) {
@@ -70,7 +71,7 @@ export function ComplianceChecklistView() {
     // Optimistic
     setCurrent({ ...current, [item]: value });
     try {
-      const res = await fetch(`/api/compliance/checklist/${current.id}`, {
+      const res = await authFetch(`/api/compliance/checklist/${current.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ item, value: !value }),
@@ -90,7 +91,7 @@ export function ComplianceChecklistView() {
     if (!current) return;
     setActing(true);
     try {
-      await fetch(`/api/compliance/checklist/${current.id}/approve`, {
+      await authFetch(`/api/compliance/checklist/${current.id}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ approvedBy: currentAdmin?.id, notes }),
@@ -108,7 +109,7 @@ export function ComplianceChecklistView() {
     if (!current) return;
     setActing(true);
     try {
-      await fetch(`/api/compliance/checklist/${current.id}/reject`, {
+      await authFetch(`/api/compliance/checklist/${current.id}/reject`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rejectedBy: currentAdmin?.id, reason: notes }),

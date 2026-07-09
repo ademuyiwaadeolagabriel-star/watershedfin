@@ -15,6 +15,7 @@ import {
   ShieldCheck, Clock, AlertCircle, CheckCircle2, XCircle, FileText, Search, Gavel,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { authFetch } from '@/lib/auth-client';
 
 const COLUMNS = [
   { key: 'pending', label: 'Pending', color: 'border-t-amber-400', icon: Clock, badge: 'bg-amber-100 text-amber-700' },
@@ -62,7 +63,7 @@ export function ComplianceConditionsView() {
       const params = new URLSearchParams();
       if (overdueOnly) params.set('overdue', 'true');
       if (search) params.set('search', search);
-      const res = await fetch(`/api/compliance/conditions?${params.toString()}`);
+      const res = await authFetch(`/api/compliance/conditions?${params.toString()}`);
       const d = await res.json();
       setConditions(d.conditions || []);
     } catch (e) {
@@ -78,7 +79,7 @@ export function ComplianceConditionsView() {
     setSelected(c);
     setActionNotes('');
     try {
-      const res = await fetch(`/api/compliance/conditions/${c.id}`);
+      const res = await authFetch(`/api/compliance/conditions/${c.id}`);
       const d = await res.json();
       setDetail(d.condition);
     } catch (e) {
@@ -90,7 +91,7 @@ export function ComplianceConditionsView() {
     if (!selected) return;
     setActing(true);
     try {
-      await fetch(`/api/compliance/conditions/${selected.id}`, {
+      await authFetch(`/api/compliance/conditions/${selected.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

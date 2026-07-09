@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/table';
 import { Search, Plus, Trash2, Save } from 'lucide-react';
 import { fmtNaira } from '@/lib/format';
+import { authFetch } from '@/lib/auth-client';
 
 const TYPES = [
   { value: 'asset', label: 'Asset' },
@@ -51,7 +52,7 @@ export function ChartOfAccounts() {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await fetch('/api/accounting/coa').then((r) => r.json());
+      const r = await authFetch('/api/accounting/coa').then((r) => r.json());
       setAccounts(r.accounts || []);
     } finally { setLoading(false); }
   };
@@ -61,7 +62,7 @@ export function ChartOfAccounts() {
     if (!form.code || !form.name) return alert('Code and name required');
     setSaving(true);
     try {
-      const r = await fetch('/api/accounting/coa', {
+      const r = await authFetch('/api/accounting/coa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, openingBalance: Number(form.openingBalance) }),
@@ -76,7 +77,7 @@ export function ChartOfAccounts() {
   const remove = async (a: any) => {
     if (!confirm(`Delete account ${a.code}?`)) return;
     try {
-      const r = await fetch(`/api/accounting/coa/${a.id}`, { method: 'DELETE' });
+      const r = await authFetch(`/api/accounting/coa/${a.id}`, { method: 'DELETE' });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Failed');
       load();

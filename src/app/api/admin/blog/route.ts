@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getAuthFromRequest } from '@/lib/auth';
 
 /**
  * /api/admin/blog
@@ -83,6 +84,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const authPayload = getAuthFromRequest(req);
+    if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     const body = await req.json();
 
     if (!body.title || !body.body) {
@@ -92,7 +95,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const adminId = body.adminId || null;
+    const adminId = authPayload.id;
 
     // Verify the admin exists (optional — fail soft if missing)
     let author = null;

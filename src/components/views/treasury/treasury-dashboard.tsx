@@ -13,6 +13,7 @@ import {
   TrendingUp, Coins, Wallet, Award, Search, FileText, RefreshCw, Plus,
 } from 'lucide-react';
 import { fmtNaira, fmtDate } from '@/lib/format';
+import { authFetch } from '@/lib/auth-client';
 
 const STATUS_BADGES: Record<string, string> = {
   active: 'bg-emerald-100 text-emerald-700',
@@ -33,8 +34,8 @@ export function TreasuryDashboard() {
     setLoading(true);
     try {
       const [d, i] = await Promise.all([
-        fetch('/api/treasury/dashboard').then((r) => r.json()),
-        fetch('/api/treasury/investments?status=active').then((r) => r.json()),
+        authFetch('/api/treasury/dashboard').then((r) => r.json()),
+        authFetch('/api/treasury/investments?status=active').then((r) => r.json()),
       ]);
       setStats(d);
       setInvestments(i.investments || []);

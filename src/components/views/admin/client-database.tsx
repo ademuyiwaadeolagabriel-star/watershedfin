@@ -23,6 +23,7 @@ import {
   Building2, CheckCircle2, Clock, XCircle,
 } from 'lucide-react';
 import { TableSkeleton } from '@/components/ui/skeleton';
+import { authFetch } from '@/lib/auth-client';
 
 interface Customer {
   id: string;
@@ -71,7 +72,7 @@ export function ClientDatabaseView() {
       if (kycStatus && kycStatus !== 'all') params.set('kycStatus', kycStatus);
       if (branchId && branchId !== 'all') params.set('branchId', branchId);
       params.set('page', String(page));
-      const res = await fetch(`/api/admin/customers?${params.toString()}`);
+      const res = await authFetch(`/api/admin/customers?${params.toString()}`);
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || 'Failed to load');
       setCustomers(d.customers || []);
@@ -85,7 +86,7 @@ export function ClientDatabaseView() {
   }, [search, kycStatus, branchId, page, toast]);
 
   useEffect(() => {
-    fetch('/api/branches')
+    authFetch('/api/branches')
       .then((r) => r.json())
       .then((d) => setBranches(d.branches || []))
       .catch(() => {});

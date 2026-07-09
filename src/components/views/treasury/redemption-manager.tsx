@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import { RefreshCw, Banknote, Repeat, HandCoins, Search } from 'lucide-react';
 import { fmtNaira, fmtDate } from '@/lib/format';
+import { authFetch } from '@/lib/auth-client';
 
 const STATUS_FILTERS = [
   { value: 'all', label: 'All' },
@@ -39,7 +40,7 @@ export function RedemptionManager() {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await fetch(`/api/treasury/investments?status=${status === 'all' ? 'all' : status}`).then((r) => r.json());
+      const r = await authFetch(`/api/treasury/investments?status=${status === 'all' ? 'all' : status}`).then((r) => r.json());
       setItems(r.investments || []);
     } finally { setLoading(false); }
   };
@@ -65,7 +66,7 @@ export function RedemptionManager() {
     try {
       const body: any = { action: action.type === 'liquidate' || action.type === 'payout' ? 'redeem' : 'rollover' };
       if (action.type === 'rollover') body.tenorDays = rolloverTenor;
-      const r = await fetch(`/api/treasury/investments/${action.inv.id}`, {
+      const r = await authFetch(`/api/treasury/investments/${action.inv.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/table';
 import { Plus, Landmark } from 'lucide-react';
 import { fmtNaira, fmtDate, addDays } from '@/lib/format';
+import { authFetch } from '@/lib/auth-client';
 
 const ASSET_CLASSES = [
   { value: 't_bill', label: 'Treasury Bill' },
@@ -40,7 +41,7 @@ export function BankAssetManager() {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await fetch('/api/treasury/assets').then((r) => r.json());
+      const r = await authFetch('/api/treasury/assets').then((r) => r.json());
       setAssets(r.assets || []);
     } finally { setLoading(false); }
   };
@@ -59,7 +60,7 @@ export function BankAssetManager() {
     if (!form.assetName || !form.faceValue || !form.purchasePrice) return alert('Fill required fields');
     setSaving(true);
     try {
-      const r = await fetch('/api/treasury/assets', {
+      const r = await authFetch('/api/treasury/assets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),

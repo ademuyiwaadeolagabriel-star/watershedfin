@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/table';
 import { TrendingUp, TrendingDown, Percent, FileDown, Search } from 'lucide-react';
 import { fmtNaira } from '@/lib/format';
+import { authFetch } from '@/lib/auth-client';
 
 export function TreasuryReport() {
   const today = new Date().toISOString().slice(0, 10);
@@ -22,7 +23,7 @@ export function TreasuryReport() {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await fetch(`/api/treasury/reports?from=${from}&to=${to}`).then((r) => r.json());
+      const r = await authFetch(`/api/treasury/reports?from=${from}&to=${to}`).then((r) => r.json());
       setData(r);
     } finally { setLoading(false); }
   };

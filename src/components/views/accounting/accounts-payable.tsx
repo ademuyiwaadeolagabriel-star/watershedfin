@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/table';
 import { Plus, Banknote, Building2, Receipt } from 'lucide-react';
 import { fmtNaira, fmtDate } from '@/lib/format';
+import { authFetch } from '@/lib/auth-client';
 
 const BILL_STATUS: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-700',
@@ -45,8 +46,8 @@ export function AccountsPayable() {
     setLoading(true);
     try {
       const [v, b] = await Promise.all([
-        fetch('/api/accounting/vendors').then((r) => r.json()),
-        fetch('/api/accounting/bills').then((r) => r.json()),
+        authFetch('/api/accounting/vendors').then((r) => r.json()),
+        authFetch('/api/accounting/bills').then((r) => r.json()),
       ]);
       setVendors(v.vendors || []);
       setBills(b.bills || []);
@@ -58,7 +59,7 @@ export function AccountsPayable() {
     if (!vendorForm.name) return alert('Name required');
     setSaving(true);
     try {
-      const r = await fetch('/api/accounting/vendors', {
+      const r = await authFetch('/api/accounting/vendors', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...vendorForm, paymentTerms: Number(vendorForm.paymentTerms) }),
       });
@@ -77,7 +78,7 @@ export function AccountsPayable() {
     const total = Number(billForm.totalAmount) || sub + tax;
     setSaving(true);
     try {
-      const r = await fetch('/api/accounting/bills', {
+      const r = await authFetch('/api/accounting/bills', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...billForm, subtotal: sub, taxAmount: tax, totalAmount: total, createdById: currentAdmin?.id }),
       });
@@ -93,7 +94,7 @@ export function AccountsPayable() {
     if (!payOpen || !payForm.amount) return;
     setSaving(true);
     try {
-      const r = await fetch(`/api/accounting/bills/${payOpen.id}/pay`, {
+      const r = await authFetch(`/api/accounting/bills/${payOpen.id}/pay`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...payForm, amount: Number(payForm.amount), createdById: currentAdmin?.id }),
       });

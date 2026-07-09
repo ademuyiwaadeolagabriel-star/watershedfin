@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { authFetch } from '@/lib/auth-client';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -77,7 +78,7 @@ export function BrandingSettingsView() {
     }
     setSaving(true);
     try {
-      const res = await fetch('/api/branding', {
+      const res = await authFetch('/api/branding', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ adminId: currentAdmin.id, ...form }),

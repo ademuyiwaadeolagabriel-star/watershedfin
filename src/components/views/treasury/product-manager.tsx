@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/table';
 import { Plus, Pencil, Trash2, Package } from 'lucide-react';
 import { fmtNaira } from '@/lib/format';
+import { authFetch } from '@/lib/auth-client';
 
 const empty = {
   name: '', description: '', minAmount: 0, maxAmount: 0,
@@ -33,7 +34,7 @@ export function ProductManager() {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await fetch('/api/treasury/products').then((r) => r.json());
+      const r = await authFetch('/api/treasury/products').then((r) => r.json());
       setProducts(r.products || []);
     } finally { setLoading(false); }
   };
@@ -63,7 +64,7 @@ export function ProductManager() {
   const remove = async (p: any) => {
     if (!confirm(`Delete product "${p.name}"?`)) return;
     try {
-      const r = await fetch(`/api/treasury/products/${p.id}`, { method: 'DELETE' });
+      const r = await authFetch(`/api/treasury/products/${p.id}`, { method: 'DELETE' });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Failed');
       load();

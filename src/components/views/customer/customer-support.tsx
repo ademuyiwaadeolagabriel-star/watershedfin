@@ -41,6 +41,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { authFetch } from '@/lib/auth-client';
 
 // ============================================================================
 // CustomerSupport — full ticket management UI
@@ -148,7 +149,7 @@ export function CustomerSupport() {
     if (!currentUser) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/customer/tickets?userId=${currentUser.id}`);
+      const res = await authFetch(`/api/customer/tickets?userId=${currentUser.id}`);
       const data = await res.json();
       if (data.tickets) setTickets(data.tickets);
     } catch (e) {
@@ -162,7 +163,7 @@ export function CustomerSupport() {
     if (!currentUser) return;
     setCallbacksLoading(true);
     try {
-      const res = await fetch(`/api/customer/callback?userId=${currentUser.id}`);
+      const res = await authFetch(`/api/customer/callback?userId=${currentUser.id}`);
       const data = await res.json();
       if (data.callbacks) setCallbacks(data.callbacks);
     } catch (e) {
@@ -186,7 +187,7 @@ export function CustomerSupport() {
     setCbSubmitting(true);
     setError(null);
     try {
-      const res = await fetch('/api/customer/callback', {
+      const res = await authFetch('/api/customer/callback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -235,7 +236,7 @@ export function CustomerSupport() {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch('/api/customer/tickets', {
+      const res = await authFetch('/api/customer/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -267,7 +268,7 @@ export function CustomerSupport() {
     if (!replyText.trim()) return;
     setReplying(true);
     try {
-      const res = await fetch(`/api/customer/tickets/${selectedTicket.id}/reply`, {
+      const res = await authFetch(`/api/customer/tickets/${selectedTicket.id}/reply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: currentUser.id, message: replyText.trim() }),

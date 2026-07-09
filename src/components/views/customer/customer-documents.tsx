@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fmtNaira, fmtDate } from '@/lib/loan-calc';
+import { authFetch } from '@/lib/auth-client';
 
 export function CustomerDocuments() {
   const { currentUser, viewParams, setView } = useAppStore();
@@ -22,7 +23,7 @@ export function CustomerDocuments() {
     (async () => {
       if (!currentUser) return;
       try {
-        const res = await fetch(`/api/customer/dashboard?userId=${currentUser.id}`);
+        const res = await authFetch(`/api/customer/dashboard?userId=${currentUser.id}`);
         const d = await res.json();
         setLoans(d.loans || []);
       } catch (e) { console.error(e); }
@@ -33,7 +34,7 @@ export function CustomerDocuments() {
   const handleDownloadOfferLetter = async (loanId: string) => {
     setGenerating(`offer-${loanId}`);
     try {
-      const res = await fetch(`/api/customer/loan/${loanId}/offer-letter?userId=${currentUser?.id}`);
+      const res = await authFetch(`/api/customer/loan/${loanId}/offer-letter?userId=${currentUser?.id}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
@@ -84,7 +85,7 @@ export function CustomerDocuments() {
   const handleDownloadAgreement = async (loanId: string) => {
     setGenerating(`agreement-${loanId}`);
     try {
-      const res = await fetch(`/api/customer/loan/${loanId}/agreement?userId=${currentUser?.id}`);
+      const res = await authFetch(`/api/customer/loan/${loanId}/agreement?userId=${currentUser?.id}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 

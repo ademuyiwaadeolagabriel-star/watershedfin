@@ -29,6 +29,7 @@ import {
   Eye,
   Inbox,
 } from 'lucide-react';
+import { authFetch } from '@/lib/auth-client';
 
 interface LoanResult {
   id: string;
@@ -116,7 +117,7 @@ export function SearchResultsView() {
       try {
         const params = new URLSearchParams({ q: committedQ });
         if (currentAdmin?.id) params.set('adminId', currentAdmin.id);
-        const res = await fetch(`/api/search?${params.toString()}`);
+        const res = await authFetch(`/api/search?${params.toString()}`);
         const json = await res.json();
         if (cancelled) return;
         if (!res.ok) throw new Error(json.error || 'Search failed');

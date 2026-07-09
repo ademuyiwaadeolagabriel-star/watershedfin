@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fmtNaira } from '@/lib/loan-calc';
+import { authFetch } from '@/lib/auth-client';
 
 interface NavItem {
   key: ViewKey;
@@ -61,7 +62,7 @@ export function CustomerSidebar() {
 
   useEffect(() => {
     if (!currentUser) return;
-    fetch(`/api/customer/dashboard?userId=${currentUser.id}`)
+    authFetch(`/api/customer/dashboard?userId=${currentUser.id}`)
       .then(r => r.json())
       .then(d => setData(d))
       .catch(() => {});

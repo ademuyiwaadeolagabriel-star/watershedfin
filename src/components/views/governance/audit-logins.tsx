@@ -10,6 +10,7 @@ import {
   AlertTriangle, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { authFetch } from '@/lib/auth-client';
 
 interface LoginItem {
   id: string;
@@ -51,7 +52,7 @@ export function AuditLoginsView() {
         if (to) params.set('to', to);
         params.set('page', String(page));
         params.set('pageSize', '20');
-        const res = await fetch(`/api/audit/logins?${params.toString()}`);
+        const res = await authFetch(`/api/audit/logins?${params.toString()}`);
         const data = await res.json();
         setItems(data.items || []);
         setFailedCount(data.failedCount || 0);

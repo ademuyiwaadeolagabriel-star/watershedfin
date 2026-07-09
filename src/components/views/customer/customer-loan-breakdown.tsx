@@ -32,6 +32,7 @@ import {
 import { cn } from '@/lib/utils';
 import { LOAN_STATUS_BADGES, LOAN_STATUS_LABELS, LOAN_STEP_LABELS } from '@/lib/constants';
 import { fmtNaira, fmtDate } from '@/lib/loan-calc';
+import { authFetch } from '@/lib/auth-client';
 
 export function CustomerLoanBreakdown() {
   const { currentUser, viewParams, setView } = useAppStore();
@@ -53,7 +54,7 @@ export function CustomerLoanBreakdown() {
     (async () => {
       if (!loanId || !currentUser) return;
       try {
-        const res = await fetch(`/api/customer/loan/${loanId}/breakdown?userId=${currentUser.id}`);
+        const res = await authFetch(`/api/customer/loan/${loanId}/breakdown?userId=${currentUser.id}`);
         const d = await res.json();
         setData(d);
       } catch (e) { console.error(e); }
@@ -61,7 +62,7 @@ export function CustomerLoanBreakdown() {
     })();
     // Load restructuring history
     if (currentUser && loanId) {
-      fetch(`/api/customer/restructure?userId=${currentUser.id}`)
+      authFetch(`/api/customer/restructure?userId=${currentUser.id}`)
         .then((r) => r.json())
         .then((d) => {
           const list = (d.requests || []).filter((r: any) => r.loanApplicantId === loanId);
@@ -84,7 +85,7 @@ export function CustomerLoanBreakdown() {
     setSubmitting(true);
     setRestructureError(null);
     try {
-      const res = await fetch('/api/customer/restructure', {
+      const res = await authFetch('/api/customer/restructure', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -103,7 +104,7 @@ export function CustomerLoanBreakdown() {
       setReqReason('');
       setRestructureSuccess(d.message || 'Restructuring request submitted successfully.');
       // Refresh list
-      fetch(`/api/customer/restructure?userId=${currentUser.id}`)
+      authFetch(`/api/customer/restructure?userId=${currentUser.id}`)
         .then((r) => r.json())
         .then((d) => {
           const list = (d.requests || []).filter((r: any) => r.loanApplicantId === loanId);

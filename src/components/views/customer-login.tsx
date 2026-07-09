@@ -260,10 +260,6 @@ export function CustomerLoginView() {
                 </button>
               ))}
             </div>
-            <p className="mt-3 text-center text-[10px] text-slate-400">
-              Password for all demo customers:{' '}
-              <code className="font-mono bg-slate-100 px-1 py-0.5 rounded">customer123</code>
-            </p>
           </div>
 
           {/* Footer links */}

@@ -8,13 +8,14 @@ import { Badge } from '@/components/ui/badge';
 import { ArrowRight, Calculator, Check, Clock, FileText } from 'lucide-react';
 import { CustomerHeader } from './customer-loans';
 import { fmtNaira } from '@/lib/loan-calc';
+import { authFetch } from '@/lib/auth-client';
 
 export function CustomerLoanProducts() {
   const { setView } = useAppStore();
   const [plans, setPlans] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch('/api/loan-plans').then(r => r.json()).then(d => setPlans(d.plans || d || [])).catch(() => {});
+    authFetch('/api/loan-plans').then(r => r.json()).then(d => setPlans(d.plans || d || [])).catch(() => {});
   }, []);
 
   return (
@@ -63,7 +64,7 @@ export function CustomerOffers() {
 
   useEffect(() => {
     if (!currentUser) return;
-    fetch(`/api/customer/dashboard?userId=${currentUser.id}`).then(r => r.json()).then(setData).catch(() => {});
+    authFetch(`/api/customer/dashboard?userId=${currentUser.id}`).then(r => r.json()).then(setData).catch(() => {});
   }, [currentUser]);
 
   const offer = data?.preQualifiedOffer;
@@ -120,7 +121,7 @@ export function CustomerDocuments() {
 
   useEffect(() => {
     if (!currentUser) return;
-    fetch(`/api/customer/dashboard?userId=${currentUser.id}`).then(r => r.json()).then(setData).catch(() => {});
+    authFetch(`/api/customer/dashboard?userId=${currentUser.id}`).then(r => r.json()).then(setData).catch(() => {});
   }, [currentUser]);
 
   const loans = data?.loans || [];
@@ -211,7 +212,7 @@ export function CustomerBankAccounts() {
 
   useEffect(() => {
     if (!currentUser) return;
-    fetch(`/api/customers/${currentUser.id}`)
+    authFetch(`/api/customers/${currentUser.id}`)
       .then(r => r.json())
       .then(d => setBanks(d.user?.userBanks || []))
       .catch(() => {})

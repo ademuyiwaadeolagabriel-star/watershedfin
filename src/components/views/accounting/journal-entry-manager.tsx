@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/table';
 import { Plus, Trash2, Save, Undo2, CheckCircle2, XCircle } from 'lucide-react';
 import { fmtNaira, fmtDate } from '@/lib/format';
+import { authFetch } from '@/lib/auth-client';
 
 interface LineItem { accountId: string; debit: number; credit: number; }
 
@@ -35,8 +36,8 @@ export function JournalEntryManager() {
     setLoading(true);
     try {
       const [a, e] = await Promise.all([
-        fetch('/api/accounting/coa').then((r) => r.json()),
-        fetch('/api/accounting/journal?take=20').then((r) => r.json()),
+        authFetch('/api/accounting/coa').then((r) => r.json()),
+        authFetch('/api/accounting/journal?take=20').then((r) => r.json()),
       ]);
       setAccounts(a.accounts || []);
       setEntries(e.entries || []);
@@ -60,7 +61,7 @@ export function JournalEntryManager() {
     if (!balanced) return alert('Entry is unbalanced');
     setSaving(true);
     try {
-      const r = await fetch('/api/accounting/journal', {
+      const r = await authFetch('/api/accounting/journal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -81,7 +82,7 @@ export function JournalEntryManager() {
     const reason = prompt('Reversal reason:');
     if (!reason) return;
     try {
-      const r = await fetch(`/api/accounting/journal/${id}`, {
+      const r = await authFetch(`/api/accounting/journal/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason, createdById: currentAdmin?.id }),

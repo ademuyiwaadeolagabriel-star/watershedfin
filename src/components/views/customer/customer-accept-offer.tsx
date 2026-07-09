@@ -10,6 +10,7 @@ import {
   ArrowRight, CheckCircle2, Shield, FileText, PenTool, Lock,
 } from 'lucide-react';
 import { CustomerHeader } from './customer-loans';
+import { authFetch } from '@/lib/auth-client';
 
 export function CustomerAcceptOffer() {
   const { currentUser, viewParams, setView } = useAppStore();
@@ -26,7 +27,7 @@ export function CustomerAcceptOffer() {
     (async () => {
       if (!loanId) return;
       try {
-        const res = await fetch(`/api/loans/${loanId}`);
+        const res = await authFetch(`/api/loans/${loanId}`);
         const d = await res.json();
         setLoan(d.loan);
       } catch (e) { console.error(e); }
@@ -44,7 +45,7 @@ export function CustomerAcceptOffer() {
     setSubmitting(true);
     setError('');
     try {
-      const res = await fetch('/api/customer/accept-offer', {
+      const res = await authFetch('/api/customer/accept-offer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

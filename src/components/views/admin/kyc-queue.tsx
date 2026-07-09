@@ -27,6 +27,7 @@ import {
   Loader2, FileText, Image as ImageIcon, RefreshCw,
 } from 'lucide-react';
 import { TableSkeleton } from '@/components/ui/skeleton';
+import { authFetch } from '@/lib/auth-client';
 
 type TabKey = 'all' | 'pending' | 'resubmit' | 'approved' | 'declined';
 
@@ -117,7 +118,7 @@ export function KycQueueView() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/kyc');
+      const res = await authFetch('/api/admin/kyc');
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || 'Failed to load');
       setUsers(d.users || []);
@@ -158,7 +159,7 @@ export function KycQueueView() {
     if (!currentAdmin) return;
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/admin/kyc/${u.id}/action`, {
+      const res = await authFetch(`/api/admin/kyc/${u.id}/action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ adminId: currentAdmin.id, action: 'approve' }),
@@ -189,7 +190,7 @@ export function KycQueueView() {
     }
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/admin/kyc/${actionUser.id}/action`, {
+      const res = await authFetch(`/api/admin/kyc/${actionUser.id}/action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ adminId: currentAdmin.id, action: actionKind, reason }),

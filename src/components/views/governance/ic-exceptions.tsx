@@ -15,6 +15,7 @@ import {
   AlertOctagon, Plus, Filter, AlertTriangle, Eye, CheckCircle2, UserCog,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { authFetch } from '@/lib/auth-client';
 
 const SEVERITY_BADGES: Record<string, string> = {
   low: 'bg-slate-100 text-slate-700',
@@ -53,7 +54,7 @@ export function IcExceptionsView() {
       if (filters.category !== 'all') params.set('category', filters.category);
       if (filters.severity !== 'all') params.set('severity', filters.severity);
       if (filters.escalated !== 'all') params.set('escalated', filters.escalated);
-      const res = await fetch(`/api/ic/exceptions?${params.toString()}`);
+      const res = await authFetch(`/api/ic/exceptions?${params.toString()}`);
       const d = await res.json();
       setExceptions(d.exceptions || []);
     } catch (e) {
@@ -73,7 +74,7 @@ export function IcExceptionsView() {
   const submit = async () => {
     if (!form.title) return;
     try {
-      await fetch('/api/ic/exceptions', {
+      await authFetch('/api/ic/exceptions', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, reporterId: currentAdmin?.id }),
       });
@@ -89,7 +90,7 @@ export function IcExceptionsView() {
     setDetail(e);
     setDetailOpen(true);
     try {
-      const res = await fetch(`/api/ic/exceptions/${e.id}`);
+      const res = await authFetch(`/api/ic/exceptions/${e.id}`);
       const d = await res.json();
       setDetail(d.exception);
     } catch (err) {
@@ -100,7 +101,7 @@ export function IcExceptionsView() {
   const resolve = async () => {
     if (!detail) return;
     try {
-      await fetch(`/api/ic/exceptions/${detail.id}`, {
+      await authFetch(`/api/ic/exceptions/${detail.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'resolve',
@@ -119,7 +120,7 @@ export function IcExceptionsView() {
   };
 
   const escalate = async (e: any) => {
-    await fetch(`/api/ic/exceptions/${e.id}`, {
+    await authFetch(`/api/ic/exceptions/${e.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ isEscalated: true, status: 'escalated' }),
     });

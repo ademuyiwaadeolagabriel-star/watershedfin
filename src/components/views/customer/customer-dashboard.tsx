@@ -19,6 +19,7 @@ import { fmtNaira, fmtDate, fmtDateTime } from '@/lib/loan-calc';
 import { CustomerSidebar } from './customer-sidebar';
 import { DashboardSkeleton } from '@/components/ui/skeleton';
 import { NotificationBell } from '@/components/notification-bell';
+import { authFetch } from '@/lib/auth-client';
 
 const ICON_MAP: Record<string, any> = {
   CheckCircle2, XCircle, AlertCircle, ArrowRight, ArrowLeft, Wallet, PenTool, FileText, CreditCard,
@@ -36,7 +37,7 @@ export function CustomerDashboard() {
     (async () => {
       if (!currentUser) return;
       try {
-        const res = await fetch(`/api/customer/dashboard?userId=${currentUser.id}`);
+        const res = await authFetch(`/api/customer/dashboard?userId=${currentUser.id}`);
         const d = await res.json();
         setData(d);
       } catch (e) { console.error(e); }
@@ -48,7 +49,7 @@ export function CustomerDashboard() {
   // never blocks the dashboard from rendering.
   useEffect(() => {
     if (!currentUser) return;
-    fetch(`/api/customer/gamification?userId=${currentUser.id}`)
+    authFetch(`/api/customer/gamification?userId=${currentUser.id}`)
       .then((r) => r.json())
       .then((g) => setGamification(g))
       .catch(() => {});

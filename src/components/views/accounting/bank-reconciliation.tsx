@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/table';
 import { RefreshCw, CheckCircle2 } from 'lucide-react';
 import { fmtNaira, fmtDate } from '@/lib/format';
+import { authFetch } from '@/lib/auth-client';
 
 export function BankReconciliation() {
   const [accounts, setAccounts] = useState<any[]>([]);
@@ -27,7 +28,7 @@ export function BankReconciliation() {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await fetch(`/api/accounting/bank-reconciliation?accountId=${accountId === 'all' ? '' : accountId}`).then((r) => r.json());
+      const r = await authFetch(`/api/accounting/bank-reconciliation?accountId=${accountId === 'all' ? '' : accountId}`).then((r) => r.json());
       setAccounts(r.accounts || []);
       setTransactions(r.transactions || []);
       setSelected(new Set());
@@ -48,7 +49,7 @@ export function BankReconciliation() {
     if (selected.size === 0) return alert('Select transactions to reconcile');
     setWorking(true);
     try {
-      const r = await fetch('/api/accounting/bank-reconciliation', {
+      const r = await authFetch('/api/accounting/bank-reconciliation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transactionIds: Array.from(selected) }),

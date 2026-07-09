@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/table';
 import { Plus, Trash2, FileText, Banknote } from 'lucide-react';
 import { fmtNaira, fmtDate } from '@/lib/format';
+import { authFetch } from '@/lib/auth-client';
 
 const STATUS_BADGES: Record<string, string> = {
   draft: 'bg-slate-100 text-slate-700',
@@ -47,13 +48,13 @@ export function InvoiceManagement() {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await fetch('/api/accounting/invoices').then((r) => r.json());
+      const r = await authFetch('/api/accounting/invoices').then((r) => r.json());
       setInvoices(r.invoices || []);
     } finally { setLoading(false); }
   };
   useEffect(() => {
     load();
-    fetch('/api/treasury/investors?mode=search&q=a').then((r) => r.json()).then((d) => setUsers(d.users || [])).catch(() => {});
+    authFetch('/api/treasury/investors?mode=search&q=a').then((r) => r.json()).then((d) => setUsers(d.users || [])).catch(() => {});
   }, []);
 
   const subtotal = lines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
@@ -65,7 +66,7 @@ export function InvoiceManagement() {
     if (lines.every((l) => !l.amount)) return alert('Add at least one line item');
     setSaving(true);
     try {
-      const r = await fetch('/api/accounting/invoices', {
+      const r = await authFetch('/api/accounting/invoices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, lineItems: lines }),
@@ -83,7 +84,7 @@ export function InvoiceManagement() {
     if (!payOpen || !payAmount) return;
     setPaying(true);
     try {
-      const r = await fetch(`/api/accounting/invoices/${payOpen.id}`, {
+      const r = await authFetch(`/api/accounting/invoices/${payOpen.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: payAmount, paymentMethod: payMethod }),

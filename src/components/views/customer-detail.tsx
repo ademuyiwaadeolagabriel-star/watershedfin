@@ -17,6 +17,7 @@ import {
   ArrowLeft, User as UserIcon, Building2, Wallet, Mail, Phone, IdCard,
   MapPin, Home, Calendar, ShieldCheck, Loader2, AlertCircle,
 } from 'lucide-react';
+import { authFetch } from '@/lib/auth-client';
 
 export function CustomerDetailView() {
   const { viewParams, setView } = useAppStore();
@@ -34,7 +35,7 @@ export function CustomerDetailView() {
         return;
       }
       try {
-        const res = await fetch(`/api/customers/${userId}`);
+        const res = await authFetch(`/api/customers/${userId}`);
         const data = await res.json();
         if (!res.ok) {
           setError(data.error || 'Failed to load customer');

@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/table';
 import { Plus, Pencil, RefreshCw } from 'lucide-react';
 import { fmtNaira, fmtDateTime } from '@/lib/format';
+import { authFetch } from '@/lib/auth-client';
 
 const empty = { name: '', code: '', location: '', glAccountId: '', balanceLimit: 0, openingBalance: 0, assignedUserId: '', status: 'active' };
 
@@ -33,8 +34,8 @@ export function TillManagement() {
     setLoading(true);
     try {
       const [t, a] = await Promise.all([
-        fetch('/api/accounting/tills').then((r) => r.json()),
-        fetch('/api/accounting/coa').then((r) => r.json()),
+        authFetch('/api/accounting/tills').then((r) => r.json()),
+        authFetch('/api/accounting/coa').then((r) => r.json()),
       ]);
       setTills(t.tills || []);
       setAccounts((a.accounts || []).filter((x: any) => x.type === 'asset'));

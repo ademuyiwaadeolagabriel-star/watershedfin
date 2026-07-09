@@ -13,6 +13,7 @@ import {
   AlertTriangle, FileClock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { authFetch } from '@/lib/auth-client';
 
 interface AuditItem {
   id: string;
@@ -57,7 +58,7 @@ export function AuditTrailView() {
         if (search) params.set('search', search);
         params.set('page', String(page));
         params.set('pageSize', '20');
-        const res = await fetch(`/api/audit/trail?${params.toString()}`);
+        const res = await authFetch(`/api/audit/trail?${params.toString()}`);
         const data = await res.json();
         setItems(data.items || []);
         setStats(data.stats || stats);

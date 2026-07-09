@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Newspaper, Send, Bell, FileText, Users, MessageSquare, Plus, CheckCircle2 } from 'lucide-react';
+import { authFetch } from '@/lib/auth-client';
 
 // ============================================================================
 // ANNOUNCEMENTS — Create broadcast announcements shown to customers
@@ -21,7 +22,7 @@ export function AnnouncementsView() {
 
   const fetchAnnouncements = async () => {
     try {
-      const res = await fetch('/api/communications/announcements');
+      const res = await authFetch('/api/communications/announcements');
       if (res.ok) {
         const data = await res.json();
         setAnnouncements(data.announcements || []);
@@ -35,7 +36,7 @@ export function AnnouncementsView() {
     if (!title || !body) return;
     setLoading(true);
     try {
-      await fetch('/api/communications/announcements', {
+      await authFetch('/api/communications/announcements', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, body, audience: 'all' }),
@@ -103,7 +104,7 @@ export function MessageCenterView() {
   const [reply, setReply] = useState('');
 
   useEffect(() => {
-    fetch('/api/communications/messages')
+    authFetch('/api/communications/messages')
       .then(res => res.ok ? res.json() : { messages: [] })
       .then(data => setMessages(data.messages || []))
       .catch(() => {});
@@ -175,7 +176,7 @@ export function NotificationCenterView() {
   const [filter, setFilter] = useState('all');
 
   useEffect(() => {
-    fetch('/api/communications/notifications-admin')
+    authFetch('/api/communications/notifications-admin')
       .then(res => res.ok ? res.json() : { notifications: [] })
       .then(data => setNotifications(data.notifications || []))
       .catch(() => {});
@@ -325,7 +326,7 @@ export function SmsBroadcastView() {
   // Fetch real recipient count from database when filter changes
   useEffect(() => {
     setLoadingCount(true);
-    fetch(`/api/customers?count=true&filter=${filter}`)
+    authFetch(`/api/customers?count=true&filter=${filter}`)
       .then(res => res.ok ? res.json() : { count: 0 })
       .then(data => setRecipientCount(data.count || 0))
       .catch(() => setRecipientCount(0))

@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select';
 import { CalendarDays, TrendingUp, Calculator, ArrowRight } from 'lucide-react';
 import { fmtNaira, fmtDate, addDays } from '@/lib/format';
+import { authFetch } from '@/lib/auth-client';
 
 export function BookDeal() {
   const { setView, currentAdmin } = useAppStore();
@@ -26,8 +27,8 @@ export function BookDeal() {
   useEffect(() => {
     (async () => {
       const [p, i] = await Promise.all([
-        fetch('/api/treasury/products').then((r) => r.json()),
-        fetch('/api/treasury/investors').then((r) => r.json()),
+        authFetch('/api/treasury/products').then((r) => r.json()),
+        authFetch('/api/treasury/investors').then((r) => r.json()),
       ]);
       setProducts((p.products || []).filter((x: any) => x.isActive));
       setInvestors(i.profiles || []);
@@ -61,7 +62,7 @@ export function BookDeal() {
     if (!form.principal || form.principal <= 0) return alert('Enter principal');
     setSubmitting(true);
     try {
-      const r = await fetch('/api/treasury/investments', {
+      const r = await authFetch('/api/treasury/investments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, bookedBy: currentAdmin?.id }),

@@ -44,8 +44,8 @@ function serializeConfig(s: any) {
     heroCtaText: s.heroCtaText ?? 'Apply for Loan',
     heroCtaSecondary: s.heroCtaSecondary ?? 'Sign In',
     heroBadge: s.heroBadge ?? 'Licensed Loan Company · Registered in Nigeria',
-    heroImageUrl: s.heroImageUrl ?? 'https://sfile.chatglm.cn/images-ppt/87e17a98030d.jpg',
-    heroImageAlt: s.heroImageAlt ?? 'Nigerian entrepreneur in her shop',
+    heroImageUrl: s.heroImageUrl ?? '/hero-bg.png',
+    heroImageAlt: s.heroImageAlt ?? 'Watershed Capital — Banking for Nigerian Entrepreneurs',
     stat1Label: s.stat1Label ?? 'Disbursed', stat1Value: s.stat1Value ?? '₦5B+',
     stat2Label: s.stat2Label ?? 'Customers', stat2Value: s.stat2Value ?? '12,000+',
     stat3Label: s.stat3Label ?? 'Approval Rate', stat3Value: s.stat3Value ?? '98%',
@@ -90,7 +90,21 @@ export async function PUT(req: NextRequest) {
     for (const f of ALLOWED_FIELDS) {
       if (fields[f] !== undefined) updateData[f] = fields[f];
     }
-    const updated = await db.settings.update({ where: { id: 1 }, data: updateData });
+    // Try to update — if new columns don't exist yet, fall back to safe fields only
+    let updated;
+    try {
+      updated = await db.settings.update({ where: { id: 1 }, data: updateData });
+    } catch (updateErr: any) {
+      // If the error is about missing columns (heroImageUrl, heroImageAlt), retry without them
+      if (updateErr.message && (updateErr.message.includes('heroImageUrl') || updateErr.message.includes('heroImageAlt') || updateErr.message.includes('Unknown column'))) {
+        const safeData = { ...updateData };
+        delete safeData.heroImageUrl;
+        delete safeData.heroImageAlt;
+        updated = await db.settings.update({ where: { id: 1 }, data: safeData });
+      } else {
+        throw updateErr;
+      }
+    }
     return NextResponse.json({ config: serializeConfig(updated) });
   } catch (e: any) {
     console.error('Branding PUT error:', e);

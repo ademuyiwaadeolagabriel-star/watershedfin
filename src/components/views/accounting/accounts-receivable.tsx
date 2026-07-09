@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/table';
 import { Banknote, TrendingUp } from 'lucide-react';
 import { fmtNaira, fmtDate } from '@/lib/format';
+import { authFetch } from '@/lib/auth-client';
 
 const STATUS_BADGES: Record<string, string> = {
   draft: 'bg-slate-100 text-slate-700',
@@ -56,7 +57,7 @@ export function AccountsReceivable() {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await fetch('/api/accounting/invoices').then((r) => r.json());
+      const r = await authFetch('/api/accounting/invoices').then((r) => r.json());
       setInvoices(r.invoices || []);
     } finally { setLoading(false); }
   };
@@ -66,7 +67,7 @@ export function AccountsReceivable() {
     if (!payOpen || !payAmount) return;
     setWorking(true);
     try {
-      const r = await fetch(`/api/accounting/invoices/${payOpen.id}`, {
+      const r = await authFetch(`/api/accounting/invoices/${payOpen.id}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: payAmount, paymentMethod: payMethod }),
       });

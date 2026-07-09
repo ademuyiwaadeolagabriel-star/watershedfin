@@ -8,6 +8,7 @@ import {
 } from 'recharts';
 import { Activity, TrendingUp, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { authFetch } from '@/lib/auth-client';
 
 const SEVERITY_COLORS: Record<string, string> = {
   info: '#3b82f6',
@@ -23,7 +24,7 @@ export function AuditActivityView() {
     (async () => {
       setLoading(true);
       try {
-        const res = await fetch('/api/audit/activity?days=30');
+        const res = await authFetch('/api/audit/activity?days=30');
         const d = await res.json();
         setData(d);
       } catch (e) {

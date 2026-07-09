@@ -20,6 +20,7 @@ import {
   Wallet, ArrowDownCircle, ArrowUpCircle, ArrowRightLeft, Banknote, Plus,
 } from 'lucide-react';
 import { fmtNaira, fmtDateTime } from '@/lib/format';
+import { authFetch } from '@/lib/auth-client';
 
 export function TellerOperations() {
   const { currentAdmin } = useAppStore() as any;
@@ -33,7 +34,7 @@ export function TellerOperations() {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await fetch('/api/accounting/tills').then((r) => r.json());
+      const r = await authFetch('/api/accounting/tills').then((r) => r.json());
       setTills(r.tills || []);
       // recent transactions: gather from all tills — fetch each till's txns is heavy; instead use journal? 
       // We'll display till balances + a placeholder recent list from the first till.
@@ -53,7 +54,7 @@ export function TellerOperations() {
     setWorking(true);
     try {
       const endpoint = modal === 'withdrawal' ? 'withdrawal' : 'deposit';
-      const r = await fetch(`/api/accounting/teller/${endpoint}`, {
+      const r = await authFetch(`/api/accounting/teller/${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, amount: Number(form.amount), createdById: currentAdmin?.id }),

@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Settings as SettingsIcon, Save, Upload, Shield, Mail, FileText, CreditCard, Globe, Star, Image as ImageIcon } from 'lucide-react';
+import { authFetch } from '@/lib/auth-client';
 
 export function SettingsView() {
   const [settings, setSettings] = useState<any>(null);
@@ -21,7 +22,7 @@ export function SettingsView() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/settings');
+      const res = await authFetch('/api/settings');
       const d = await res.json();
       setSettings(d.settings);
     } catch (e) {
@@ -40,7 +41,7 @@ export function SettingsView() {
   const save = async () => {
     setSaving(true);
     try {
-      await fetch('/api/settings', {
+      await authFetch('/api/settings', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),
       });
@@ -56,7 +57,7 @@ export function SettingsView() {
     const fd = new FormData();
     fd.set('file', logoFile);
     try {
-      const res = await fetch('/api/settings/logo', { method: 'POST', body: fd });
+      const res = await authFetch('/api/settings/logo', { method: 'POST', body: fd });
       const d = await res.json();
       if (d.filePath) setLogoPath(d.filePath);
     } catch (e) {

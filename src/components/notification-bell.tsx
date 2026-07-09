@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useAppStore, type ViewKey } from '@/lib/store';
 import { cn } from '@/lib/utils';
+import { authFetch } from '@/lib/auth-client';
 
 export interface NotificationBellProps {
   userId?: string | null;
@@ -85,7 +86,7 @@ export function NotificationBell({ userId, adminId }: NotificationBellProps) {
       if (recipient.userId) params.set('userId', recipient.userId);
       if (recipient.adminId) params.set('adminId', recipient.adminId);
       params.set('limit', '10');
-      const res = await fetch(`/api/notifications?${params.toString()}`);
+      const res = await authFetch(`/api/notifications?${params.toString()}`);
       if (!res.ok) return;
       const data = await res.json();
       setItems(data.items || []);
@@ -152,7 +153,7 @@ export function NotificationBell({ userId, adminId }: NotificationBellProps) {
   const markAllAsRead = useCallback(async () => {
     if (!recipient.userId && !recipient.adminId) return;
     try {
-      await fetch('/api/notifications/read-all', {
+      await authFetch('/api/notifications/read-all', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -169,7 +170,7 @@ export function NotificationBell({ userId, adminId }: NotificationBellProps) {
 
   const markOneAsRead = useCallback(async (id: string) => {
     try {
-      await fetch(`/api/notifications/${id}/read`, { method: 'POST' });
+      await authFetch(`/api/notifications/${id}/read`, { method: 'POST' });
       setItems((prev) =>
         prev.map((i) =>
           i.id === id ? { ...i, isRead: true, readAt: new Date().toISOString() } : i

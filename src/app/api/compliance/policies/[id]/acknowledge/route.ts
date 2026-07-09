@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getAuthFromRequest } from '@/lib/auth';
 
 export async function POST(
   req: NextRequest,
@@ -8,7 +9,9 @@ export async function POST(
   try {
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
-    const adminId = body.adminId || null;
+    const authPayload = getAuthFromRequest(req);
+    if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    const adminId = authPayload.id;
     const metadata = body.metadata ? JSON.stringify(body.metadata) : null;
 
     // Upsert acknowledgment (unique [policyDocumentId, adminId])

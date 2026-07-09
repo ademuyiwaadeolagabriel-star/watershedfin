@@ -12,6 +12,7 @@ import {
   FileText, AlertTriangle, UserX,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { authFetch } from '@/lib/auth-client';
 
 export function ComplianceMonitoringView() {
   const [data, setData] = useState<any>(null);
@@ -21,7 +22,7 @@ export function ComplianceMonitoringView() {
     (async () => {
       setLoading(true);
       try {
-        const res = await fetch('/api/compliance/monitoring');
+        const res = await authFetch('/api/compliance/monitoring');
         const d = await res.json();
         setData(d);
       } catch (e) {

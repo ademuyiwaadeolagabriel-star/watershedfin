@@ -14,6 +14,7 @@ import {
   ShieldAlert, Plus, TrendingUp, AlertTriangle, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { authFetch } from '@/lib/auth-client';
 
 const RATING_COLORS: Record<string, string> = {
   low: 'bg-emerald-500',
@@ -63,7 +64,7 @@ export function IcRiskView() {
       if (filterCategory !== 'all') params.set('category', filterCategory);
       if (filterRating !== 'all') params.set('rating', filterRating);
       if (filterStatus !== 'all') params.set('status', filterStatus);
-      const res = await fetch(`/api/ic/risk?${params.toString()}`);
+      const res = await authFetch(`/api/ic/risk?${params.toString()}`);
       const d = await res.json();
       setRisks(d.risks || []);
     } catch (e) {
@@ -78,7 +79,7 @@ export function IcRiskView() {
   const submit = async () => {
     if (!form.title) return;
     try {
-      await fetch('/api/ic/risk', {
+      await authFetch('/api/ic/risk', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       });

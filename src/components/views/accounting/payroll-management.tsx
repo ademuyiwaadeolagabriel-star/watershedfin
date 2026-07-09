@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/table';
 import { Plus, Users, CheckCircle2 } from 'lucide-react';
 import { fmtNaira, fmtDate } from '@/lib/format';
+import { authFetch } from '@/lib/auth-client';
 
 export function PayrollManagement() {
   const { currentAdmin } = useAppStore() as any;
@@ -36,8 +37,8 @@ export function PayrollManagement() {
     setLoading(true);
     try {
       const [b, s] = await Promise.all([
-        fetch('/api/accounting/payroll').then((r) => r.json()),
-        fetch('/api/accounting/payroll?mode=staff').then((r) => r.json()),
+        authFetch('/api/accounting/payroll').then((r) => r.json()),
+        authFetch('/api/accounting/payroll?mode=staff').then((r) => r.json()),
       ]);
       setBatches(b.batches || []);
       setStaff(s.staff || []);
@@ -58,7 +59,7 @@ export function PayrollManagement() {
     if (!form.period) return alert('Period required');
     setSaving(true);
     try {
-      const r = await fetch('/api/accounting/payroll', {
+      const r = await authFetch('/api/accounting/payroll', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -77,7 +78,7 @@ export function PayrollManagement() {
 
   const viewDetail = async (id: string) => {
     try {
-      const r = await fetch(`/api/accounting/payroll/${id}`).then((r) => r.json());
+      const r = await authFetch(`/api/accounting/payroll/${id}`).then((r) => r.json());
       setDetail(r.batch);
     } catch (e) { console.error(e); }
   };
@@ -86,7 +87,7 @@ export function PayrollManagement() {
     if (!confirm('Approve & pay this payroll batch?')) return;
     setApproving(true);
     try {
-      const r = await fetch(`/api/accounting/payroll/${id}`, {
+      const r = await authFetch(`/api/accounting/payroll/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ approvedById: currentAdmin?.id }),

@@ -13,6 +13,7 @@ import {
 import { useAppStore } from '@/lib/store';
 import { FileText, Upload, Download, CheckCircle2, Plus, Eye, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { authFetch } from '@/lib/auth-client';
 
 const CATEGORIES = ['general', 'kyc', 'aml', 'credit', 'operations', 'hr', 'data_protection', 'anti_fraud'];
 
@@ -36,7 +37,7 @@ export function CompliancePoliciesView() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/compliance/policies');
+      const res = await authFetch('/api/compliance/policies');
       const d = await res.json();
       setPolicies(d.policies || []);
     } catch (e) {
@@ -59,7 +60,7 @@ export function CompliancePoliciesView() {
     fd.set('createdBy', currentAdmin?.id || '');
     if (file) fd.set('file', file);
     try {
-      await fetch('/api/compliance/policies', { method: 'POST', body: fd });
+      await authFetch('/api/compliance/policies', { method: 'POST', body: fd });
       setCreateOpen(false);
       setTitle(''); setCategory('general'); setVersion('1.0'); setEffectiveDate(''); setBody(''); setFile(null);
       load();
@@ -69,7 +70,7 @@ export function CompliancePoliciesView() {
   };
 
   const updateStatus = async (id: string, status: string) => {
-    await fetch(`/api/compliance/policies/${id}`, {
+    await authFetch(`/api/compliance/policies/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
     });
@@ -78,7 +79,7 @@ export function CompliancePoliciesView() {
 
   const acknowledge = async (id: string) => {
     if (!currentAdmin?.id) return;
-    await fetch(`/api/compliance/policies/${id}/acknowledge`, {
+    await authFetch(`/api/compliance/policies/${id}/acknowledge`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ adminId: currentAdmin.id }),
     });
@@ -87,7 +88,7 @@ export function CompliancePoliciesView() {
 
   const remove = async (id: string) => {
     if (!confirm('Delete this policy? This cannot be undone.')) return;
-    await fetch(`/api/compliance/policies/${id}`, { method: 'DELETE' });
+    await authFetch(`/api/compliance/policies/${id}`, { method: 'DELETE' });
     load();
   };
 
@@ -95,7 +96,7 @@ export function CompliancePoliciesView() {
     setViewPolicy(p);
     setAckOpen(true);
     try {
-      const res = await fetch(`/api/compliance/policies/${p.id}`);
+      const res = await authFetch(`/api/compliance/policies/${p.id}`);
       const d = await res.json();
       setAckList(d.policy?.acknowledgments || []);
     } catch (e) {

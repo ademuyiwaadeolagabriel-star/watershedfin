@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Layers, Plus, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { authFetch } from '@/lib/auth-client';
 
 const empty = { name: '', riskScore: 0.5, riskScoreInt: 3, benchmarkedMargin: 18 };
 
@@ -38,7 +39,7 @@ export function SectorsView() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/sectors');
+      const res = await authFetch('/api/sectors');
       const d = await res.json();
       setSectors(d.sectors || []);
     } catch (e) {
@@ -54,7 +55,7 @@ export function SectorsView() {
     if (!form.name) return;
     try {
       if (editingId) {
-        await fetch(`/api/sectors/${editingId}`, {
+        await authFetch(`/api/sectors/${editingId}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...form,
@@ -64,7 +65,7 @@ export function SectorsView() {
           }),
         });
       } else {
-        await fetch('/api/sectors', {
+        await authFetch('/api/sectors', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...form,
@@ -96,7 +97,7 @@ export function SectorsView() {
 
   const remove = async (s: any) => {
     if (!confirm(`Delete sector "${s.name}"?`)) return;
-    await fetch(`/api/sectors/${s.id}`, { method: 'DELETE' });
+    await authFetch(`/api/sectors/${s.id}`, { method: 'DELETE' });
     load();
   };
 

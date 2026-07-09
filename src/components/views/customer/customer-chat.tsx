@@ -17,6 +17,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { authFetch } from '@/lib/auth-client';
 
 // ============================================================================
 // CustomerChat — in-app chat between customer and their Loan Officer
@@ -73,7 +74,7 @@ export function CustomerChat() {
   const loadMessages = useCallback(async () => {
     if (!currentUser) return;
     try {
-      const res = await fetch(`/api/customer/chat?userId=${currentUser.id}`);
+      const res = await authFetch(`/api/customer/chat?userId=${currentUser.id}`);
       const data = await res.json();
       if (data.messages) setMessages(data.messages);
       if (data.loanOfficer !== undefined) setLoanOfficer(data.loanOfficer);
@@ -103,7 +104,7 @@ export function CustomerChat() {
     setSending(true);
     setError(null);
     try {
-      const res = await fetch('/api/customer/chat', {
+      const res = await authFetch('/api/customer/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

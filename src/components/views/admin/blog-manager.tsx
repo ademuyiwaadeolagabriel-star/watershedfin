@@ -58,6 +58,7 @@ import {
   ExternalLink,
   Search,
 } from 'lucide-react';
+import { authFetch } from '@/lib/auth-client';
 
 interface BlogPost {
   id: string;
@@ -129,7 +130,7 @@ export function BlogManagerView() {
   const loadPosts = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/blog?limit=100');
+      const res = await authFetch('/api/admin/blog?limit=100');
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed to load posts');
       setPosts(json.posts || []);
@@ -146,7 +147,7 @@ export function BlogManagerView() {
 
   const loadCategories = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/blog/categories');
+      const res = await authFetch('/api/admin/blog/categories');
       const json = await res.json();
       if (res.ok) setCategories(json.categories || []);
     } catch {
@@ -230,13 +231,13 @@ export function BlogManagerView() {
 
       let res: Response;
       if (editingId) {
-        res = await fetch(`/api/admin/blog/${editingId}`, {
+        res = await authFetch(`/api/admin/blog/${editingId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
       } else {
-        res = await fetch('/api/admin/blog', {
+        res = await authFetch('/api/admin/blog', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -271,7 +272,7 @@ export function BlogManagerView() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      const res = await fetch(`/api/admin/blog/${deleteTarget.id}`, {
+      const res = await authFetch(`/api/admin/blog/${deleteTarget.id}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ adminId: currentAdmin?.id }),
@@ -301,7 +302,7 @@ export function BlogManagerView() {
     try {
       if (p.status === 'published') {
         // Unpublish — PUT back to draft
-        const res = await fetch(`/api/admin/blog/${p.id}`, {
+        const res = await authFetch(`/api/admin/blog/${p.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -317,7 +318,7 @@ export function BlogManagerView() {
         });
       } else {
         // Publish — use the dedicated publish endpoint
-        const res = await fetch(`/api/admin/blog/${p.id}/publish`, {
+        const res = await authFetch(`/api/admin/blog/${p.id}/publish`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ adminId: currentAdmin?.id }),

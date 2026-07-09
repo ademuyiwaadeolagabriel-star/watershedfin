@@ -15,6 +15,7 @@ import {
   ShieldCheck, Loader2, AlertCircle, Wallet, CheckCircle2, FileCheck,
   Clock, MapPin,
 } from 'lucide-react';
+import { authFetch } from '@/lib/auth-client';
 
 const PERMISSION_LABELS: Record<string, string> = {
   loanOrigination: 'Loan Origination',
@@ -63,7 +64,7 @@ export function StaffDetailView() {
         return;
       }
       try {
-        const res = await fetch(`/api/admin/staff/${staffId}`);
+        const res = await authFetch(`/api/admin/staff/${staffId}`);
         const d = await res.json();
         if (!res.ok) {
           setError(d.error || 'Failed to load staff record');

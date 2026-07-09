@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog';
 import { Package, Plus, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { authFetch } from '@/lib/auth-client';
 
 const empty = {
   name: '', slug: '', description: '', duration: 12, interest: 0,
@@ -28,7 +29,7 @@ export function LoanProductsView() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/loan-products');
+      const res = await authFetch('/api/loan-products');
       const d = await res.json();
       setProducts(d.products || []);
     } catch (e) {
@@ -51,12 +52,12 @@ export function LoanProductsView() {
     };
     try {
       if (editingId) {
-        await fetch(`/api/loan-products/${editingId}`, {
+        await authFetch(`/api/loan-products/${editingId}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
       } else {
-        await fetch('/api/loan-products', {
+        await authFetch('/api/loan-products', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
@@ -84,7 +85,7 @@ export function LoanProductsView() {
 
   const remove = async (p: any) => {
     if (!confirm(`Delete product "${p.name}"?`)) return;
-    await fetch(`/api/loan-products/${p.id}`, { method: 'DELETE' });
+    await authFetch(`/api/loan-products/${p.id}`, { method: 'DELETE' });
     load();
   };
 

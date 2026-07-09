@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Building2, Plus, Pencil, Trash2, Power, Users } from 'lucide-react';
 import { NIGERIAN_STATES } from '@/lib/constants';
 import { cn } from '@/lib/utils';
+import { authFetch } from '@/lib/auth-client';
 
 const empty = { name: '', code: '', state: '', address: '', phoneContact: '', managerId: '', status: 'active' };
 
@@ -23,8 +24,8 @@ export function BranchesView() {
     setLoading(true);
     try {
       const [b, s] = await Promise.all([
-        fetch('/api/branches').then((r) => r.json()),
-        fetch('/api/staff').then((r) => r.json()),
+        authFetch('/api/branches').then((r) => r.json()),
+        authFetch('/api/staff').then((r) => r.json()),
       ]);
       setBranches(b.branches || []);
       setStaff(s.staff || []);
@@ -41,12 +42,12 @@ export function BranchesView() {
     if (!form.name || !form.code) return;
     try {
       if (editingId) {
-        await fetch(`/api/branches/${editingId}`, {
+        await authFetch(`/api/branches/${editingId}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(form),
         });
       } else {
-        await fetch('/api/branches', {
+        await authFetch('/api/branches', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(form),
         });
@@ -70,7 +71,7 @@ export function BranchesView() {
 
   const toggleStatus = async (b: any) => {
     const next = b.status === 'active' ? 'inactive' : 'active';
-    await fetch(`/api/branches/${b.id}`, {
+    await authFetch(`/api/branches/${b.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: next }),
     });
@@ -79,7 +80,7 @@ export function BranchesView() {
 
   const remove = async (b: any) => {
     if (!confirm(`Delete branch "${b.name}"? This cannot be undone.`)) return;
-    await fetch(`/api/branches/${b.id}`, { method: 'DELETE' });
+    await authFetch(`/api/branches/${b.id}`, { method: 'DELETE' });
     load();
   };
 

@@ -27,6 +27,7 @@ import {
   Tag,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { authFetch } from '@/lib/auth-client';
 
 // ============================================================================
 // CustomerFaq — Knowledge Base / FAQ view
@@ -92,7 +93,7 @@ export function CustomerFaq() {
       const params = new URLSearchParams();
       if (activeCategory !== 'All') params.set('category', activeCategory);
       if (search.trim()) params.set('search', search.trim());
-      const res = await fetch(`/api/faq?${params.toString()}`);
+      const res = await authFetch(`/api/faq?${params.toString()}`);
       const data = await res.json();
       setArticles(data.articles || []);
       if (data.categories && data.categories.length > 0) {
@@ -117,7 +118,7 @@ export function CustomerFaq() {
   const recordView = (articleId: string) => {
     if (viewedRef.has(articleId)) return;
     viewedRef.add(articleId);
-    fetch(`/api/faq/${articleId}/view`, { method: 'POST' }).catch(() => {});
+    authFetch(`/api/faq/${articleId}/view`, { method: 'POST' }).catch(() => {});
   };
 
   const handleFeedback = (articleId: string, kind: 'up' | 'down') => {

@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/table';
 import { FileDown, FileSpreadsheet, RefreshCw, BarChart3 } from 'lucide-react';
 import { fmtNaira, fmtDate } from '@/lib/format';
+import { authFetch } from '@/lib/auth-client';
 
 const REPORT_TYPES = [
   { value: 'balance_sheet', label: 'Balance Sheet' },
@@ -47,13 +48,13 @@ export function ReportingHub() {
         const params = new URLSearchParams({ type: reportType });
         if (reportType === 'balance_sheet' || reportType === 'trial_balance') params.set('asOf', asOf);
         if (reportType === 'profit_loss' || reportType === 'cash_flow') { params.set('from', from); params.set('to', to); }
-        const r = await fetch(`/api/accounting/statements?${params.toString()}`).then((r) => r.json());
+        const r = await authFetch(`/api/accounting/statements?${params.toString()}`).then((r) => r.json());
         setData(r);
       } else if (reportType === 'ar_aging') {
-        const r = await fetch('/api/accounting/invoices').then((r) => r.json());
+        const r = await authFetch('/api/accounting/invoices').then((r) => r.json());
         setData({ invoices: (r.invoices || []).filter((i: any) => i.status !== 'paid' && i.status !== 'void') });
       } else if (reportType === 'ap_aging') {
-        const r = await fetch('/api/accounting/bills').then((r) => r.json());
+        const r = await authFetch('/api/accounting/bills').then((r) => r.json());
         setData({ bills: (r.bills || []).filter((b: any) => b.status !== 'paid') });
       }
     } finally { setLoading(false); }

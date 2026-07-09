@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getAuthFromRequest } from '@/lib/auth';
 
 /**
  * POST /api/admin/blog/[id]/publish
@@ -17,7 +18,7 @@ export async function POST(
   try {
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
-    const adminId = body.adminId || null;
+    const adminId = authPayload.id;
 
     const existing = await db.blog.findUnique({
       where: { id },

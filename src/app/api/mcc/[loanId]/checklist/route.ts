@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getAuthFromRequest } from '@/lib/auth';
 import {
   CP_CHECKLIST_ITEMS,
   CP_CHECKLIST_TOTAL,
@@ -110,7 +111,10 @@ export async function POST(
   try {
     const { loanId } = await params;
     const body = await req.json();
-    const adminId = String(body.adminId || '');
+    // A1 FIX: Get adminId from JWT token
+    const authPayload = getAuthFromRequest(req);
+    if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    const adminId = authPayload.id;
 
     if (!adminId) {
       return NextResponse.json({ error: 'adminId is required' }, { status: 400 });

@@ -18,6 +18,7 @@ import {
   Users, Plus, Pencil, KeyRound, ShieldCheck, Search, Gavel,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { authFetch } from '@/lib/auth-client';
 
 const ROLES = Object.keys(ROLE_LABELS);
 
@@ -47,8 +48,8 @@ export function StaffView() {
       if (filterRole !== 'all') params.set('role', filterRole);
       if (filterBranch !== 'all') params.set('branchId', filterBranch);
       const [s, b] = await Promise.all([
-        fetch(`/api/staff?${params.toString()}`).then((r) => r.json()),
-        fetch('/api/branches').then((r) => r.json()),
+        authFetch(`/api/staff?${params.toString()}`).then((r) => r.json()),
+        authFetch('/api/branches').then((r) => r.json()),
       ]);
       setStaff(s.staff || []);
       setBranches(b.branches || []);
@@ -73,7 +74,7 @@ export function StaffView() {
   const submitCreate = async () => {
     if (!form.firstName || !form.lastName || !form.username || !form.email || !form.password) return;
     try {
-      await fetch('/api/staff', {
+      await authFetch('/api/staff', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       });
@@ -96,7 +97,7 @@ export function StaffView() {
   const submitEdit = async () => {
     if (!editing) return;
     try {
-      await fetch(`/api/staff/${editing.id}`, {
+      await authFetch(`/api/staff/${editing.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           firstName: editing.firstName, lastName: editing.lastName,
@@ -116,7 +117,7 @@ export function StaffView() {
   const resetPassword = async (s: any) => {
     if (!confirm(`Reset password for ${s.firstName} ${s.lastName}? Temporary password will be generated.`)) return;
     try {
-      const res = await fetch(`/api/staff/${s.id}`, {
+      const res = await authFetch(`/api/staff/${s.id}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });

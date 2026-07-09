@@ -9,6 +9,7 @@ import { ArrowRight, FileText, CheckCircle2, Clock, XCircle, ChevronRight } from
 import { cn } from '@/lib/utils';
 import { LOAN_STATUS_BADGES, LOAN_STATUS_LABELS } from '@/lib/constants';
 import { fmtNaira, fmtDate } from '@/lib/loan-calc';
+import { authFetch } from '@/lib/auth-client';
 
 export function CustomerHeader({ title, user, subtitle }: { title: string; user: any; subtitle?: string }) {
   const { setView } = useAppStore();
@@ -34,7 +35,7 @@ export function CustomerLoans() {
     (async () => {
       if (!currentUser) return;
       try {
-        const res = await fetch(`/api/customer/dashboard?userId=${currentUser.id}`);
+        const res = await authFetch(`/api/customer/dashboard?userId=${currentUser.id}`);
         const d = await res.json();
         setLoans(d.loans || []);
       } catch (e) { console.error(e); }

@@ -13,6 +13,7 @@ import {
   CreditCard, RefreshCw, ArrowRight,
 } from 'lucide-react';
 import { fmtNaira, fmtDate } from '@/lib/format';
+import { authFetch } from '@/lib/auth-client';
 
 export function AccountingDashboard() {
   const { setView } = useAppStore();
@@ -22,7 +23,7 @@ export function AccountingDashboard() {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await fetch('/api/accounting/dashboard').then((r) => r.json());
+      const r = await authFetch('/api/accounting/dashboard').then((r) => r.json());
       setData(r);
     } finally { setLoading(false); }
   };

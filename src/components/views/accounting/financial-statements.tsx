@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/table';
 import { FileDown, FileSpreadsheet, RefreshCw } from 'lucide-react';
 import { fmtNaira, fmtDate } from '@/lib/format';
+import { authFetch } from '@/lib/auth-client';
 
 const today = new Date().toISOString().slice(0, 10);
 const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10);
@@ -33,7 +34,7 @@ export function FinancialStatements() {
         params.set('from', from);
         params.set('to', to);
       }
-      const r = await fetch(`/api/accounting/statements?${params.toString()}`).then((r) => r.json());
+      const r = await authFetch(`/api/accounting/statements?${params.toString()}`).then((r) => r.json());
       setData(r);
     } finally { setLoading(false); }
   };

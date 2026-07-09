@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getAuthFromRequest } from '@/lib/auth';
 
 /**
  * /api/admin/blog/[id]
@@ -89,6 +90,8 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
+    const authPayload = getAuthFromRequest(req);
+    if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     const body = await req.json();
 
     const existing = await db.blog.findUnique({
@@ -157,7 +160,7 @@ export async function PUT(
     });
 
     // Audit log
-    const actor = await getActor(body.adminId);
+    const actor = await getActor(authPayload.id);
     if (actor) {
       await db.auditLog.create({
         data: {
@@ -201,7 +204,7 @@ export async function DELETE(
     await db.blog.delete({ where: { id } });
 
     // Audit log
-    const actor = await getActor(body.adminId);
+    const actor = await getActor(authPayload.id);
     if (actor) {
       await db.auditLog.create({
         data: {
