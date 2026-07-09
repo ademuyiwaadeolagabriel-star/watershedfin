@@ -208,12 +208,44 @@ export function CamView() {
           authFetch(`/api/loans/${loanId}`).then(r => r.json()),
           authFetch(`/api/appraisals/${loanId}`).then(r => r.json()),
         ]);
-        if (loanRes.loan) setLoan(loanRes.loan);
+        if (loanRes.loan) {
+          setLoan(loanRes.loan);
+          const ln = loanRes.loan;
+
+          // ── AUTO-POPULATE from onboarding/loan data (eliminate duplication) ──
+          const biz = ln.user?.business;
+          const sectorObj = biz?.sectorRef || biz?.sector;
+          const yearsInOp = biz?.dateEstablished
+            ? Math.floor((Date.now() - new Date(biz.dateEstablished).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+            : (biz?.yearsInOperation || 0);
+
+          setData((prev: CamData) => ({
+            ...prev,
+            // Auto-populate from loan record
+            loanPrincipal: ln.amount || prev.loanPrincipal,
+            loanInterestRate: ln.percent || prev.loanInterestRate,
+            loanTenorMonths: ln.duration || prev.loanTenorMonths,
+            repaymentMethod: ln.repaymentPlan || prev.repaymentMethod,
+            loanPurpose: ln.reason || prev.loanPurpose,
+            loanBaseAmount: ln.amount || prev.loanBaseAmount,
+            // Auto-populate from user/business record
+            yearsAtAddress: ln.user?.yearsAtResidence || prev.yearsAtAddress,
+            yearsInOperation: yearsInOp || prev.yearsInOperation,
+            selectedSectorName: sectorObj?.name || prev.selectedSectorName,
+            sectorRiskScore: sectorObj?.riskScore ?? prev.sectorRiskScore,
+            sectorBenchmarkMargin: sectorObj?.benchmarkedMargin ?? prev.sectorBenchmarkMargin,
+            businessLocation: biz?.state || biz?.shopAddress || prev.businessLocation,
+            // CCD and Upfront from loan plan if available
+            ccdPercent: ln.plan?.ccdPercent || ln.finalCcdFeePercent || prev.ccdPercent,
+            upfrontFeePercent: ln.plan?.upfrontFeePercent || ln.finalUpfrontFeePercent || prev.upfrontFeePercent,
+          }));
+        }
+
         if (apprRes.appraisal) {
           const ap = apprRes.appraisal;
           setAppraisal(ap);
 
-          // D2 FIX: Load saved engine dump
+          // Load saved engine dump
           if (ap.engineDump) {
             try {
               const dump = JSON.parse(ap.engineDump);
@@ -221,7 +253,7 @@ export function CamView() {
             } catch {}
           }
 
-          // D2 FIX: Load saved form data back into the CAM form
+          // Load saved form data back into the CAM form (only if CAM was previously saved)
           const safeParse = (val: any, fallback: any) => {
             if (!val) return fallback;
             if (typeof val === 'string') {
@@ -230,46 +262,47 @@ export function CamView() {
             return val;
           };
 
-          setData((prev: CamData) => ({
-            ...prev, // keep INITIAL_DATA defaults
-            // Scalar fields from CreditAppraisal model
-            salesClientEstimate: ap.salesClientEstimate ?? prev.salesClientEstimate,
-            salesSpotCheck: ap.salesSpotCheck ?? prev.salesSpotCheck,
-            salesBookRecords: ap.salesBookRecord ?? prev.salesBookRecords,
-            salesBankStatement: ap.salesBankStatement ?? prev.salesBankStatement,
-            consideredMonthlySales: ap.consideredMonthlySales ?? prev.consideredMonthlySales,
-            cashAtHand: ap.cashAtHand ?? prev.cashAtHand,
-            cashInBanks: ap.cashInBanks ?? prev.cashInBanks,
-            receivables: ap.receivables ?? prev.receivables,
-            shortTermLiabilities: ap.shortTermLiabilities ?? prev.shortTermLiabilities,
-            longTermLiabilities: ap.longTermLiabilities ?? prev.longTermLiabilities,
-            payables: ap.payables ?? prev.payables,
-            loanPurpose: ap.loanPurpose ?? prev.loanPurpose,
-            loanCycle: ap.loanCycle ?? prev.loanCycle,
-            applicantAge: ap.applicantAge ?? prev.applicantAge,
-            yearsAtAddress: ap.yearsAtAddress ?? prev.yearsAtAddress,
-            yearsInOperation: ap.yearsInOperation ?? prev.yearsInOperation,
-            managementExperience: ap.managementExperience ?? prev.managementExperience,
-            successionPlanVerified: ap.successionPlanVerified ?? prev.successionPlanVerified,
-            bankAccountVerified: ap.bankAccountVerified ?? prev.bankAccountVerified,
-            previousDefault: ap.previousDefault ?? prev.previousDefault,
-            competitionIntensity: ap.competitionIntensity ?? prev.competitionIntensity,
-            marketRiskCommentary: ap.marketRiskCommentary ?? prev.marketRiskCommentary,
-            riskGrade: ap.riskGrade ?? prev.riskGrade,
-            riskScore: ap.riskScore ?? prev.riskScore,
-            engineVerdict: ap.engineVerdict ?? prev.engineVerdict,
-            dsrRatio: ap.dsrRatio ?? prev.dsrRatio,
-            appraisalGpsLat: ap.appraisalGpsLat ?? prev.appraisalGpsLat,
-            appraisalGpsLong: ap.appraisalGpsLong ?? prev.appraisalGpsLong,
-            // D2 FIX: Load structured arrays from JSON columns
-            inventory: safeParse(ap.inventorySnapshot, prev.inventory),
-            businessAssets: safeParse(ap.assetsRegister, {}).business || prev.businessAssets,
-            familyAssets: safeParse(ap.assetsRegister, {}).family || prev.familyAssets,
-            collaterals: safeParse(ap.collateralRegister, prev.collaterals),
-            guarantors: safeParse(ap.guarantorRegister, prev.guarantors),
-            guarantorBizVerifications: safeParse(ap.guarantorBizVerification, prev.guarantorBizVerifications),
-            bankBalances: safeParse(ap.bankBalancesRegister, prev.bankBalances),
-          }));
+          // Only override with saved appraisal data if the appraisal has actually been saved before
+          const hasSavedData = ap.salesClientEstimate !== null || ap.engineDump !== null;
+
+          if (hasSavedData) {
+            setData((prev: CamData) => ({
+              ...prev,
+              // Override with saved CAM data (LO may have adjusted these)
+              loanPrincipal: ap.loanPrincipal || prev.loanPrincipal,
+              loanInterestRate: ap.loanInterestRate || prev.loanInterestRate,
+              loanTenorMonths: ap.loanTenorMonths || prev.loanTenorMonths,
+              ccdPercent: ap.ccdPercent || prev.ccdPercent,
+              upfrontFeePercent: ap.upfrontFeePercent || prev.upfrontFeePercent,
+              salesClientEstimate: ap.salesClientEstimate ?? prev.salesClientEstimate,
+              salesSpotCheck: ap.salesSpotCheck ?? prev.salesSpotCheck,
+              salesBookRecords: ap.salesBookRecord ?? prev.salesBookRecords,
+              salesBankStatement: ap.salesBankStatement ?? prev.salesBankStatement,
+              cashAtHand: ap.cashAtHand ?? prev.cashAtHand,
+              cashInBanks: ap.cashInBanks ?? prev.cashInBanks,
+              receivables: ap.receivables ?? prev.receivables,
+              shortTermLiabilities: ap.shortTermLiabilities ?? prev.shortTermLiabilities,
+              longTermLiabilities: ap.longTermLiabilities ?? prev.longTermLiabilities,
+              payables: ap.payables ?? prev.payables,
+              applicantAge: ap.applicantAge ?? prev.applicantAge,
+              managementExperience: ap.managementExperience ?? prev.managementExperience,
+              successionPlanVerified: ap.successionPlanVerified ?? prev.successionPlanVerified,
+              bankAccountVerified: ap.bankAccountVerified ?? prev.bankAccountVerified,
+              previousDefault: ap.previousDefault ?? prev.previousDefault,
+              competitionIntensity: ap.competitionIntensity ?? prev.competitionIntensity,
+              marketRiskCommentary: ap.marketRiskCommentary ?? prev.marketRiskCommentary,
+              appraisalGpsLat: ap.appraisalGpsLat ?? prev.appraisalGpsLat,
+              appraisalGpsLong: ap.appraisalGpsLong ?? prev.appraisalGpsLong,
+              // Structured arrays from JSON columns
+              inventory: safeParse(ap.inventorySnapshot, prev.inventory),
+              businessAssets: safeParse(ap.assetsRegister, {}).business || prev.businessAssets,
+              familyAssets: safeParse(ap.assetsRegister, {}).family || prev.familyAssets,
+              collaterals: safeParse(ap.collateralRegister, prev.collaterals),
+              guarantors: safeParse(ap.guarantorRegister, prev.guarantors),
+              guarantorBizVerifications: safeParse(ap.guarantorBizVerification, prev.guarantorBizVerifications),
+              bankBalances: safeParse(ap.bankBalancesRegister, prev.bankBalances),
+            }));
+          }
         }
       } catch (e) {
         console.error('CAM load error:', e);
@@ -403,6 +436,16 @@ export function CamView() {
       return null;
     }
   }, [data]);
+
+  // ── REAL-TIME AUTO-RECALCULATION (debounced 800ms) ──
+  // Engine recalculates automatically as the LO types — no need to click "Recalculate"
+  useEffect(() => {
+    if (loading) return;
+    const timer = setTimeout(() => {
+      recalcEngine();
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [data, loading]);
 
   const updateField = (key: string, value: any) => {
     setData(prev => ({ ...prev, [key]: value }));
@@ -894,6 +937,102 @@ export function CamView() {
         </div>
       </div>
 
+      {/* ── LIVE RISK DASHBOARD — updates in real-time as LO types ── */}
+      {engineResult && !isLocked && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+          {/* Risk Grade */}
+          <div className={cn('rounded-lg p-3 border-2 text-center', 
+            engineResult.riskGrade.grade === 'A' && 'border-emerald-300 bg-emerald-50',
+            engineResult.riskGrade.grade === 'B' && 'border-green-300 bg-green-50',
+            engineResult.riskGrade.grade === 'C' && 'border-amber-300 bg-amber-50',
+            engineResult.riskGrade.grade === 'D' && 'border-orange-300 bg-orange-50',
+            engineResult.riskGrade.grade === 'F' && 'border-red-300 bg-red-50',
+          )}>
+            <p className="text-[9px] uppercase text-slate-500 font-semibold">Risk Grade</p>
+            <p className={cn('text-2xl font-bold',
+              engineResult.riskGrade.grade === 'A' && 'text-emerald-700',
+              engineResult.riskGrade.grade === 'B' && 'text-green-700',
+              engineResult.riskGrade.grade === 'C' && 'text-amber-700',
+              engineResult.riskGrade.grade === 'D' && 'text-orange-700',
+              engineResult.riskGrade.grade === 'F' && 'text-red-700',
+            )}>{engineResult.riskGrade.grade}</p>
+            <p className="text-[8px] text-slate-400">{engineResult.riskGrade.label}</p>
+          </div>
+
+          {/* DSR */}
+          <div className={cn('rounded-lg p-3 border-2 text-center',
+            engineResult.ratios.dsr > 0.45 ? 'border-red-300 bg-red-50' :
+            engineResult.ratios.dsr > 0.35 ? 'border-amber-300 bg-amber-50' :
+            'border-emerald-300 bg-emerald-50'
+          )}>
+            <p className="text-[9px] uppercase text-slate-500 font-semibold">DSR</p>
+            <p className={cn('text-2xl font-bold',
+              engineResult.ratios.dsr > 0.45 ? 'text-red-600' :
+              engineResult.ratios.dsr > 0.35 ? 'text-amber-600' :
+              'text-emerald-600'
+            )}>{(engineResult.ratios.dsr * 100).toFixed(1)}%</p>
+            <p className="text-[8px] text-slate-400">Limit: ≤45%</p>
+          </div>
+
+          {/* Gearing */}
+          <div className={cn('rounded-lg p-3 border-2 text-center',
+            engineResult.ratios.gearingRatio > 0.35 ? 'border-red-300 bg-red-50' :
+            engineResult.ratios.gearingRatio > 0.25 ? 'border-amber-300 bg-amber-50' :
+            'border-emerald-300 bg-emerald-50'
+          )}>
+            <p className="text-[9px] uppercase text-slate-500 font-semibold">Gearing</p>
+            <p className={cn('text-2xl font-bold',
+              engineResult.ratios.gearingRatio > 0.35 ? 'text-red-600' :
+              engineResult.ratios.gearingRatio > 0.25 ? 'text-amber-600' :
+              'text-emerald-600'
+            )}>{(engineResult.ratios.gearingRatio * 100).toFixed(1)}%</p>
+            <p className="text-[8px] text-slate-400">Limit: ≤35%</p>
+          </div>
+
+          {/* Collateral Coverage */}
+          <div className={cn('rounded-lg p-3 border-2 text-center',
+            engineResult.collateralCoverage.coveragePercent < 100 ? 'border-red-300 bg-red-50' :
+            engineResult.collateralCoverage.coveragePercent < 150 ? 'border-amber-300 bg-amber-50' :
+            'border-emerald-300 bg-emerald-50'
+          )}>
+            <p className="text-[9px] uppercase text-slate-500 font-semibold">Coverage</p>
+            <p className={cn('text-2xl font-bold',
+              engineResult.collateralCoverage.coveragePercent < 100 ? 'text-red-600' :
+              engineResult.collateralCoverage.coveragePercent < 150 ? 'text-amber-600' :
+              'text-emerald-600'
+            )}>{engineResult.collateralCoverage.coveragePercent.toFixed(0)}%</p>
+            <p className="text-[8px] text-slate-400">Min: ≥100%</p>
+          </div>
+
+          {/* Net Profit */}
+          <div className={cn('rounded-lg p-3 border-2 text-center',
+            engineResult.pnl.netProfit < 0 ? 'border-red-300 bg-red-50' :
+            'border-emerald-300 bg-emerald-50'
+          )}>
+            <p className="text-[9px] uppercase text-slate-500 font-semibold">Net Profit/mo</p>
+            <p className={cn('text-lg font-bold',
+              engineResult.pnl.netProfit < 0 ? 'text-red-600' : 'text-emerald-600'
+            )}>₦{(engineResult.pnl.netProfit || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p>
+            <p className="text-[8px] text-slate-400">After all expenses</p>
+          </div>
+
+          {/* Engine Verdict */}
+          <div className={cn('rounded-lg p-3 border-2 text-center',
+            engineResult.engineVerdict === 'REJECT' ? 'border-red-300 bg-red-50' :
+            engineResult.engineVerdict === 'REVIEW' ? 'border-amber-300 bg-amber-50' :
+            'border-emerald-300 bg-emerald-50'
+          )}>
+            <p className="text-[9px] uppercase text-slate-500 font-semibold">Verdict</p>
+            <p className={cn('text-lg font-bold',
+              engineResult.engineVerdict === 'REJECT' ? 'text-red-600' :
+              engineResult.engineVerdict === 'REVIEW' ? 'text-amber-600' :
+              'text-emerald-600'
+            )}>{engineResult.engineVerdict}</p>
+            <p className="text-[8px] text-slate-400">Score: {engineResult.finalScore}/100</p>
+          </div>
+        </div>
+      )}
+
       {/* L1: Validation errors panel — shows all blocking issues */}
       {canEdit && validationErrors.length > 0 && !isLocked && (
         <div className="rounded-md bg-red-50 border border-red-200 px-4 py-3">
@@ -1321,8 +1460,10 @@ function ProfileTab({ data, update, loan }: any) {
   const b = u?.business;
   return (
     <div className="space-y-6">
+      {/* Client Identity — from onboarding (read-only) */}
       <div>
-        <h3 className="text-base font-bold text-slate-900 mb-3">Client Identity</h3>
+        <h3 className="text-base font-bold text-slate-900 mb-1">Client Identity</h3>
+        <p className="text-xs text-slate-400 mb-3">Auto-populated from onboarding — read only</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Field label="First Name" value={u?.firstName} readOnly />
           <Field label="Last Name" value={u?.lastName} readOnly />
@@ -1335,12 +1476,30 @@ function ProfileTab({ data, update, loan }: any) {
         </div>
       </div>
 
+      {/* Loan Terms — from onboarding (read-only during LO phase) */}
       <div>
-        <h3 className="text-base font-bold text-slate-900 mb-3">CAM Profile Fields</h3>
+        <h3 className="text-base font-bold text-slate-900 mb-1">Loan Terms (Requested)</h3>
+        <p className="text-xs text-slate-400 mb-3">Auto-populated from customer application — HOC may adjust during structuring</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Field label="Loan Principal (₦)" type="number" value={data.loanPrincipal} onChange={(v: any) => update('loanPrincipal', Number(v))} />
+          <Field label="Interest Rate (% p.a.)" type="number" value={data.loanInterestRate} onChange={(v: any) => update('loanInterestRate', Number(v))} />
+          <Field label="Tenor (months)" type="number" value={data.loanTenorMonths} onChange={(v: any) => update('loanTenorMonths', Number(v))} />
+          <SelectField label="Repayment Method" value={data.repaymentMethod} onChange={(v: any) => update('repaymentMethod', v)} options={['REDUCING', 'FLAT']} />
+          <Field label="CCD (%)" type="number" value={data.ccdPercent} onChange={(v: any) => update('ccdPercent', Number(v))} />
+          <Field label="Upfront Fee (%)" type="number" value={data.upfrontFeePercent} onChange={(v: any) => update('upfrontFeePercent', Number(v))} />
+          <Field label="Loan Purpose" value={data.loanPurpose || '—'} readOnly />
+          <Field label="Sector" value={data.selectedSectorName || b?.sectorRef?.name || '—'} readOnly />
+        </div>
+      </div>
+
+      {/* CAM-Specific Risk Assessment Fields */}
+      <div>
+        <h3 className="text-base font-bold text-slate-900 mb-1">CAM Risk Assessment</h3>
+        <p className="text-xs text-slate-400 mb-3">Fields specific to credit appraisal — completed by Loan Officer</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Field label="Applicant Age" type="number" value={data.applicantAge} onChange={(v: any) => update('applicantAge', Number(v))} />
-          <Field label="Years at Address" type="number" value={data.yearsAtAddress} onChange={(v: any) => update('yearsAtAddress', Number(v))} />
-          <Field label="Years in Operation" type="number" value={data.yearsInOperation} onChange={(v: any) => update('yearsInOperation', Number(v))} />
+          <Field label="Years at Address (auto)" type="number" value={data.yearsAtAddress} readOnly />
+          <Field label="Years in Operation (auto)" type="number" value={data.yearsInOperation} readOnly />
           <Field label="Management Experience (yrs)" type="number" value={data.managementExperience} onChange={(v: any) => update('managementExperience', Number(v))} />
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
@@ -1354,17 +1513,15 @@ function ProfileTab({ data, update, loan }: any) {
         </div>
       </div>
 
+      {/* Sector & Zonification — auto-populated, read-only */}
       <div>
-        <h3 className="text-base font-bold text-slate-900 mb-3">Loan Parameters</h3>
+        <h3 className="text-base font-bold text-slate-900 mb-1">Sector & Zonification (Auto)</h3>
+        <p className="text-xs text-slate-400 mb-3">Auto-populated from business sector and location</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Field label="Loan Principal (₦)" type="number" value={data.loanPrincipal} onChange={(v: any) => update('loanPrincipal', Number(v))} />
-          <Field label="Interest Rate (% p.a.)" type="number" value={data.loanInterestRate} onChange={(v: any) => update('loanInterestRate', Number(v))} />
-          <Field label="Tenor (months)" type="number" value={data.loanTenorMonths} onChange={(v: any) => update('loanTenorMonths', Number(v))} />
-          <SelectField label="Repayment Method" value={data.repaymentMethod} onChange={(v: any) => update('repaymentMethod', v)} options={['REDUCING', 'FLAT']} />
-          <Field label="CCD (%)" type="number" value={data.ccdPercent} onChange={(v: any) => update('ccdPercent', Number(v))} />
-          <Field label="Upfront Fee (%)" type="number" value={data.upfrontFeePercent} onChange={(v: any) => update('upfrontFeePercent', Number(v))} />
-          <Field label="Sector Risk Score (0-1)" type="number" value={data.sectorRiskScore} onChange={(v: any) => update('sectorRiskScore', Number(v))} />
-          <Field label="Sector Benchmark Margin (%)" type="number" value={data.sectorBenchmarkMargin} onChange={(v: any) => update('sectorBenchmarkMargin', Number(v))} />
+          <Field label="Sector Risk Score (auto)" type="number" value={data.sectorRiskScore} readOnly />
+          <Field label="Benchmark Margin % (auto)" type="number" value={data.sectorBenchmarkMargin} readOnly />
+          <Field label="Business Location" value={data.businessLocation || '—'} readOnly />
+          <Field label="Zonification Rating" value={lookupLocationRating(data.businessLocation)?.rating?.toString() || '—'} readOnly />
         </div>
       </div>
 
@@ -1584,25 +1741,33 @@ function BusinessTab({ data, update, loan }: any) {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-base font-bold text-slate-900 mb-3">Business Profile</h3>
+        <h3 className="text-base font-bold text-slate-900 mb-1">Business Profile (From Onboarding)</h3>
+        <p className="text-xs text-slate-400 mb-3">Auto-populated from customer onboarding — verify during field visitation</p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <Field label="Business Name" value={b?.name} readOnly />
-          <Field label="Sector" value={b?.sector} readOnly />
+          <Field label="Sector" value={b?.sectorRef?.name || b?.sector} readOnly />
           <Field label="Legal Structure" value={b?.legalStructure} readOnly />
           <Field label="RC/BN Number" value={b?.rcBnNumber} readOnly />
           <Field label="Date Established" value={b?.dateEstablished ? new Date(b.dateEstablished).toLocaleDateString() : ''} readOnly />
-          <Field label="Years in Operation" value={b?.yearsInOperation} readOnly />
-          <Field label="Business Worth (₦)" type="number" value={data.businessWorth || b?.businessWorth} onChange={(v: any) => update('businessWorth', Number(v))} />
-          <Field label="Stock Value (₦)" type="number" value={data.totalStockValue || b?.stockValue} onChange={(v: any) => update('totalStockValue', Number(v))} />
+          <Field label="Years in Operation" value={data.yearsInOperation} readOnly />
         </div>
       </div>
       <div>
-        <h3 className="text-base font-bold text-slate-900 mb-3">Location</h3>
+        <h3 className="text-base font-bold text-slate-900 mb-3">Business Location</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Field label="Shop Address" value={b?.shopAddress} readOnly />
           <Field label="Landmark" value={b?.landmark} readOnly />
           <Field label="State" value={b?.state} readOnly />
           <Field label="Ownership Status" value={b?.ownershipStatus} readOnly />
+        </div>
+      </div>
+      {/* Business Verification Checkboxes */}
+      <div>
+        <h3 className="text-base font-bold text-slate-900 mb-3">Business Verification</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <CheckField label="Business visually confirmed during visitation" checked={data.businessVerified || false} onChange={(v: any) => update('businessVerified', v)} />
+          <CheckField label="Stock level matches declared value" checked={data.stockMatchesDeclared || false} onChange={(v: any) => update('stockMatchesDeclared', v)} />
+          <CheckField label="Business activity matches sector" checked={data.activityMatchesSector || false} onChange={(v: any) => update('activityMatchesSector', v)} />
         </div>
       </div>
     </div>
@@ -1619,9 +1784,9 @@ function SalesTab({ data, update, engineResult }: any) {
   // ── SECTION 1: Weekly Sales per Client Estimation (Excel rows 88-99) ──
   // Grid: Good/Average/Bad rows × Monday-Sunday columns
   const weeklyGrid = data.weeklyGrid || {
-    good:  { monday: 0, tuesday: 0, wednesday: 20000000, thursday: 0, friday: 20000000, saturday: 20000000, sunday: 0 },
-    average: { monday: 15000000, tuesday: 18000000, wednesday: 0, thursday: 0, friday: 0, saturday: 0, sunday: 0 },
-    bad:   { monday: 0, tuesday: 0, wednesday: 0, thursday: 5000000, friday: 0, saturday: 0, sunday: 0 },
+    good:  { monday: 0, tuesday: 0, wednesday: 0, thursday: 0, friday: 0, saturday: 0, sunday: 0 },
+    average: { monday: 0, tuesday: 0, wednesday: 0, thursday: 0, friday: 0, saturday: 0, sunday: 0 },
+    bad:   { monday: 0, tuesday: 0, wednesday: 0, thursday: 0, friday: 0, saturday: 0, sunday: 0 },
   };
   const updGrid = (row: string, day: string, val: number) => {
     update('weeklyGrid', { ...weeklyGrid, [row]: { ...weeklyGrid[row], [day]: val } });
@@ -1632,7 +1797,7 @@ function SalesTab({ data, update, engineResult }: any) {
   const monthlyClientEstimate = weeklyTotalGrid * 4;
 
   // ── SECTION 2: 3-Day Sales (Excel rows 101-108) ──
-  const threeDaySales = data.threeDaySales || { day1: 20000000, day2: 18000000, day3: 17000000 };
+  const threeDaySales = data.threeDaySales || { day1: 0, day2: 0, day3: 0 };
   const upd3Day = (k: string, v: number) => update('threeDaySales', { ...threeDaySales, [k]: v });
   const threeDayTotal = (Number(threeDaySales.day1) || 0) + (Number(threeDaySales.day2) || 0) + (Number(threeDaySales.day3) || 0);
   const monthly3Day = threeDayTotal * 8; // × 8 extrapolation factor per Excel

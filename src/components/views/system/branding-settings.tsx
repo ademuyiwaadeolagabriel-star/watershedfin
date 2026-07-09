@@ -367,6 +367,8 @@ export function BrandingSettingsView() {
               <Field label="Hero CTA Button Text" value={form.heroCtaText} onChange={(v) => update('heroCtaText', v)} disabled={!isSuper} />
               <Field label="Hero Secondary Button Text" value={form.heroCtaSecondary} onChange={(v) => update('heroCtaSecondary', v)} disabled={!isSuper} />
               <Field label="Hero Badge Text (shown above title)" value={form.heroBadge} onChange={(v) => update('heroBadge', v)} disabled={!isSuper} full />
+              <Field label="Hero Image URL (background photo)" value={form.heroImageUrl} onChange={(v) => update('heroImageUrl', v)} disabled={!isSuper} full />
+              <Field label="Hero Image Alt Text (for accessibility)" value={form.heroImageAlt} onChange={(v) => update('heroImageAlt', v)} disabled={!isSuper} full />
             </div>
 
             {/* Stats Bar */}

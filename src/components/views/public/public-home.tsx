@@ -42,6 +42,24 @@ const DEFAULT_WHY_US = [
   { icon: 'ShieldCheck', title: 'Licensed Lender', desc: 'Fully licensed to operate as a loan company in Nigeria. Your data is protected.' },
   { icon: 'BadgeCheck', title: 'No Hidden Fees', desc: 'What you see is what you pay. Transparent pricing with every line item disclosed upfront.' },
   { icon: 'UserCheck', title: 'Dedicated Relationship Manager', desc: 'A real human who knows your business and is one call away — not a chatbot, not a queue.' },
+  { icon: 'TrendingUp', title: 'Competitive Rates', desc: 'Interest rates from 2% monthly with flexible tenors from 1 to 36 months. Structured to fit your cashflow.' },
+  { icon: 'Lock', title: 'Bank-Grade Security', desc: 'JWT-authenticated platform with CBN-compliant credit engine. Your data is encrypted and never shared.' },
+];
+
+const DEFAULT_WHO_WE_SERVE = [
+  { icon: 'Wallet', title: 'Traders & Market Women', desc: 'Working capital for inventory restocking, seasonal demand spikes, and market expansion. From ₦100K to ₦5M.' },
+  { icon: 'TrendingUp', title: 'SMEs & Growing Businesses', desc: 'Business expansion loans for new locations, equipment purchase, and staff hiring. From ₦5M to ₦20M.' },
+  { icon: 'Banknote', title: 'Manufacturers & Contractors', desc: 'LPO financing, invoice discounting, and asset finance for large orders and project execution. Up to ₦50M.' },
+  { icon: 'Users', title: 'Cooperatives & Groups', desc: 'Group lending with competitive rates and collective collateral options. Tailored repayment structures.' },
+];
+
+const DEFAULT_FAQS = [
+  { q: 'What documents do I need to apply?', a: 'You need your BVN, a valid ID (NIN, Driver\'s License, or International Passport), bank statements for the last 6 months, and proof of business address. If you have CAC registration, include your certificate.' },
+  { q: 'How much can I borrow?', a: 'Loan amounts range from ₦100,000 to ₦50,000,000 depending on your business cashflow, credit history, and collateral. Our credit engine evaluates your repayment capacity using 30+ financial formulas.' },
+  { q: 'What is the interest rate?', a: 'Interest rates start from 2% monthly (24% annually) for SME loans. Rates vary by product type, loan amount, tenor, and risk grade. You\'ll see your exact rate before accepting the offer.' },
+  { q: 'How long does approval take?', a: 'Qualified applications are typically approved within 48 hours. Complex applications (₦20M+) may take 3-5 business days due to additional risk assessment and CRO review.' },
+  { q: 'Do I need collateral?', a: 'Most loans require collateral coverage of at least 100% of the loan amount (using Forced Sale Value). Acceptable collateral includes real estate, vehicles, equipment, cash deposits, and stock. We also accept guarantors.' },
+  { q: 'Can I repay early?', a: 'Yes. You can repay early without penalty. Interest is calculated on reducing balance for most products, so early repayment saves you money.' },
 ];
 
 const DEFAULT_REVIEWS = [
@@ -93,66 +111,165 @@ export function PublicHome() {
       <PublicNav settings={settings} />
 
       <main className="flex-1">
-        {/* ═══ 1. HERO ═══ */}
-        <section className="relative overflow-hidden bg-gradient-to-br from-emerald-700 via-emerald-800 to-emerald-950 text-white">
-          <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 25% 25%, white 1px, transparent 1px), radial-gradient(circle at 75% 75%, white 1px, transparent 1px)', backgroundSize: '32px 32px, 48px 48px' }} />
-          <div className="absolute -top-24 -right-24 h-96 w-96 rounded-full bg-emerald-400/20 blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-32 -left-32 h-96 w-96 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
+        {/* ═══ 1. HERO — Premium animated banner with real imagery ═══ */}
+        <section className="relative min-h-[600px] lg:min-h-[700px] overflow-hidden bg-slate-900">
+          {/* Background image with overlay */}
+          <motion.div
+            initial={{ scale: 1.1, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 1.2, ease: 'easeOut' }}
+            className="absolute inset-0"
+          >
+            <img
+              src={cfg.heroImageUrl || 'https://sfile.chatglm.cn/images-ppt/87e17a98030d.jpg'}
+              alt={cfg.heroImageAlt || 'Nigerian entrepreneur'}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-900/95 via-emerald-800/85 to-slate-900/80" />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent" />
+          </motion.div>
 
-          <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16 lg:py-24">
-            <div className="grid lg:grid-cols-2 gap-12 items-center">
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-                <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur px-3 py-1 text-xs font-medium text-emerald-200 mb-6">
+          {/* Floating glow orbs */}
+          <motion.div
+            animate={{ x: [0, 30, 0], y: [0, -20, 0] }}
+            transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
+            className="absolute top-10 right-10 h-72 w-72 rounded-full bg-emerald-400/10 blur-3xl pointer-events-none"
+          />
+          <motion.div
+            animate={{ x: [0, -40, 0], y: [0, 30, 0] }}
+            transition={{ duration: 10, repeat: Infinity, ease: 'easeInOut' }}
+            className="absolute bottom-10 left-10 h-96 w-96 rounded-full bg-teal-400/10 blur-3xl pointer-events-none"
+          />
+
+          {/* Content */}
+          <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 lg:py-28 min-h-[600px] lg:min-h-[700px] flex items-center">
+            <div className="grid lg:grid-cols-12 gap-8 items-center w-full">
+              {/* Left: Text content */}
+              <motion.div
+                initial={{ opacity: 0, x: -30 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.8, delay: 0.3 }}
+                className="lg:col-span-7 text-white"
+              >
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.5 }}
+                  className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 px-4 py-1.5 text-xs font-medium text-emerald-100 mb-6"
+                >
                   <ShieldCheck className="h-3.5 w-3.5" /> {cfg.heroBadge}
-                </div>
-                <h1 className="text-4xl lg:text-5xl font-bold leading-tight mb-4">
+                </motion.div>
+
+                <motion.h1
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.7, delay: 0.6 }}
+                  className="text-4xl lg:text-6xl font-bold leading-tight mb-5 tracking-tight"
+                >
                   {cfg.heroTitle.replace(cfg.heroHighlight, '').trim()}{' '}
-                  <span className="text-emerald-300">{cfg.heroHighlight}</span>
-                </h1>
-                <p className="text-lg text-emerald-100/90 max-w-xl leading-relaxed mb-8">
+                  <span className="bg-gradient-to-r from-emerald-300 to-teal-200 bg-clip-text text-transparent">
+                    {cfg.heroHighlight}
+                  </span>
+                </motion.h1>
+
+                <motion.p
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.7, delay: 0.8 }}
+                  className="text-base lg:text-lg text-emerald-50/90 max-w-xl leading-relaxed mb-8"
+                >
                   {cfg.heroSubtitle}
-                </p>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <button onClick={() => go('onboarding')} className="inline-flex items-center gap-2 rounded-lg bg-white text-emerald-700 px-6 py-3 text-sm font-bold shadow-lg hover:bg-emerald-50 transition-colors">
-                    {cfg.heroCtaText} <ArrowRight className="h-4 w-4" />
+                </motion.p>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.7, delay: 1.0 }}
+                  className="flex flex-col sm:flex-row gap-3"
+                >
+                  <button
+                    onClick={() => go('onboarding')}
+                    className="group inline-flex items-center gap-2 rounded-xl bg-white text-emerald-700 px-7 py-3.5 text-sm font-bold shadow-2xl shadow-emerald-900/30 hover:bg-emerald-50 hover:scale-105 transition-all duration-300"
+                  >
+                    {cfg.heroCtaText}
+                    <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
                   </button>
-                  <button onClick={() => go('customer-login')} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600/30 backdrop-blur border border-white/20 text-white px-6 py-3 text-sm font-semibold hover:bg-emerald-600/40 transition-colors">
+                  <button
+                    onClick={() => go('customer-login')}
+                    className="inline-flex items-center gap-2 rounded-xl bg-white/10 backdrop-blur-md border border-white/30 text-white px-7 py-3.5 text-sm font-semibold hover:bg-white/20 hover:scale-105 transition-all duration-300"
+                  >
                     {cfg.heroCtaSecondary}
                   </button>
-                </div>
-                <div className="flex items-center gap-6 mt-8 text-sm text-emerald-200">
-                  <span className="flex items-center gap-1.5"><Clock className="h-4 w-4" /> 48hr Disbursement</span>
-                  <span className="flex items-center gap-1.5"><ShieldCheck className="h-4 w-4" /> Licensed Lender</span>
-                  <span className="flex items-center gap-1.5"><BadgeCheck className="h-4 w-4" /> No Hidden Fees</span>
-                </div>
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.7, delay: 1.2 }}
+                  className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-8 text-sm text-emerald-100"
+                >
+                  <span className="flex items-center gap-1.5"><Clock className="h-4 w-4 text-emerald-300" /> 48hr Disbursement</span>
+                  <span className="flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-emerald-300" /> Licensed Lender</span>
+                  <span className="flex items-center gap-1.5"><BadgeCheck className="h-4 w-4 text-emerald-300" /> No Hidden Fees</span>
+                </motion.div>
               </motion.div>
 
-              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.2 }} className="hidden lg:block">
-                <div className="relative">
-                  <div className="absolute inset-0 bg-gradient-to-br from-emerald-400/30 to-emerald-600/30 rounded-2xl blur-2xl" />
-                  <div className="relative bg-white/10 backdrop-blur rounded-2xl p-6 border border-white/20">
+              {/* Right: Floating loan card preview */}
+              <motion.div
+                initial={{ opacity: 0, x: 30 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.8, delay: 0.5 }}
+                className="hidden lg:block lg:col-span-5"
+              >
+                <motion.div
+                  animate={{ y: [0, -10, 0] }}
+                  transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                  className="relative"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-emerald-400/30 to-teal-500/30 rounded-3xl blur-2xl" />
+                  <div className="relative bg-white/10 backdrop-blur-xl rounded-3xl p-7 border border-white/20 shadow-2xl">
                     <div className="flex items-center justify-between mb-6">
                       <div>
-                        <p className="text-emerald-200 text-xs">Loan Dashboard Preview</p>
-                        <p className="text-lg font-bold">LN-2026-0042</p>
+                        <p className="text-emerald-200 text-xs uppercase tracking-wider">Loan Dashboard</p>
+                        <p className="text-xl font-bold">LN-2026-0042</p>
                       </div>
-                      <span className="rounded-full bg-emerald-500 px-3 py-1 text-xs font-bold">APPROVED</span>
+                      <span className="rounded-full bg-emerald-500 px-3 py-1 text-xs font-bold shadow-lg">APPROVED</span>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div><p className="text-emerald-200 text-[10px] uppercase">Amount</p><p className="text-2xl font-bold">₦2.5M</p></div>
-                      <div><p className="text-emerald-200 text-[10px] uppercase">Monthly</p><p className="text-2xl font-bold">₦236K</p></div>
-                      <div><p className="text-emerald-200 text-[10px] uppercase">Rate</p><p className="text-lg font-bold">24% p.a.</p></div>
-                      <div><p className="text-emerald-200 text-[10px] uppercase">Tenor</p><p className="text-lg font-bold">12 months</p></div>
+                    <div className="grid grid-cols-2 gap-4 mb-5">
+                      <div className="bg-white/5 rounded-xl p-3 border border-white/10">
+                        <p className="text-emerald-200 text-[10px] uppercase">Amount</p>
+                        <p className="text-2xl font-bold">₦2.5M</p>
+                      </div>
+                      <div className="bg-white/5 rounded-xl p-3 border border-white/10">
+                        <p className="text-emerald-200 text-[10px] uppercase">Monthly</p>
+                        <p className="text-2xl font-bold">₦236K</p>
+                      </div>
+                      <div className="bg-white/5 rounded-xl p-3 border border-white/10">
+                        <p className="text-emerald-200 text-[10px] uppercase">Rate</p>
+                        <p className="text-lg font-bold">24% p.a.</p>
+                      </div>
+                      <div className="bg-white/5 rounded-xl p-3 border border-white/10">
+                        <p className="text-emerald-200 text-[10px] uppercase">Tenor</p>
+                        <p className="text-lg font-bold">12 months</p>
+                      </div>
                     </div>
-                    <div className="mt-4 h-2 rounded-full bg-white/20 overflow-hidden">
-                      <div className="h-full bg-emerald-400 rounded-full" style={{ width: '75%' }} />
+                    <div className="h-2.5 rounded-full bg-white/20 overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: '75%' }}
+                        transition={{ duration: 1.5, delay: 1.5, ease: 'easeOut' }}
+                        className="h-full bg-gradient-to-r from-emerald-400 to-teal-300 rounded-full"
+                      />
                     </div>
-                    <p className="text-emerald-200 text-[10px] mt-1">9 of 12 payments made</p>
+                    <p className="text-emerald-200 text-[10px] mt-1.5">9 of 12 payments made</p>
                   </div>
-                </div>
+                </motion.div>
               </motion.div>
             </div>
           </div>
+
+          {/* Bottom fade */}
+          <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-white to-transparent" />
         </section>
 
         {/* ═══ 2. STATS BAR ═══ */}
@@ -256,6 +373,42 @@ export function PublicHome() {
           </div>
         </section>
 
+        {/* ═══ 5b. WHO WE SERVE ═══ */}
+        <section className="py-16 lg:py-24 bg-slate-50">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-bold text-slate-900 mb-3">Who We Serve</h2>
+              <p className="text-slate-600 max-w-2xl mx-auto">Tailored financing solutions for every stage of your business journey</p>
+            </div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {DEFAULT_WHO_WE_SERVE.map((item, i) => {
+                const Icon = ICON_MAP[item.icon] || Wallet;
+                return (
+                  <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }}
+                    className="bg-white rounded-xl p-6 border border-slate-200 hover:border-emerald-300 hover:shadow-lg transition-all">
+                    <div className="inline-flex h-12 w-12 items-center justify-center rounded-lg bg-emerald-50 mb-4">
+                      <Icon className="h-6 w-6 text-emerald-600" />
+                    </div>
+                    <h3 className="text-sm font-bold text-slate-900 mb-2">{item.title}</h3>
+                    <p className="text-xs text-slate-500 leading-relaxed">{item.desc}</p>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* ═══ 5c. LOAN CALCULATOR ═══ */}
+        <section className="py-16 lg:py-24">
+          <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-bold text-slate-900 mb-3">Estimate Your Repayment</h2>
+              <p className="text-slate-600">Use our calculator to see your estimated monthly payment. No commitment required.</p>
+            </div>
+            <LoanCalculator onApply={() => go('onboarding')} />
+          </div>
+        </section>
+
         {/* ═══ 6. TESTIMONIALS ═══ */}
         {reviews.length > 0 && (
           <section className="bg-slate-50 py-16 lg:py-24">
@@ -286,6 +439,27 @@ export function PublicHome() {
             </div>
           </section>
         )}
+
+        {/* ═══ 6b. FAQ ═══ */}
+        <section className="py-16 lg:py-24">
+          <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-bold text-slate-900 mb-3">Frequently Asked Questions</h2>
+              <p className="text-slate-600">Everything you need to know about our lending process</p>
+            </div>
+            <div className="space-y-3">
+              {DEFAULT_FAQS.map((faq, i) => (
+                <FaqItem key={i} q={faq.q} a={faq.a} />
+              ))}
+            </div>
+            <div className="text-center mt-8">
+              <p className="text-sm text-slate-500 mb-3">Still have questions?</p>
+              <button onClick={() => go('onboarding')} className="text-sm font-semibold text-emerald-600 hover:text-emerald-700">
+                Talk to us — Apply now →
+              </button>
+            </div>
+          </div>
+        </section>
 
         {/* ═══ 7. WHISTLEBLOWER HOTLINE ═══ */}
         <WhistleblowerSection />
@@ -565,5 +739,137 @@ function WhistleblowerSection() {
         )}
       </div>
     </section>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FAQ ITEM — collapsible question/answer
+// ═══════════════════════════════════════════════════════════════════════════
+
+function FaqItem({ q, a }: { q: string; a: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border border-slate-200 rounded-lg overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between gap-4 p-4 text-left hover:bg-slate-50 transition-colors"
+      >
+        <span className="text-sm font-semibold text-slate-900">{q}</span>
+        <ChevronRight className={cn('h-4 w-4 text-slate-400 flex-shrink-0 transition-transform', open && 'rotate-90')} />
+      </button>
+      {open && (
+        <div className="px-4 pb-4 text-sm text-slate-600 leading-relaxed">
+          {a}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOAN CALCULATOR — interactive monthly payment estimator
+// ═══════════════════════════════════════════════════════════════════════════
+
+function LoanCalculator({ onApply }: { onApply: () => void }) {
+  const [amount, setAmount] = useState(2000000);
+  const [tenor, setTenor] = useState(12);
+  const [rate, setRate] = useState(3); // monthly rate %
+
+  const monthlyRate = rate / 100;
+  const monthlyPayment = monthlyRate === 0
+    ? amount / tenor
+    : (amount * monthlyRate * Math.pow(1 + monthlyRate, tenor)) / (Math.pow(1 + monthlyRate, tenor) - 1);
+  const totalPayable = monthlyPayment * tenor;
+  const totalInterest = totalPayable - amount;
+
+  const fmt = (n: number) => '₦' + n.toLocaleString('en-NG', { maximumFractionDigits: 0 });
+
+  return (
+    <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+      <div className="grid lg:grid-cols-2">
+        {/* Inputs */}
+        <div className="p-8 space-y-6">
+          <div>
+            <label className="text-xs font-semibold text-slate-700 mb-2 block">Loan Amount</label>
+            <input
+              type="range"
+              min="100000"
+              max="50000000"
+              step="100000"
+              value={amount}
+              onChange={(e) => setAmount(Number(e.target.value))}
+              className="w-full accent-emerald-600"
+            />
+            <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+              <span>₦100K</span>
+              <span className="text-emerald-600 font-bold text-sm">{fmt(amount)}</span>
+              <span>₦50M</span>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-700 mb-2 block">Repayment Period (months)</label>
+            <input
+              type="range"
+              min="1"
+              max="36"
+              step="1"
+              value={tenor}
+              onChange={(e) => setTenor(Number(e.target.value))}
+              className="w-full accent-emerald-600"
+            />
+            <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+              <span>1 mo</span>
+              <span className="text-emerald-600 font-bold text-sm">{tenor} months</span>
+              <span>36 mo</span>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-700 mb-2 block">Interest Rate (monthly %)</label>
+            <input
+              type="range"
+              min="1"
+              max="5"
+              step="0.5"
+              value={rate}
+              onChange={(e) => setRate(Number(e.target.value))}
+              className="w-full accent-emerald-600"
+            />
+            <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+              <span>1%</span>
+              <span className="text-emerald-600 font-bold text-sm">{rate}% / mo</span>
+              <span>5%</span>
+            </div>
+          </div>
+        </div>
+        {/* Results */}
+        <div className="bg-gradient-to-br from-emerald-700 to-emerald-900 p-8 text-white flex flex-col justify-center">
+          <p className="text-emerald-200 text-xs uppercase tracking-wider mb-2">Estimated Monthly Payment</p>
+          <p className="text-4xl font-bold mb-6">{fmt(monthlyPayment)}</p>
+          <div className="space-y-2 text-sm border-t border-white/20 pt-4">
+            <div className="flex justify-between">
+              <span className="text-emerald-200">Principal</span>
+              <span className="font-semibold">{fmt(amount)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-emerald-200">Total Interest</span>
+              <span className="font-semibold">{fmt(totalInterest)}</span>
+            </div>
+            <div className="flex justify-between border-t border-white/20 pt-2">
+              <span className="text-emerald-200">Total Payable</span>
+              <span className="font-bold">{fmt(totalPayable)}</span>
+            </div>
+          </div>
+          <button
+            onClick={onApply}
+            className="mt-6 w-full rounded-lg bg-white text-emerald-700 px-4 py-3 text-sm font-bold hover:bg-emerald-50 transition-colors flex items-center justify-center gap-2"
+          >
+            Apply Now <ArrowRight className="h-4 w-4" />
+          </button>
+          <p className="text-[10px] text-emerald-300 mt-3 text-center">
+            * Estimates only. Actual rates depend on credit assessment.
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }

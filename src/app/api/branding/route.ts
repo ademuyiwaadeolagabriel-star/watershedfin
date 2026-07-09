@@ -5,6 +5,7 @@ export const runtime = 'nodejs';
 
 const HOMEPAGE_FIELDS = [
   'heroTitle', 'heroHighlight', 'heroSubtitle', 'heroCtaText', 'heroCtaSecondary', 'heroBadge',
+  'heroImageUrl', 'heroImageAlt',
   'stat1Label', 'stat1Value', 'stat2Label', 'stat2Value', 'stat3Label', 'stat3Value', 'stat4Label', 'stat4Value',
   'sectionServicesTitle', 'sectionServicesSubtitle', 'sectionJourneyTitle',
   'sectionWhyTitle', 'sectionWhySubtitle', 'sectionCtaTitle', 'sectionCtaSubtitle', 'sectionCtaButton',
@@ -43,6 +44,8 @@ function serializeConfig(s: any) {
     heroCtaText: s.heroCtaText ?? 'Apply for Loan',
     heroCtaSecondary: s.heroCtaSecondary ?? 'Sign In',
     heroBadge: s.heroBadge ?? 'Licensed Loan Company · Registered in Nigeria',
+    heroImageUrl: s.heroImageUrl ?? 'https://sfile.chatglm.cn/images-ppt/87e17a98030d.jpg',
+    heroImageAlt: s.heroImageAlt ?? 'Nigerian entrepreneur in her shop',
     stat1Label: s.stat1Label ?? 'Disbursed', stat1Value: s.stat1Value ?? '₦5B+',
     stat2Label: s.stat2Label ?? 'Customers', stat2Value: s.stat2Value ?? '12,000+',
     stat3Label: s.stat3Label ?? 'Approval Rate', stat3Value: s.stat3Value ?? '98%',

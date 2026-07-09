@@ -26,6 +26,8 @@ export interface BrandingConfig {
   heroCtaText: string;
   heroCtaSecondary: string;
   heroBadge: string;
+  heroImageUrl: string;
+  heroImageAlt: string;
   stat1Label: string; stat1Value: string;
   stat2Label: string; stat2Value: string;
   stat3Label: string; stat3Value: string;
@@ -75,6 +77,8 @@ export const DEFAULT_BRANDING: BrandingConfig = {
   heroCtaText: 'Apply for Loan',
   heroCtaSecondary: 'Sign In',
   heroBadge: 'Licensed Loan Company · Registered in Nigeria',
+  heroImageUrl: 'https://sfile.chatglm.cn/images-ppt/87e17a98030d.jpg',
+  heroImageAlt: 'Nigerian entrepreneur in her shop',
   stat1Label: 'Disbursed', stat1Value: '₦5B+',
   stat2Label: 'Customers', stat2Value: '12,000+',
   stat3Label: 'Approval Rate', stat3Value: '98%',

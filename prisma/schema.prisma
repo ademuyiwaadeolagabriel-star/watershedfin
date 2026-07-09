@@ -1,203 +1,241 @@
+// ============================================================================
+// WATERSHED FINANCE LIMITED — Banking Platform Prisma Schema
+// ============================================================================
+// Full schema covering 15 modules:
+//   Identity, Onboarding, Branches, Loan Origination & Governance,
+//   Credit Appraisal (CAM), Risk Engine, MCC, Compliance, Audit,
+//   Treasury, Accounting, Savings, Investments, Communications, Settings
+// ============================================================================
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
+// ============================================================================
+// 1. IDENTITY & AUTH
+// ============================================================================
+
 model Admin {
-  id                      String                @id @default(cuid())
-  firstName               String
-  lastName                String
-  username                String                @unique
-  email                   String                @unique
-  password                String
-  phone                   String?
-  avatar                  String?
-  status                  Int                   @default(1)
-  role                    String                @default("admin")
-  roleType                String?
-  branchId                String?
-  token                   String?
-  tokenExpired            DateTime?
-  lastLogin               DateTime?
-  lastLoginIp             String?
-  loanOrigination         Boolean               @default(false)
-  loanVetting             Boolean               @default(false)
-  loanStructuring         Boolean               @default(false)
-  loanAnalyst             Boolean               @default(false)
-  loanRisk                Boolean               @default(false)
-  loanLegal               Boolean               @default(false)
-  loanCfoReview           Boolean               @default(false)
-  loanFinalization        Boolean               @default(false)
-  loanDisbursement        Boolean               @default(false)
-  loanPortfolio           Boolean               @default(false)
-  loanSupervisor          Boolean               @default(false)
-  loanMcc                 Boolean               @default(false)
-  onboarding              Boolean               @default(false)
-  kycVerify               Boolean               @default(false)
-  accountingView          Boolean               @default(false)
-  accountingPost          Boolean               @default(false)
-  treasuryOnboard         Boolean               @default(false)
-  treasuryBook            Boolean               @default(false)
-  treasuryAssets          Boolean               @default(false)
-  branchManage            Boolean               @default(false)
-  auditAccess             Boolean               @default(false)
-  internalControl         Boolean               @default(false)
-  compliance              Boolean               @default(false)
-  reportsGlobal           Boolean               @default(false)
-  generalSettings         Boolean               @default(false)
-  message                 Boolean               @default(true)
-  support                 Boolean               @default(false)
-  createdAt               DateTime              @default(now())
-  updatedAt               DateTime              @updatedAt
-  branch                  Branch?               @relation("BranchStaff", fields: [branchId], references: [id])
-  approvals               ApprovalLog[]
-  auditLogs               AuditLog[]
-  blogPosts               Blog[]                @relation("BlogAuthor")
-  managedBranches         Branch[]              @relation("BranchManager")
-  bmVisits                BranchManagerVisit[]
-  complianceConditions    ComplianceCondition[] @relation("ConditionsSetBy")
-  verifiedConditions      ComplianceCondition[] @relation("ConditionsVerifiedBy")
-  analystLoans            CreditAppraisal[]     @relation("AnalystAppraisals")
-  assignedExceptions      ExceptionReport[]     @relation("ExceptionAssignee")
-  exceptionReports        ExceptionReport[]     @relation("ExceptionReporter")
-  expenses                Expense[]
-  journalEntries          JournalEntry[]
-  bmVettedLoans           LoanApplicants[]      @relation("BmVettedLoans")
-  hocStructuredLoans      LoanApplicants[]      @relation("HocStructuredLoans")
-  loanOfficerLoans        LoanApplicants[]      @relation("LoanOfficerLoans")
-  loginHistory            LoginHistory[]
-  mccDecisions            MccDecision[]
-  approvedPayrollBatches  PayrollBatch[]        @relation("PayrollApprovedBy")
-  processedPayrollBatches PayrollBatch[]        @relation("PayrollProcessedBy")
-  riskAssessments         RiskAssessment[]      @relation("RiskOwner")
-  sentEmails              SentEmail[]
-  staffSalaries           StaffSalary[]         @relation("StaffSalaryForAdmin")
-  tillTransactions        TillTransaction[]
-  managedUsers            User[]                @relation("UserLoanOfficer")
+  id              String   @id @default(cuid())
+  firstName       String
+  lastName        String
+  username        String   @unique
+  email           String   @unique
+  password        String
+  phone           String?
+  avatar          String?
+  status          Int      @default(1) // 1=active, 0=suspended
+  role            String   @default("admin") // super, md, cfo, hoc, cro, legal, bm, analyst, loan, frontdesk, treasury, admin
+  roleType        String?  // alias used in workflow routing
+  branchId        String?
+  branch          Branch?  @relation("BranchStaff", fields: [branchId], references: [id])
+  token           String?
+  tokenExpired    DateTime?
+  lastLogin       DateTime?
+  lastLoginIp     String?
+
+  // Permission flags (condensed from 60+ flags into role-implied + granular)
+  // Core loan workflow
+  loanOrigination     Boolean @default(false)
+  loanVetting         Boolean @default(false)
+  loanStructuring     Boolean @default(false)
+  loanAnalyst         Boolean @default(false)
+  loanRisk            Boolean @default(false)
+  loanLegal           Boolean @default(false)
+  loanCfoReview       Boolean @default(false)
+  loanFinalization    Boolean @default(false)
+  loanDisbursement    Boolean @default(false)
+  loanPortfolio       Boolean @default(false)
+  loanSupervisor      Boolean @default(false)
+  loanMcc             Boolean @default(false)
+  // Module access
+  onboarding          Boolean @default(false)
+  kycVerify           Boolean @default(false)
+  accountingView      Boolean @default(false)
+  accountingPost      Boolean @default(false)
+  treasuryOnboard     Boolean @default(false)
+  treasuryBook        Boolean @default(false)
+  treasuryAssets      Boolean @default(false)
+  branchManage        Boolean @default(false)
+  auditAccess         Boolean @default(false)
+  internalControl     Boolean @default(false)
+  compliance          Boolean @default(false)
+  reportsGlobal       Boolean @default(false)
+  generalSettings     Boolean @default(false)
+  // Legacy/CMS
+  message             Boolean @default(true)
+  support             Boolean @default(false)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  loanOfficerLoans    LoanApplicants[] @relation("LoanOfficerLoans")
+  bmVettedLoans       LoanApplicants[] @relation("BmVettedLoans")
+  hocStructuredLoans  LoanApplicants[] @relation("HocStructuredLoans")
+  managedUsers        User[]            @relation("UserLoanOfficer")
+  analystLoans        CreditAppraisal[] @relation("AnalystAppraisals")
+  managedBranches     Branch[]          @relation("BranchManager")
+  bmVisits            BranchManagerVisit[]
+  mccDecisions        MccDecision[]
+  approvals           ApprovalLog[]
+  auditLogs           AuditLog[]
+  complianceConditions ComplianceCondition[]  @relation("ConditionsSetBy")
+  verifiedConditions  ComplianceCondition[]  @relation("ConditionsVerifiedBy")
+  riskAssessments     RiskAssessment[]       @relation("RiskOwner")
+  exceptionReports    ExceptionReport[]      @relation("ExceptionReporter")
+  assignedExceptions  ExceptionReport[]      @relation("ExceptionAssignee")
+  journalEntries      JournalEntry[]
+  tillTransactions    TillTransaction[]
+  processedPayrollBatches PayrollBatch[] @relation("PayrollProcessedBy")
+  approvedPayrollBatches  PayrollBatch[] @relation("PayrollApprovedBy")
+  staffSalaries       StaffSalary[] @relation("StaffSalaryForAdmin")
+  expenses            Expense[]
+  sentEmails          SentEmail[]
+  loginHistory        LoginHistory[]
+  blogPosts           Blog[]        @relation("BlogAuthor")
 
   @@index([branchId])
   @@index([role])
 }
 
 model User {
-  id                        String               @id @default(cuid())
-  firstName                 String
-  lastName                  String
-  email                     String?              @unique
-  phone                     String?              @unique
-  phoneCode                 String?
-  username                  String?
-  password                  String?
-  country                   String?
-  iso2                      String?
-  avatar                    String?
-  status                    Int                  @default(1)
-  accountType               String               @default("customer")
-  businessId                String?
-  branchId                  String?
-  staffId                   String?
-  assignedBranchId          String?
-  assignedBy                String?
-  assignedAt                DateTime?
-  assignmentStatus          String               @default("unassigned")
-  onboardingChannel         String?
-  createdBy                 String?
-  role                      String?
-  roleType                  String?
-  accountNumber             String?              @unique
-  merchantId                String?              @unique
-  referral                  String?
-  referredDate              DateTime?
-  refWaivers                Int                  @default(0)
-  bvn                       String?
-  nin                       String?
-  bvnVerified               Boolean              @default(false)
-  bvnVerifiedAt             DateTime?
-  bvnMatchScore             Int?
-  bvnPhotoPath              String?
-  ninVerified               Boolean              @default(false)
-  kycStatus                 String?
-  gender                    String?
-  maritalStatus             String?
-  religion                  String?
-  dob                       DateTime?
-  nationality               String?              @default("Nigerian")
-  address                   String?
-  nearestLandmark           String?
-  houseOwnership            String?
-  yearsAtResidence          Int?
-  dependents                Int?
-  state                     String?
-  lga                       String?
-  town                      String?
-  docPassportPath           String?
-  docIdCardPath             String?
-  guarantorFormPath         String?
-  hasExternalLoans          Boolean              @default(false)
-  isGuarantorElsewhere      Boolean              @default(false)
-  marketingChannel          String?
-  previousLoanAmount        Float?
-  previousDefault           Boolean              @default(false)
-  bankAccountVerified       Boolean              @default(false)
-  bankName                  String?
-  loanPurpose               String?
-  kinFirstName              String?
-  kinLastName               String?
-  kinMobile                 String?
-  kinEmail                  String?
-  kinAddress                String?
-  successionPlanVerified    Boolean              @default(false)
-  managementQualityScore    Int?
+  id                String   @id @default(cuid())
+  firstName         String
+  lastName          String
+  email             String?  @unique
+  phone             String?  @unique
+  phoneCode         String?
+  username          String?
+  password          String?
+  country           String?
+  iso2              String?
+  avatar            String?
+  status            Int      @default(1)
+  accountType       String   @default("customer") // customer, investor
+  businessId        String?
+  business          Business?
+  branchId          String?
+  branch            Branch?  @relation("BranchCustomers", fields: [branchId], references: [id])
+  staffId           String?  // assigned Loan Officer (Admin.id)
+  loanOfficer       Admin?   @relation("UserLoanOfficer", fields: [staffId], references: [id])
+  assignedBranchId  String?
+  assignedBy        String?
+  assignedAt        DateTime?
+  assignmentStatus  String   @default("unassigned") // unassigned, pending_lo_assignment, assigned
+  onboardingChannel String?  // self_onboard, loan_officer, front_desk, bm
+  createdBy         String?
+  role              String?  // optional role for hybrid users
+  roleType          String?
+  accountNumber     String?  @unique // NUBAN
+  merchantId        String?  @unique // for referrals
+  referral          String?
+  referredDate      DateTime?
+  refWaivers        Int      @default(0)
+
+  // KYC / Verification
+  bvn               String?
+  nin               String?
+  bvnVerified       Boolean  @default(false)
+  bvnVerifiedAt     DateTime?
+  bvnMatchScore     Int?
+  bvnPhotoPath      String?
+  ninVerified       Boolean  @default(false)
+  kycStatus         String?  // DRAFT, PENDING, PROCESSING, APPROVED, DECLINED, RESUBMIT
+  gender            String?
+  maritalStatus     String?
+  religion          String?
+  dob               DateTime?
+  nationality       String?  @default("Nigerian")
+  address           String?
+  nearestLandmark   String?
+  houseOwnership    String?
+  yearsAtResidence  Int?
+  dependents        Int?
+  state             String?
+  lga               String?
+  town              String?
+
+  // CAM handshake fields
+  docPassportPath   String?
+  docIdCardPath     String?
+  guarantorFormPath String?
+  hasExternalLoans  Boolean  @default(false)
+  isGuarantorElsewhere Boolean @default(false)
+  marketingChannel  String?
+  previousLoanAmount Float?
+  previousDefault   Boolean  @default(false)
+  bankAccountVerified Boolean @default(false)
+  bankName          String?
+  loanPurpose       String?
+
+  // Succession
+  kinFirstName      String?
+  kinLastName       String?
+  kinMobile         String?
+  kinEmail          String?
+  kinAddress        String?
+  successionPlanVerified Boolean @default(false)
+  managementQualityScore Int?
   managementExperienceYears Float?
-  gpsLatitude               Float?
-  gpsLongitude              Float?
-  gpsAccuracy               Float?
-  gpsCapturedAt             DateTime?
-  gpsCapturedBy             String?
-  emailVerify               Int                  @default(0)
-  phoneVerify               Int                  @default(0)
-  otpRequired               String               @default("on")
-  verificationCode          String?
-  emailTime                 DateTime?
-  phoneTime                 DateTime?
-  faStatus                  String?
-  faExpiring                DateTime?
-  googlefaSecret            String?
-  ipAddress                 String?
-  lastLogin                 DateTime?
-  loginAlert                Int                  @default(1)
-  transactionNotification   Int                  @default(1)
-  promotionalEmails         Int                  @default(1)
-  language                  String               @default("en")
-  revealBalance             Int                  @default(1)
-  needsPhysicalVerification Boolean              @default(false)
-  physicallyVerifiedAt      DateTime?
-  verifiedByStaffId         String?
-  pin                       String?
-  social                    String?
-  socialAccountId           String?
-  notificationPreferences   String?
-  createdAt                 DateTime             @default(now())
-  updatedAt                 DateTime             @updatedAt
-  balance                   Balance?
-  beneficiaries             Beneficiary[]
-  business                  Business?
-  contacts                  Contact[]
-  appraisals                CreditAppraisal[]
-  investorProfile           InvestorProfile?
-  loans                     LoanApplicants[]
-  loginHistory              LoginHistory[]
-  savings                   Savings[]
-  tickets                   Ticket[]
-  transactions              Transactions[]
-  investments               TreasuryInvestment[]
-  branch                    Branch?              @relation("BranchCustomers", fields: [branchId], references: [id])
-  loanOfficer               Admin?               @relation("UserLoanOfficer", fields: [staffId], references: [id])
-  userBanks                 UserBank[]
+
+  // GPS
+  gpsLatitude       Float?
+  gpsLongitude      Float?
+  gpsAccuracy       Float?
+  gpsCapturedAt     DateTime?
+  gpsCapturedBy     String?
+
+  // Security & Auth
+  emailVerify       Int      @default(0)
+  phoneVerify       Int      @default(0)
+  otpRequired       String   @default("on")
+  verificationCode  String?
+  emailTime         DateTime?
+  phoneTime         DateTime?
+  faStatus          String?
+  faExpiring        DateTime?
+  googlefaSecret    String?
+  ipAddress         String?
+  lastLogin         DateTime?
+  loginAlert        Int      @default(1)
+  transactionNotification Int @default(1)
+  promotionalEmails Int      @default(1)
+  language          String   @default("en")
+  revealBalance     Int      @default(1)
+  needsPhysicalVerification Boolean @default(false)
+  physicallyVerifiedAt DateTime?
+  verifiedByStaffId String?
+
+  // Settings
+  pin               String?  // Hash::make
+  social            String?
+  socialAccountId   String?
+
+  // Notification preferences (JSON string of toggles per channel/category)
+  notificationPreferences String?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  loans             LoanApplicants[]
+  appraisals        CreditAppraisal[]
+  savings           Savings[]
+  investments       TreasuryInvestment[]
+  transactions      Transactions[]
+  tickets           Ticket[]
+  beneficiaries     Beneficiary[]
+  userBanks         UserBank[]
+  contacts          Contact[]
+  balance           Balance?
+  investorProfile   InvestorProfile?
+  loginHistory      LoginHistory[]
 
   @@index([branchId])
   @@index([staffId])
@@ -206,163 +244,192 @@ model User {
 }
 
 model Business {
-  id                        String    @id @default(cuid())
-  userId                    String    @unique
-  name                      String
-  reference                 String?   @unique
-  description               String?
-  sector                    String?
-  subSector                 String?
-  sectorId                  String?
-  country                   String?
-  businessType              String?
-  legalStructure            String?
-  rcBnNumber                String?
-  rcNumber                  String?
-  ncrId                     String?
-  coOwners                  String?
-  cacVerifiedAt             DateTime?
-  cacVerificationData       String?
-  shopAddress               String?
-  landmark                  String?
-  line1                     String?
-  line2                     String?
-  state                     String?
-  city                      String?
-  postalCode                String?
-  zipCode                   String?
-  gpsLatitude               Float?
-  gpsLongitude              Float?
-  gpsAccuracy               Float?
-  ownershipStatus           String?
-  yearsAtLocation           Int?
-  dateEstablished           DateTime?
-  yearsInOperation          Float?
-  vintageCalculated         Int?
-  operatingDaysWeek         Int?
-  businessWorth             Float?
-  stockValue                Float?
-  monthlySales              Float?
-  dailyGoodSales            Float?
-  dailyBadSales             Float?
-  dailyAvgSales             Float?
-  marketRiskCommentary      String?
-  competitionIntensity      String?
-  financialStatement        String?
-  kycStatus                 String?
-  kycType                   String?
-  kycExpiry                 DateTime?
-  loanStatus                String?
-  declineReason             String?
-  physicallyVerifiedAt      DateTime?
-  verifierId                String?
-  needsPhysicalVerification Boolean   @default(false)
-  guarantorVerifiedAt       DateTime?
-  selfie                    String?
-  docFront                  String?
-  docBack                   String?
-  docType                   String?
-  docNumber                 String?
-  proofOfAddress            String?
-  sourceOfFunds             String?
-  docShopPhoto              String?
-  docCac                    String?
-  kinFirstName              String?
-  kinLastName               String?
-  kinMobile                 String?
-  kinMobileCode             String?
-  kinEmail                  String?
-  kinAddress                String?
-  guarantorName             String?
-  guarantorPhone            String?
-  guarantorEmail            String?
-  guarantorAddress          String?
-  guarantorRelationship     String?
-  docGuarantorId            String?
-  docGuarantorForm          String?
-  guarantorVerifiedAt2      DateTime?
-  gFirstName                String?
-  gLastName                 String?
-  gEmail                    String?
-  gMobile                   String?
-  gAddress                  String?
-  gMobileCode               String?
-  gDocType                  String?
-  gDocNumber                String?
-  gDocFront                 String?
-  gDocBack                  String?
-  gProofOfAddress           String?
-  revealBalance             Int       @default(1)
-  pin                       String?
-  tag                       String?
-  otpRequired               String    @default("on")
-  bDay                      Int?
-  bMonth                    Int?
-  bYear                     Int?
-  createdAt                 DateTime  @default(now())
-  updatedAt                 DateTime  @updatedAt
-  sectorRef                 Sector?   @relation(fields: [sectorId], references: [id])
-  user                      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name              String
+  reference         String?  @unique // NUBAN 10-digit
+  description       String?
+  sector            String?
+  subSector         String?
+  sectorId          String?
+  country           String?
+  sectorRef         Sector?  @relation(fields: [sectorId], references: [id])
+
+  // Business type & legal
+  businessType      String?  // individual, partnership, llc, company
+  legalStructure    String?  // Individual, Enterprise, Partnership, Limited Liability, PLC
+  rcBnNumber        String?
+  rcNumber          String?
+  ncrId             String?
+  coOwners          String?
+  cacVerifiedAt     DateTime?
+  cacVerificationData String?
+
+  // Location
+  shopAddress       String?
+  landmark          String?
+  line1             String?
+  line2             String?
+  state             String?
+  city              String?
+  postalCode        String?
+  zipCode           String?
+  gpsLatitude       Float?
+  gpsLongitude      Float?
+  gpsAccuracy       Float?
+  ownershipStatus   String?  // Rented, Owned, Family
+  yearsAtLocation   Int?
+
+  // Operations
+  dateEstablished   DateTime?
+  yearsInOperation  Float?
+  vintageCalculated Int?
+  operatingDaysWeek Int?
+
+  // CAM financials
+  businessWorth     Float?
+  stockValue        Float?
+  monthlySales      Float?
+  dailyGoodSales    Float?
+  dailyBadSales     Float?
+  dailyAvgSales     Float?
+  marketRiskCommentary String?
+  competitionIntensity String? // Low, Medium, High, Intense
+  financialStatement String?
+
+  // KYC status
+  kycStatus         String?  // DRAFT, PENDING, PROCESSING, APPROVED, DECLINED, RESUBMIT
+  kycType           String?
+  kycExpiry         DateTime?
+  loanStatus        String?
+  declineReason     String?
+  physicallyVerifiedAt DateTime?
+  verifierId        String?
+  needsPhysicalVerification Boolean @default(false)
+  guarantorVerifiedAt DateTime?
+
+  // Documents
+  selfie            String?
+  docFront          String?
+  docBack           String?
+  docType           String?
+  docNumber         String?
+  proofOfAddress    String?
+  sourceOfFunds     String?
+  docShopPhoto      String?
+  docCac            String?
+
+  // KIN
+  kinFirstName      String?
+  kinLastName       String?
+  kinMobile         String?
+  kinMobileCode     String?
+  kinEmail          String?
+  kinAddress        String?
+
+  // Guarantor
+  guarantorName     String?
+  guarantorPhone    String?
+  guarantorEmail    String?
+  guarantorAddress  String?
+  guarantorRelationship String?
+  docGuarantorId    String?
+  docGuarantorForm  String?
+  guarantorVerifiedAt2 DateTime?
+
+  // Group guarantor
+  gFirstName        String?
+  gLastName         String?
+  gEmail            String?
+  gMobile           String?
+  gAddress          String?
+  gMobileCode       String?
+  gDocType          String?
+  gDocNumber        String?
+  gDocFront         String?
+  gDocBack          String?
+  gProofOfAddress   String?
+
+  // System
+  revealBalance     Int      @default(1)
+  pin               String?
+  tag               String?
+  otpRequired       String   @default("on")
+  bDay              Int?
+  bMonth            Int?
+  bYear             Int?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Computed helpers (denormalized)
+  // has_complete_cam_docs, has_gps_verification, health_score, risk_level — derived at runtime
 
   @@index([sectorId])
   @@index([kycStatus])
 }
 
 model Branch {
-  id           String               @id @default(cuid())
-  name         String
-  code         String               @unique
-  state        String?
-  address      String?
-  phoneContact String?
-  managerId    String?
-  status       String               @default("active")
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
-  staff        Admin[]              @relation("BranchStaff")
-  manager      Admin?               @relation("BranchManager", fields: [managerId], references: [id])
-  bmVisits     BranchManagerVisit[] @relation("BranchVisits")
-  loans        LoanApplicants[]
-  tills        Till[]
-  customers    User[]               @relation("BranchCustomers")
+  id              String   @id @default(cuid())
+  name            String
+  code            String   @unique
+  state           String?
+  address         String?
+  phoneContact    String?
+  managerId       String?
+  manager         Admin?   @relation("BranchManager", fields: [managerId], references: [id])
+  status          String   @default("active") // active, inactive
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  staff           Admin[]           @relation("BranchStaff")
+  customers       User[]            @relation("BranchCustomers")
+  loans           LoanApplicants[]
+  tills           Till[]
+  bmVisits        BranchManagerVisit[] @relation("BranchVisits")
 
   @@index([status])
 }
 
 model BranchManagerVisit {
-  id                   String         @id @default(cuid())
-  loanApplicantId      String
-  branchManagerId      String
-  branchId             String?
-  visitDate            DateTime
-  gpsLatitude          Float?
-  gpsLongitude         Float?
-  gpsAccuracy          Float?
+  id                  String   @id @default(cuid())
+  loanApplicantId     String
+  loan                LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
+  branchManagerId     String
+  branchManager       Admin    @relation(fields: [branchManagerId], references: [id])
+  branchId            String?
+  branch              Branch?  @relation("BranchVisits", fields: [branchId], references: [id])
+  visitDate           DateTime
+  gpsLatitude         Float?
+  gpsLongitude        Float?
+  gpsAccuracy         Float?
   distanceFromOriginal Float?
-  businessOperating    Boolean        @default(false)
-  stockVerified        Boolean        @default(false)
+  businessOperating   Boolean  @default(false)
+  stockVerified       Boolean  @default(false)
   stockMatchPercentage Float?
-  customerPresent      Boolean        @default(false)
-  verificationMethod   String         @default("in_person")
-  timeSpentMinutes     Int            @default(0)
-  notes                String?
-  photos               String?
-  createdAt            DateTime       @default(now())
-  branch               Branch?        @relation("BranchVisits", fields: [branchId], references: [id])
-  branchManager        Admin          @relation(fields: [branchManagerId], references: [id])
-  loan                 LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
+  customerPresent     Boolean  @default(false)
+  verificationMethod  String   @default("in_person")
+  timeSpentMinutes    Int      @default(0)
+  notes               String?
+  photos              String?  // JSON array
+  createdAt           DateTime @default(now())
 
   @@index([loanApplicantId])
   @@index([branchManagerId])
 }
 
+// ============================================================================
+// 2. LOAN PLANS / PRODUCTS & SECTORS
+// ============================================================================
+
 model Sector {
-  id                String           @id @default(cuid())
-  name              String           @unique
-  riskScore         Float            @default(0.5)
-  riskScoreInt      Int?
-  benchmarkedMargin Float?
-  createdAt         DateTime         @default(now())
+  id                String   @id @default(cuid())
+  name              String   @unique
+  riskScore         Float    @default(0.5) // 0-1, higher=safer (used by engine)
+  riskScoreInt      Int?     // 1-5 scale (used by RiskEngineService)
+  benchmarkedMargin Float?   // decimal percent e.g. 22.50
+  createdAt         DateTime @default(now())
   businesses        Business[]
   loans             LoanApplicants[]
 
@@ -370,157 +437,202 @@ model Sector {
 }
 
 model LoanPlan {
-  id                  String           @id @default(cuid())
-  name                String
-  slug                String           @unique
-  description         String?
-  duration            Int
-  interest            Float
-  failedInterest      Float?
-  installment         Int?
-  min                 Float?
-  max                 Float?
-  type                String?
-  productType         String?
-  suggestedAmount     Float?
-  image               String?
-  digitalLink         String?
-  camTemplateConfig   String?
-  minCreditScore      Float            @default(50)
-  maxDebtServiceRatio Float            @default(33)
-  status              Int              @default(1)
-  breaks              Int              @default(0)
-  amount              Float?
-  catId               String?
-  createdBy           String?
-  editedBy            String?
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
-  loans               LoanApplicants[]
+  id                String   @id @default(cuid())
+  name              String
+  slug              String   @unique
+  description       String?
+  duration          Int      // months
+  interest          Float    // % p.a.
+  failedInterest    Float?
+  installment       Int?
+  min               Float?
+  max               Float?
+  type              String?  // loan, bnpl
+  productType       String?
+  suggestedAmount   Float?
+  image             String?
+  digitalLink       String?
+  camTemplateConfig String?  // JSON
+  minCreditScore    Float    @default(50)
+  maxDebtServiceRatio Float  @default(33)
+  status            Int      @default(1)
+  breaks            Int      @default(0)
+  amount            Float?
+  catId             String?
+  createdBy         String?
+  editedBy          String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  loans             LoanApplicants[]
 
   @@index([slug])
   @@index([status])
 }
 
+// ============================================================================
+// 3. LOAN APPLICANTS (the loan entity — 20-state workflow)
+// ============================================================================
+
 model LoanApplicants {
-  id                        String                    @id @default(cuid())
-  userId                    String
-  staffId                   String?
-  branchId                  String?
-  planId                    String?
-  acctId                    String?
-  amount                    Float
-  payback                   Float?
-  duration                  Int
-  percent                   Float?
-  reason                    String?
-  status                    String                    @default("pending")
-  currentStep               String                    @default("LO_ENTRY")
-  failedPercent             Float?
-  complianceStatus          String                    @default("pending")
-  hasComplianceConditions   Boolean                   @default(false)
-  applicationRef            String?                   @unique
-  refId                     String?                   @unique
-  createdVia                String                    @default("system")
-  defaulter                 Boolean                   @default(false)
-  vettedAmount              Float?
-  vettedDuration            Int?
-  vettedInterestRate        Float?
-  structuredAmount          Float?
-  structuredTenor           Int?
-  finalAmount               Float?
-  finalTenure               Int?
-  finalInterestRate         Float?
-  finalCcdFeePercent        Float?
-  finalUpfrontFeePercent    Float?
-  finalAdminFee             Float?
-  approvedAmount            Float?
-  approvedTenor             Int?
-  approvedDate              DateTime?
-  appraisedAmount           Float?
-  appraisedTenor            Int?
-  repaymentPlan             String                    @default("REDUCING")
-  legalStatus               String?
-  legalOpinion              String?
-  cacEvidencePath           String?
-  cacStatusComment          String?
-  isCacVerified             Boolean                   @default(false)
-  disbursementDate          DateTime?
-  disbursedAt               DateTime?
-  disbursedBy               String?
-  startDate                 DateTime?
-  maturityDate              DateTime?
-  signedOfferPath           String?
-  fundSourceAccount         String?
-  digitalSignature          String?
-  acceptedAt                DateTime?
-  crcReportPath             String?
-  crcReportUploadedAt       DateTime?
-  crcReportUploadedBy       String?
-  submittedAt               DateTime?
-  bmVerifiedAt              DateTime?
-  bmValidatedBy             String?
-  bmReviewDate              DateTime?
-  hocStructuredAt           DateTime?
-  analystReviewedAt         DateTime?
-  riskApprovedAt            DateTime?
-  croCheckedAt              DateTime?
-  legalClearedAt            DateTime?
-  cfoClearedAt              DateTime?
-  mdApprovedAt              DateTime?
-  finalOfferGeneratedAt     DateTime?
-  offerLetterGeneratedAt    DateTime?
-  auditPassedAt             DateTime?
-  hocFinalizedAt            DateTime?
-  croFinalCheckAt           DateTime?
-  cfoAuthorizedAt           DateTime?
-  bmRecommendedAmount       Float?
-  bmRecommendedTenor        Int?
-  bmComment                 String?
-  bmFieldVisit              String?
-  bmRiskFlags               String?
-  bmChecklist               String?
-  bmValidationData          String?
-  hocRecommendedAmount      Float?
-  hocRecommendedTenor       Int?
-  hocMoratorium             Int?
-  hocRepaymentCycle         String?
-  hocComment                String?
-  hocStructureMeta          String?
-  cfoApprovedAmount         Float?
-  cfoApprovedTenor          Int?
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+  staffId           String?  // Loan Officer (Admin.id)
+  loanOfficer       Admin?   @relation("LoanOfficerLoans", fields: [staffId], references: [id])
+  branchId          String?
+  branch            Branch?  @relation(fields: [branchId], references: [id])
+  planId            String?
+  plan              LoanPlan? @relation(fields: [planId], references: [id])
+  acctId            String?
+
+  // Request
+  amount            Float
+  payback           Float?
+  duration          Int
+  percent           Float?   // interest % p.a.
+  reason            String?
+
+  // Status & workflow
+  status            String   @default("pending") // pending, processing, queried, running, paid, declined, pending_legal
+  currentStep       String   @default("LO_ENTRY")
+  // 20 steps: DRAFT, LO_ENTRY, LO_ASSESSMENT, QUERY_RESPONSE, LEGAL_CAC_CHECK,
+  // BM_QC, HOC_STRUCTURING, ANALYST_STRUCTURING, HOC_APPROVAL, CRO_VERIFICATION,
+  // CRO_RISK, CFO_REVIEW, LEGAL_REVIEW, LEGAL_FINAL_REVIEW, HOC_AGGREGATION,
+  // MD_APPROVAL, HOC_FINALIZATION, CUSTOMER_ACCEPTANCE, HOC_SCHEDULING,
+  // CFO_DISBURSEMENT, TREASURY_PAYOUT
+  failedPercent     Float?
+  complianceStatus  String   @default("pending") // pending, conditions_pending, conditions_met, cleared_for_disbursement
+  hasComplianceConditions Boolean @default(false)
+  applicationRef    String?  @unique // LN-2025-001
+  refId             String?  @unique
+  createdVia        String   @default("system")
+  defaulter         Boolean  @default(false)
+
+  // Vetted/structured/final amounts (Triple Lock)
+  vettedAmount      Float?
+  vettedDuration    Int?
+  vettedInterestRate Float?
+  structuredAmount  Float?
+  structuredTenor   Int?
+  finalAmount       Float?
+  finalTenure       Int?
+  finalInterestRate Float?
+  finalCcdFeePercent Float?
+  finalUpfrontFeePercent Float?
+  finalAdminFee     Float?
+  approvedAmount    Float?
+  approvedTenor     Int?
+  approvedDate      DateTime?
+  appraisedAmount   Float?
+  appraisedTenor    Int?
+
+  // Repayment plan
+  repaymentPlan     String   @default("REDUCING") // REDUCING, FLAT
+
+  // Legal
+  legalStatus       String?  // pending, cleared, queried
+  legalOpinion      String?
+  cacEvidencePath   String?
+  cacStatusComment  String?
+  isCacVerified     Boolean  @default(false)
+
+  // Disbursement
+  disbursementDate  DateTime?
+  disbursedAt       DateTime?
+  disbursedBy       String?
+  startDate         DateTime?
+  maturityDate      DateTime?
+  signedOfferPath   String?
+  fundSourceAccount String?
+
+  // Customer acceptance
+  digitalSignature  String?  // JSON
+  acceptedAt        DateTime?
+
+  // CRC report
+  crcReportPath     String?
+  crcReportUploadedAt DateTime?
+  crcReportUploadedBy String?
+
+  // Workflow timestamps
+  submittedAt       DateTime?
+  bmVerifiedAt      DateTime?
+  bmValidatedBy     String?
+  bmReviewDate      DateTime?
+  hocStructuredAt   DateTime?
+  analystReviewedAt DateTime?
+  riskApprovedAt    DateTime?
+  croCheckedAt      DateTime?
+  legalClearedAt    DateTime?
+  cfoClearedAt      DateTime?
+  mdApprovedAt      DateTime?
+  finalOfferGeneratedAt DateTime?
+  offerLetterGeneratedAt DateTime?
+  auditPassedAt     DateTime?
+  hocFinalizedAt    DateTime?
+  croFinalCheckAt   DateTime?
+  cfoAuthorizedAt   DateTime?
+
+  // Vetting (BM)
+  bmRecommendedAmount Float?
+  bmRecommendedTenor Int?
+  bmComment         String?
+  bmFieldVisit      String?  // JSON
+  bmRiskFlags       String?  // JSON
+  bmChecklist       String?  // JSON
+  bmValidationData  String?  // JSON
+
+  // Structuring (HOC)
+  hocRecommendedAmount Float?
+  hocRecommendedTenor Int?
+  hocMoratorium     Int?
+  hocRepaymentCycle String?
+  hocComment        String?
+  hocStructureMeta  String?  // JSON
+
+  // CFO
+  cfoApprovedAmount Float?
+  cfoApprovedTenor Int?
   scheduledDisbursementDate DateTime?
-  cfoComment                String?
-  cfoReviewDate             DateTime?
-  cfoVerifiedAt             DateTime?
-  riskApprovedAmount        Float?
-  finalApprovedAmount       Float?
-  finalApprovedTenor        Int?
-  approvalReference         String?
-  offerCode                 String?
-  isLocked                  Boolean                   @default(false)
-  createdAt                 DateTime                  @default(now())
-  updatedAt                 DateTime                  @updatedAt
-  hocStructurerId           String?
-  sectorId                  String?
-  approvalLogs              ApprovalLog[]
-  bmVisits                  BranchManagerVisit[]
-  complianceConditions      ComplianceCondition[]
-  complianceDocuments       ComplianceDocument[]
-  complianceVerifications   ComplianceVerification[]
-  appraisal                 CreditAppraisal?
-  bmValidator               Admin?                    @relation("BmVettedLoans", fields: [bmValidatedBy], references: [id])
-  branch                    Branch?                   @relation(fields: [branchId], references: [id])
-  hocStructurer             Admin?                    @relation("HocStructuredLoans", fields: [hocStructurerId], references: [id])
-  plan                      LoanPlan?                 @relation(fields: [planId], references: [id])
-  sectorRef                 Sector?                   @relation(fields: [sectorId], references: [id])
-  loanOfficer               Admin?                    @relation("LoanOfficerLoans", fields: [staffId], references: [id])
-  user                      User                      @relation(fields: [userId], references: [id])
-  loanDocuments             LoanDocument[]
-  loanRepayments            LoanRepayment[]
-  loanTransactions          LoanTransaction[]
-  mccDecisions              MccDecision[]
-  preDisbursementChecklist  PreDisbursementChecklist?
+  cfoComment        String?
+  cfoReviewDate     DateTime?
+  cfoVerifiedAt     DateTime?
+
+  // CRO — max safe exposure (opinion, not override)
+  riskApprovedAmount Float?
+
+  // Final approval
+  finalApprovedAmount Float?
+  finalApprovedTenor Int?
+
+  // Reference codes
+  approvalReference String?
+  offerCode         String?
+
+  // Locking
+  isLocked          Boolean  @default(false)
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  bmValidator       Admin?   @relation("BmVettedLoans", fields: [bmValidatedBy], references: [id])
+  hocStructurerId   String?
+  hocStructurer     Admin?   @relation("HocStructuredLoans", fields: [hocStructurerId], references: [id])
+  appraisal         CreditAppraisal?
+  mccDecisions      MccDecision[]
+  approvalLogs      ApprovalLog[]
+  complianceConditions ComplianceCondition[]
+  complianceDocuments ComplianceDocument[]
+  complianceVerifications ComplianceVerification[]
+  preDisbursementChecklist PreDisbursementChecklist?
+  bmVisits          BranchManagerVisit[]
+  loanDocuments     LoanDocument[]
+  loanRepayments    LoanRepayment[]
+  loanTransactions  LoanTransaction[]
+  sectorRef         Sector?  @relation(fields: [sectorId], references: [id])
+  sectorId          String?
 
   @@index([userId])
   @@index([staffId])
@@ -530,154 +642,193 @@ model LoanApplicants {
   @@index([complianceStatus])
 }
 
+// ============================================================================
+// 4. CREDIT APPRAISAL (the rich CAM memo with 8 snapshots)
+// ============================================================================
+
 model CreditAppraisal {
-  id                         String         @id @default(cuid())
-  loanApplicantId            String         @unique
-  userId                     String
-  staffId                    String?
-  branchId                   String?
-  bmId                       String?
-  hocId                      String?
-  assignedAnalystId          String?
-  croId                      String?
-  sectorId                   String?
-  cfoId                      String?
-  applicantAge               Int?
-  yearsAtAddress             Float?
-  yearsInOperation           Float?
-  managementExperience       Float?
-  successionPlanVerified     Boolean?
-  bankAccountVerified        Boolean?
-  previousDefault            Boolean?
-  competitionIntensity       String?
-  marketRiskCommentary       String?
-  riskRating                 String?
-  salesClientEstimate        Float?
-  salesSpotCheck             Float?
-  salesBookRecord            Float?
-  salesRecords               Float?
-  salesBankStatement         Float?
-  consideredMonthlySales     Float?
-  selectedSalesSource        String?
-  purchasesClientEstimate    Float?
-  purchasesBankDebit         Float?
-  purchasesInvoices          Float?
-  purchasesMarginDerived     Float?
+  id                String   @id @default(cuid())
+  loanApplicantId   String   @unique
+  loan              LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+  staffId           String?
+  branchId          String?
+  bmId              String?
+  hocId             String?
+  assignedAnalystId String?
+  analyst           Admin?   @relation("AnalystAppraisals", fields: [assignedAnalystId], references: [id])
+  croId             String?
+  sectorId          String?
+  cfoId             String?
+
+  // ===== Phase 1: Risk Snapshot =====
+  applicantAge      Int?
+  yearsAtAddress    Float?
+  yearsInOperation  Float?
+  managementExperience Float?
+  successionPlanVerified Boolean?
+  bankAccountVerified Boolean?
+  previousDefault   Boolean?
+  competitionIntensity String?
+  marketRiskCommentary String?
+  riskRating        String?  // JSON
+
+  // ===== CAM financials (sales cross-check 4 sources) =====
+  salesClientEstimate Float?
+  salesSpotCheck    Float?
+  salesBookRecord   Float?
+  salesRecords      Float?
+  salesBankStatement Float?
+  consideredMonthlySales Float?
+  selectedSalesSource String?
+
+  // Purchases cross-check
+  purchasesClientEstimate Float?
+  purchasesBankDebit Float?
+  purchasesInvoices Float?
+  purchasesMarginDerived Float?
   consideredMonthlyPurchases Float?
-  totalStockValue            Float?
-  weightedMargin             Float?
-  stockTurnoverFrequency     Float?
-  stockTurnoverDays          Int?
-  monthlyGrossProfit         Float?
-  monthlyBusinessExpenses    Float?
-  monthlyFamilyExpenses      Float?
-  irregularFamilyExpenses    Float?
-  otherLoanRepayments        Float?
-  monthlyNetSurplus          Float?
-  adjustedNetCashflow        Float?
-  salesOnCreditPercent       Float?
-  businessAssetValue         Float?
-  familyAssetValue           Float?
-  dsrPercent                 Float?
-  scoreFinancial             Float?
-  scoreBusiness              Float?
-  scoreIndustry              Float?
-  scoreCollateral            Float?
-  totalScore                 Float?
-  riskGradeLegacy            String?
-  loanPurpose                String?
-  loanCycle                  Int?
-  businessStartDate          DateTime?
-  bankName                   String?
-  accountNumber              String?
-  verifiedMonthlySales       Float?
-  verifiedMonthlyCogs        Float?
-  verifiedMonthlyNetProfit   Float?
-  dsrRatio                   Float?
-  dscrRatio                  Float?
-  riskScore                  Int?
-  riskGrade                  String?
-  engineVerdict              String?
-  salesVariancePercent       Float?
-  hasHighVariance            Boolean?
-  engineDump                 String?
-  creditBureauHistory        String?
-  lastPurchaseDate           DateTime?
-  evaluationDate             DateTime?
-  cashSalesPerDay            Float?
-  estimatedTreasury          Float?
-  treasuryVerdict            String?
-  loSnapshot                 String?
-  bmSnapshot                 String?
-  analystSnapshot            String?
-  hocSnapshot                String?
-  croSnapshot                String?
-  cfoSnapshot                String?
-  legalSnapshot              String?
-  mdSnapshot                 String?
-  governanceAudits           String?
-  engineSnapshot             String?
-  inventorySnapshot          String?
-  assetsRegister             String?
-  creditBureauReport         String?
-  evidenceFiles              String?
-  bmFieldVisit               String?
-  bmRiskFlags                String?
-  bmChecklist                String?
-  bmTabAudits                String?
-  bmReviewMeta               String?
-  bmValidationData           String?
-  hocStructureMeta           String?
-  balanceSheet               String?
-  marginAnalysis             String?
-  gpsData                    String?
-  commentTrail               String?
-  bmRecommendedAmount        Float?
-  bmRecommendedTenor         Int?
-  bmComment                  String?
-  bmValidatedAt              DateTime?
-  bmValidatedBy              String?
-  bmReviewDate               DateTime?
-  hocRecommendedAmount       Float?
-  hocRecommendedTenor        Int?
-  hocMoratorium              Int?
-  hocRepaymentCycle          String?
-  hocReviewStatus            String?
-  hocReviewDate              DateTime?
-  hocComment                 String?
-  hocReviewComment           String?
-  croComment                 String?
-  cfoApprovedAmount          Float?
-  cfoApprovedTenor           Int?
-  scheduledDisbursementDate  DateTime?
-  fundSourceAccount          String?
-  cfoComment                 String?
-  cfoReviewDate              DateTime?
-  cfoVerifiedAt              DateTime?
-  finalApprovedAmount        Float?
-  finalApprovedTenor         Int?
-  finalInterestRate          Float?
-  cfoVerifiedAt2             DateTime?
-  legalVerifiedAt            DateTime?
-  mdVerifiedAt               DateTime?
-  isSnapshotLocked           Boolean        @default(false)
-  snapshotCreatedAt          DateTime?
-  status                     String         @default("draft")
-  rejectionReason            String?
-  submittedAt                DateTime?
-  approvedAt                 DateTime?
-  appraisalGpsLat            Float?
-  appraisalGpsLong           Float?
-  unforeseenBufferRate       Float?         @default(0.20)
-  collateralRegister         String?
-  guarantorRegister          String?
-  guarantorBizVerification   String?
-  bankBalancesRegister       String?
-  createdAt                  DateTime       @default(now())
-  updatedAt                  DateTime       @updatedAt
-  analyst                    Admin?         @relation("AnalystAppraisals", fields: [assignedAnalystId], references: [id])
-  loan                       LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
-  user                       User           @relation(fields: [userId], references: [id])
+
+  // Margin & inventory
+  totalStockValue   Float?
+  weightedMargin    Float?
+  stockTurnoverFrequency Float?
+  stockTurnoverDays Int?
+
+  // Cashflow
+  monthlyGrossProfit Float?
+  monthlyBusinessExpenses Float?
+  monthlyFamilyExpenses Float?
+  irregularFamilyExpenses Float?
+  otherLoanRepayments Float?
+  monthlyNetSurplus Float?
+  adjustedNetCashflow Float?
+  salesOnCreditPercent Float?
+
+  // Assets
+  businessAssetValue Float?
+  familyAssetValue  Float?
+
+  // DSR (legacy field)
+  dsrPercent        Float?
+
+  // Scoring (4-axis, 100 pts)
+  scoreFinancial    Float?  // out of 40
+  scoreBusiness     Float?  // out of 20
+  scoreIndustry     Float?  // out of 20
+  scoreCollateral   Float?  // out of 20
+  totalScore        Float?  // out of 100
+  riskGradeLegacy   String? // A/B/C/D/F
+
+  // Profile
+  loanPurpose       String?
+  loanCycle         Int?
+  businessStartDate DateTime?
+  bankName          String?
+  accountNumber     String?
+
+  // ===== Risk Engine (formalized) =====
+  verifiedMonthlySales Float?
+  verifiedMonthlyCogs Float?
+  verifiedMonthlyNetProfit Float?
+  dsrRatio          Float?  // decimal, limit 0.45
+  dscrRatio         Float?  // target >1.25
+  riskScore         Int?    // 0-100
+  riskGrade         String? // A/B/C/D/F
+  engineVerdict     String? // APPROVE, REVIEW, REJECT
+  salesVariancePercent Float?
+  hasHighVariance   Boolean?
+  engineDump        String? // JSON
+
+  // ===== Forensic / Treasury cross-check =====
+  creditBureauHistory String? // JSON
+  lastPurchaseDate  DateTime?
+  evaluationDate    DateTime?
+  cashSalesPerDay   Float?
+  estimatedTreasury Float?
+  treasuryVerdict   String?
+
+  // ===== 8 SNAPSHOT COLUMNS (the waterfall cascade) =====
+  loSnapshot        String?  // JSON — Loan Officer frozen
+  bmSnapshot        String?  // JSON — Branch Manager vetted
+  analystSnapshot   String?  // JSON — Credit Analyst structured
+  hocSnapshot       String?  // JSON — Head of Credit golden record
+  croSnapshot       String?  // JSON — CRO risk certificate
+  cfoSnapshot       String?  // JSON — CFO liquidity
+  legalSnapshot     String?  // JSON — Legal perfection
+  mdSnapshot        String?  // JSON — MD sanction
+  governanceAudits  String?  // JSON — threaded audit log
+  engineSnapshot    String?  // JSON — full engine output
+  inventorySnapshot String?  // JSON
+  assetsRegister    String?  // JSON
+  creditBureauReport String? // JSON
+  evidenceFiles     String?  // JSON
+  bmFieldVisit      String?  // JSON
+  bmRiskFlags       String?  // JSON
+  bmChecklist       String?  // JSON
+  bmTabAudits       String?  // JSON
+  bmReviewMeta      String?  // JSON
+  bmValidationData  String?  // JSON
+  hocStructureMeta  String?  // JSON
+  balanceSheet      String?  // JSON
+  marginAnalysis    String?  // JSON
+  gpsData           String?  // JSON
+  commentTrail      String?  // JSON
+
+  // ===== Decision values (Triple Lock layers) =====
+  bmRecommendedAmount Float?
+  bmRecommendedTenor Int?
+  bmComment         String?
+  bmValidatedAt     DateTime?
+  bmValidatedBy     String?
+  bmReviewDate      DateTime?
+  hocRecommendedAmount Float?
+  hocRecommendedTenor Int?
+  hocMoratorium     Int?
+  hocRepaymentCycle String?
+  hocReviewStatus   String?
+  hocReviewDate     DateTime?
+  hocComment        String?
+  hocReviewComment  String?
+  croComment        String?
+  cfoApprovedAmount Float?
+  cfoApprovedTenor  Int?
+  scheduledDisbursementDate DateTime?
+  fundSourceAccount String?
+  cfoComment        String?
+  cfoReviewDate     DateTime?
+  cfoVerifiedAt     DateTime?
+  finalApprovedAmount Float?
+  finalApprovedTenor Int?
+  finalInterestRate Float?
+  cfoVerifiedAt2    DateTime?
+  legalVerifiedAt   DateTime?
+  mdVerifiedAt      DateTime?
+
+  // ===== Governance / locking =====
+  isSnapshotLocked  Boolean  @default(false)
+  snapshotCreatedAt DateTime?
+  status            String   @default("draft") // draft, submitted, approved, declined
+  rejectionReason   String?
+  submittedAt       DateTime?
+  approvedAt        DateTime?
+
+  // ===== GPS =====
+  appraisalGpsLat   Float?
+  appraisalGpsLong  Float?
+
+  // ===== HOC structuring overrides =====
+  unforeseenBufferRate Float? @default(0.20)
+
+  // ===== EXCEL PARITY ADDITIONS (G6, G9, G10, G11) =====
+  collateralRegister        String?  // JSON — full collateral detail (chassis, year, ownership, address, land measurement, title)
+  guarantorRegister         String?  // JSON — full guarantor details (up to 2 guarantors with BVN, NIN, business, address, etc.)
+  guarantorBizVerification  String?  // JSON — guarantor business verification data per guarantor
+  bankBalancesRegister      String?  // JSON — array of {bankName, accountName, accountNumber, balance} up to 6 banks
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@index([loanApplicantId])
   @@index([userId])
@@ -686,26 +837,31 @@ model CreditAppraisal {
   @@index([engineVerdict])
 }
 
+// ============================================================================
+// 5. MCC (Management Credit Committee) — 8-level decision ledger
+// ============================================================================
+
 model MccDecision {
-  id                     String         @id @default(cuid())
-  loanApplicantId        String
-  approverId             String
-  approverName           String
-  approverRole           String
-  approvalLevel          Int
-  recommendedAmount      Float?
-  duration               Int?
-  ccdPercentage          Float?
-  upfrontFeePercentage   Float?
+  id                String   @id @default(cuid())
+  loanApplicantId   String
+  loan              LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
+  approverId        String
+  approver          Admin    @relation(fields: [approverId], references: [id])
+  approverName      String
+  approverRole      String   // LO, BM, CA, HOC, CRO, LEGAL, GCFO, MD
+  approvalLevel     Int      // 1-8
+  recommendedAmount Float?
+  duration          Int?     // months
+  ccdPercentage     Float?   // Capital Contribution Deposit %
+  upfrontFeePercentage Float?
   interestRatePercentage Float?
-  comment                String?
-  decisionType           String         @default("approved")
-  decisionDate           DateTime       @default(now())
-  metadata               String?
-  createdAt              DateTime       @default(now())
-  updatedAt              DateTime       @updatedAt
-  approver               Admin          @relation(fields: [approverId], references: [id])
-  loan                   LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
+  comment           String?
+  decisionType      String   @default("approved") // approved, rejected, deferred, conditional
+  decisionDate      DateTime @default(now())
+  metadata          String?  // JSON
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@unique([loanApplicantId, approverId, approverRole])
   @@index([loanApplicantId, approvalLevel])
@@ -714,55 +870,66 @@ model MccDecision {
 }
 
 model ApprovalLog {
-  id                 String         @id @default(cuid())
-  loanApplicantId    String
-  userId             String?
-  adminId            String?
-  action             String
+  id                String   @id @default(cuid())
+  loanApplicantId   String
+  loan              LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
+  userId            String?
+  adminId           String?
+  admin             Admin?   @relation(fields: [adminId], references: [id])
+  action            String   // APPROVED, REJECTED, QUERIED, DISBURSED, FORWARDED, RETURNED
   roleAtTimeOfAction String?
-  comments           String?
-  metadata           String?
-  createdAt          DateTime       @default(now())
-  admin              Admin?         @relation(fields: [adminId], references: [id])
-  loan               LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
+  comments          String?
+  metadata          String?  // JSON
+  createdAt         DateTime @default(now())
 
   @@index([loanApplicantId])
   @@index([adminId])
 }
 
+// ============================================================================
+// 6. COMPLIANCE (Conditions, Documents, Verifications, Pre-Disbursement)
+// ============================================================================
+
 model ComplianceCondition {
-  id                   String                   @id @default(cuid())
-  loanApplicantId      String
-  mccDecisionId        String?
-  setBy                String
-  setByRole            String?
-  conditionType        String
-  title                String
-  description          String?
-  instructions         String?
+  id                String   @id @default(cuid())
+  loanApplicantId   String
+  loan              LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
+  mccDecisionId     String?
+  setBy             String
+  setByAdmin        Admin?   @relation("ConditionsSetBy", fields: [setBy], references: [id])
+  setByRole         String?  // MD, CFO, CRO, LEGAL, HOC
+
+  conditionType     String   // document_upload, field_update, guarantor_update, collateral_verification,
+                              // account_validation, bvn_verification, address_verification,
+                              // employment_verification, business_verification, insurance_required, other
+  title             String
+  description       String?
+  instructions      String?
   requiredDocumentType String?
-  fieldName            String?
-  fieldExpectedValue   String?
-  priority             String                   @default("medium")
-  deadline             DateTime?
-  status               String                   @default("pending")
-  verifiedBy           String?
-  verifiedAt           DateTime?
-  verificationNotes    String?
-  rejectedBy           String?
-  rejectedAt           DateTime?
-  rejectionReason      String?
-  waivedBy             String?
-  waivedAt             DateTime?
-  waiverReason         String?
-  metadata             String?
-  createdAt            DateTime                 @default(now())
-  updatedAt            DateTime                 @updatedAt
-  loan                 LoanApplicants           @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
-  setByAdmin           Admin                    @relation("ConditionsSetBy", fields: [setBy], references: [id])
-  verifiedAdmin        Admin?                   @relation("ConditionsVerifiedBy", fields: [verifiedBy], references: [id])
-  documents            ComplianceDocument[]
-  verifications        ComplianceVerification[]
+  fieldName         String?
+  fieldExpectedValue String?
+
+  priority          String   @default("medium") // low, medium, high, critical
+  deadline          DateTime?
+
+  status            String   @default("pending") // pending, customer_notified, document_uploaded, under_review, verified, rejected, waived, expired
+  verifiedBy        String?
+  verifiedAdmin     Admin?   @relation("ConditionsVerifiedBy", fields: [verifiedBy], references: [id])
+  verifiedAt        DateTime?
+  verificationNotes String?
+  rejectedBy        String?
+  rejectedAt        DateTime?
+  rejectionReason   String?
+  waivedBy          String?
+  waivedAt          DateTime?
+  waiverReason      String?
+
+  metadata          String?  // JSON
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  documents         ComplianceDocument[]
+  verifications     ComplianceVerification[]
 
   @@index([loanApplicantId, status])
   @@index([conditionType, status])
@@ -770,226 +937,250 @@ model ComplianceCondition {
 }
 
 model ComplianceDocument {
-  id                    String               @id @default(cuid())
+  id                String   @id @default(cuid())
   complianceConditionId String?
-  loanApplicantId       String
-  documentType          String
-  documentName          String
-  filePath              String
-  fileType              String?
-  fileSize              Int?
-  uploadedBy            String?
-  uploaderType          String               @default("customer")
-  status                String               @default("pending")
-  reviewedBy            String?
-  reviewedAt            DateTime?
-  reviewNotes           String?
-  documentDate          DateTime?
-  expiryDate            DateTime?
-  createdAt             DateTime             @default(now())
-  condition             ComplianceCondition? @relation(fields: [complianceConditionId], references: [id], onDelete: Cascade)
-  loan                  LoanApplicants       @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
+  condition         ComplianceCondition? @relation(fields: [complianceConditionId], references: [id], onDelete: Cascade)
+  loanApplicantId   String
+  loan              LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
+  documentType      String
+  documentName      String
+  filePath          String
+  fileType          String?
+  fileSize          Int?
+  uploadedBy        String?
+  uploaderType      String   @default("customer")
+  status            String   @default("pending") // pending, approved, rejected, expired
+  reviewedBy        String?
+  reviewedAt        DateTime?
+  reviewNotes       String?
+  documentDate      DateTime?
+  expiryDate        DateTime?
+  createdAt         DateTime @default(now())
 
   @@index([loanApplicantId])
   @@index([complianceConditionId])
 }
 
 model ComplianceVerification {
-  id                    String              @id @default(cuid())
+  id                String   @id @default(cuid())
   complianceConditionId String
-  loanApplicantId       String
-  action                String
-  notes                 String?
-  metadata              String?
-  performedBy           String?
-  performerRole         String?
-  previousStatus        String?
-  newStatus             String?
-  createdAt             DateTime            @default(now())
-  condition             ComplianceCondition @relation(fields: [complianceConditionId], references: [id], onDelete: Cascade)
-  loan                  LoanApplicants      @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
+  condition         ComplianceCondition @relation(fields: [complianceConditionId], references: [id], onDelete: Cascade)
+  loanApplicantId   String
+  loan              LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
+  action            String   // created, notified_customer, document_received, review_started, requested_info, info_provided, verified, rejected, re_uploaded, waived, escalated, deadline_extended
+  notes             String?
+  metadata          String?  // JSON
+  performedBy       String?
+  performerRole     String?
+  previousStatus    String?
+  newStatus         String?
+  createdAt         DateTime @default(now())
 
   @@index([complianceConditionId])
   @@index([loanApplicantId])
 }
 
 model PreDisbursementChecklist {
-  id                           String         @id @default(cuid())
-  loanApplicantId              String         @unique
-  allConditionsVerified        Boolean        @default(false)
-  documentsComplete            Boolean        @default(false)
-  customerKycValid             Boolean        @default(false)
-  guarantorKycValid            Boolean        @default(false)
-  collateralDocumented         Boolean        @default(false)
-  offerLetterSigned            Boolean        @default(false)
-  bankAccountVerified          Boolean        @default(false)
-  disbursementAccountConfirmed Boolean        @default(false)
-  customItems                  String?
-  status                       String         @default("pending")
-  approvedBy                   String?
-  approvedAt                   DateTime?
-  approvalNotes                String?
-  rejectedBy                   String?
-  rejectedAt                   DateTime?
-  rejectionReason              String?
-  createdAt                    DateTime       @default(now())
-  updatedAt                    DateTime       @updatedAt
-  loan                         LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  loanApplicantId   String   @unique
+  loan              LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
+
+  allConditionsVerified Boolean @default(false)
+  documentsComplete  Boolean  @default(false)
+  customerKycValid   Boolean  @default(false)
+  guarantorKycValid  Boolean  @default(false)
+  collateralDocumented Boolean @default(false)
+  offerLetterSigned  Boolean  @default(false)
+  bankAccountVerified Boolean @default(false)
+  disbursementAccountConfirmed Boolean @default(false)
+  customItems        String?  // JSON
+
+  status            String   @default("pending") // pending, in_progress, completed, disbursement_approved, disbursement_rejected
+  approvedBy        String?
+  approvedAt        DateTime?
+  approvalNotes     String?
+  rejectedBy        String?
+  rejectedAt        DateTime?
+  rejectionReason   String?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
+// ============================================================================
+// 7. LOAN DOCUMENTS, REPAYMENTS, TRANSACTIONS
+// ============================================================================
+
 model LoanDocument {
-  id              String         @id @default(cuid())
-  loanApplicantId String
-  documentType    String
-  fileName        String
-  filePath        String
-  fileHash        String?
-  fileSize        Int?
-  uploadedBy      String?
-  version         Int            @default(1)
-  metadata        String?
-  createdAt       DateTime       @default(now())
-  loan            LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  loanApplicantId   String
+  loan              LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
+  documentType      String   // cam_memo, offer_letter, repayment_schedule, cac_doc, etc.
+  fileName          String
+  filePath          String
+  fileHash          String?  // SHA-256
+  fileSize          Int?
+  uploadedBy        String?
+  version           Int      @default(1)
+  metadata          String?  // JSON
+  createdAt         DateTime @default(now())
 
   @@index([loanApplicantId])
   @@index([documentType])
 }
 
 model LoanRepayment {
-  id              String         @id @default(cuid())
-  loanApplicantId String
-  refId           String?        @unique
-  dueDate         DateTime
-  amountDue       Float
-  principalPart   Float?
-  interestPart    Float?
-  feePart         Float?
-  amountPaid      Float          @default(0)
-  status          String         @default("pending")
-  paidAt          DateTime?
-  paymentMethod   String?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  loan            LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  loanApplicantId   String
+  loan              LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
+  refId             String?  @unique
+  dueDate           DateTime
+  amountDue         Float
+  principalPart     Float?
+  interestPart      Float?
+  feePart           Float?
+  amountPaid        Float    @default(0)
+  status            String   @default("pending") // pending, partial, paid, overdue
+  paidAt            DateTime?
+  paymentMethod     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@index([loanApplicantId, status])
   @@index([dueDate])
 }
 
 model LoanTransaction {
-  id              String         @id @default(cuid())
-  loanApplicantId String
-  type            String
-  amount          Float
-  reference       String?
-  transactionDate DateTime
-  metadata        String?
-  createdAt       DateTime       @default(now())
-  loan            LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  loanApplicantId   String
+  loan              LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
+  type              String   // disbursement, repayment, fee, penalty
+  amount            Float
+  reference         String?
+  transactionDate   DateTime
+  metadata          String?  // JSON
+  createdAt         DateTime @default(now())
 
   @@index([loanApplicantId])
 }
 
+// ============================================================================
+// 8. RISK ENGINE TABLES
+// ============================================================================
+
 model RiskConfiguration {
-  id          String   @id @default(cuid())
-  key         String   @unique
-  label       String
-  value       String
-  type        String   @default("percentage")
-  category    String?
-  description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                String   @id @default(cuid())
+  key               String   @unique
+  label             String
+  value             String
+  type              String   @default("percentage") // percentage, number, boolean
+  category          String?  // financial, scoring, qualitative
+  description       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model RiskAssessment {
-  id                   String                  @id @default(cuid())
-  riskCode             String?                 @unique
-  title                String
-  description          String?
-  category             String?
-  type                 String?
-  inherentLikelihood   Int?
-  inherentImpact       Int?
-  inherentScore        Int?
-  inherentRiskRating   String?
-  residualLikelihood   Int?
-  residualImpact       Int?
-  residualScore        Int?
-  residualRiskRating   String?
-  riskResponse         String?
-  treatmentPlan        String?
-  riskOwnerId          String?
-  controlOwnerId       String?
+  id                String   @id @default(cuid())
+  riskCode          String?  @unique // RSK-YYYY-NNNNN
+  title             String
+  description       String?
+  category          String?
+  type              String?
+
+  inherentLikelihood Int?
+  inherentImpact     Int?
+  inherentScore      Int?
+  inherentRiskRating String?  // critical, high, medium, low
+
+  residualLikelihood Int?
+  residualImpact     Int?
+  residualScore      Int?
+  residualRiskRating String?
+
+  riskResponse      String?  // avoid, mitigate, transfer, accept
+  treatmentPlan     String?
+
+  riskOwnerId       String?
+  riskOwner         Admin?   @relation("RiskOwner", fields: [riskOwnerId], references: [id])
+  controlOwnerId    String?
   controlEffectiveness String?
-  status               String                  @default("identified")
-  identifiedDate       DateTime                @default(now())
-  nextReviewDate       DateTime?
-  lastReviewDate       DateTime?
-  createdAt            DateTime                @default(now())
-  updatedAt            DateTime                @updatedAt
-  riskOwner            Admin?                  @relation("RiskOwner", fields: [riskOwnerId], references: [id])
-  histories            RiskAssessmentHistory[]
+
+  status            String   @default("identified") // identified, assessing, treating, monitored, closed
+  identifiedDate    DateTime @default(now())
+  nextReviewDate    DateTime?
+  lastReviewDate    DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  histories         RiskAssessmentHistory[]
 
   @@index([status])
   @@index([inherentRiskRating])
 }
 
 model RiskAssessmentHistory {
-  id               String         @id @default(cuid())
-  riskAssessmentId String
-  assessorId       String?
-  action           String?
-  changes          String?
-  notes            String?
-  createdAt        DateTime       @default(now())
-  riskAssessment   RiskAssessment @relation(fields: [riskAssessmentId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  riskAssessmentId  String
+  riskAssessment    RiskAssessment @relation(fields: [riskAssessmentId], references: [id], onDelete: Cascade)
+  assessorId        String?
+  action            String?
+  changes           String?  // JSON
+  notes             String?
+  createdAt         DateTime @default(now())
 
   @@index([riskAssessmentId])
 }
 
 model ExceptionReport {
-  id              String    @id @default(cuid())
-  exceptionCode   String?   @unique
-  title           String
-  description     String?
-  category        String?
-  type            String?
-  severity        String    @default("medium")
-  priority        String    @default("normal")
-  status          String    @default("open")
-  isEscalated     Boolean   @default(false)
-  reporterId      String?
-  assignedToId    String?
-  assignedAt      DateTime?
-  resolutionType  String?
-  resolvedById    String?
-  resolvedAt      DateTime?
-  resolutionNotes String?
-  metadata        String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  assignedTo      Admin?    @relation("ExceptionAssignee", fields: [assignedToId], references: [id])
-  reporter        Admin?    @relation("ExceptionReporter", fields: [reporterId], references: [id])
+  id                String   @id @default(cuid())
+  exceptionCode     String?  @unique // EXC-YYYY-NNNNN
+  title             String
+  description       String?
+  category          String?  // transaction, compliance, operational, security, fraud, credit
+  type              String?
+  severity          String   @default("medium") // low, medium, high, critical
+  priority          String   @default("normal") // low, normal, high, urgent
+  status            String   @default("open") // open, under_review, resolved, escalated
+  isEscalated       Boolean  @default(false)
+
+  reporterId        String?
+  reporter          Admin?   @relation("ExceptionReporter", fields: [reporterId], references: [id])
+  assignedToId      String?
+  assignedTo        Admin?   @relation("ExceptionAssignee", fields: [assignedToId], references: [id])
+  assignedAt        DateTime?
+
+  resolutionType    String?  // confirmed_fraud, policy_violation, error, false_positive, acceptable_risk, other
+  resolvedById      String?
+  resolvedAt        DateTime?
+  resolutionNotes   String?
+
+  metadata          String?  // JSON
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@index([status])
   @@index([severity])
   @@index([category])
 }
 
+// ============================================================================
+// 9. AUDIT & POLICIES
+// ============================================================================
+
 model AuditLog {
-  id          String   @id @default(cuid())
-  userId      String?
-  adminId     String?
-  action      String
-  module      String?
-  description String?
-  ipAddress   String?
-  userAgent   String?
-  severity    String   @default("info")
-  metadata    String?
-  createdAt   DateTime @default(now())
-  admin       Admin?   @relation(fields: [adminId], references: [id])
+  id                String   @id @default(cuid())
+  userId            String?
+  adminId           String?
+  admin             Admin?   @relation(fields: [adminId], references: [id])
+  action            String   // created, updated, deleted, approved, rejected, logged_in, etc.
+  module            String?  // loan, kyc, mcc, treasury, accounting, audit, etc.
+  description       String?
+  ipAddress         String?
+  userAgent         String?
+  severity          String   @default("info") // info, warning, critical
+  metadata          String?  // JSON
+  createdAt         DateTime @default(now())
 
   @@index([adminId])
   @@index([action])
@@ -999,20 +1190,20 @@ model AuditLog {
 }
 
 model LoginHistory {
-  id           String   @id @default(cuid())
-  userId       String?
-  adminId      String?
-  guard        String
-  status       String
-  ipAddress    String?
-  userAgent    String?
-  deviceType   String?
-  browserName  String?
-  platformName String?
-  location     String?
-  createdAt    DateTime @default(now())
-  admin        Admin?   @relation(fields: [adminId], references: [id])
-  user         User?    @relation(fields: [userId], references: [id])
+  id                String   @id @default(cuid())
+  userId            String?
+  user              User?    @relation(fields: [userId], references: [id])
+  adminId           String?
+  admin             Admin?   @relation(fields: [adminId], references: [id])
+  guard             String   // web, user, admin
+  status            String   // success, failed
+  ipAddress         String?
+  userAgent         String?
+  deviceType        String?
+  browserName       String?
+  platformName      String?
+  location          String?
+  createdAt         DateTime @default(now())
 
   @@index([userId])
   @@index([adminId])
@@ -1021,73 +1212,84 @@ model LoginHistory {
 }
 
 model PolicyDocument {
-  id              String                 @id @default(cuid())
-  title           String
-  category        String?
-  version         String                 @default("1.0")
-  effectiveDate   DateTime
-  status          String                 @default("active")
-  filePath        String?
-  body            String?
-  createdBy       String?
-  createdAt       DateTime               @default(now())
-  updatedAt       DateTime               @updatedAt
-  acknowledgments PolicyAcknowledgment[]
+  id                String   @id @default(cuid())
+  title             String
+  category          String?
+  version           String   @default("1.0")
+  effectiveDate     DateTime
+  status            String   @default("active") // active, superseded, archived
+  filePath          String?
+  body              String?  // rich text
+  createdBy         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  acknowledgments   PolicyAcknowledgment[]
 
   @@index([status])
 }
 
 model PolicyAcknowledgment {
-  id               String         @id @default(cuid())
-  policyDocumentId String
-  adminId          String?
-  acknowledgedAt   DateTime
-  metadata         String?
-  createdAt        DateTime       @default(now())
-  policy           PolicyDocument @relation(fields: [policyDocumentId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  policyDocumentId  String
+  policy            PolicyDocument @relation(fields: [policyDocumentId], references: [id], onDelete: Cascade)
+  adminId           String?
+  acknowledgedAt    DateTime
+  metadata          String?  // JSON
+  createdAt         DateTime @default(now())
 
   @@unique([policyDocumentId, adminId])
 }
 
+// ============================================================================
+// 10. TREASURY MODULE
+// ============================================================================
+
 model TreasuryProduct {
-  id                      String               @id @default(cuid())
-  name                    String
-  description             String?
-  minAmount               Float                @default(0)
-  maxAmount               Float?
-  interestRatePa          Float
-  minTenorDays            Int                  @default(30)
-  maxTenorDays            Int                  @default(365)
-  whtRate                 Float                @default(10)
-  earlyLiquidationPenalty Float                @default(20)
-  isActive                Boolean              @default(true)
-  createdAt               DateTime             @default(now())
-  updatedAt               DateTime             @updatedAt
-  investments             TreasuryInvestment[]
+  id                String   @id @default(cuid())
+  name              String
+  description       String?
+  minAmount         Float    @default(0)
+  maxAmount         Float?
+  interestRatePa    Float    // % per annum
+  minTenorDays      Int      @default(30)
+  maxTenorDays      Int      @default(365)
+  whtRate           Float    @default(10) // %
+  earlyLiquidationPenalty Float @default(20) // %
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  investments       TreasuryInvestment[]
 }
 
 model TreasuryInvestment {
-  id                String                 @id @default(cuid())
-  subscriptionCode  String                 @unique
+  id                String   @id @default(cuid())
+  subscriptionCode  String   @unique // INV-2025-888
   userId            String
+  user              User     @relation(fields: [userId], references: [id])
   productId         String
+  product           TreasuryProduct @relation(fields: [productId], references: [id])
+
   principal         Float
   interestRate      Float
   tenorDays         Int
   startDate         DateTime
   maturityDate      DateTime
-  accruedInterest   Float                  @default(0)
-  whtDeducted       Float                  @default(0)
-  payoutType        String                 @default("backend")
-  rolloverType      String                 @default("none")
-  payoutBankDetails String?
-  status            String                 @default("active")
+
+  accruedInterest   Float    @default(0)
+  whtDeducted       Float    @default(0)
+
+  payoutType        String   @default("backend") // compounding, monthly, backend
+  rolloverType      String   @default("none") // none, principal_only, principal_plus_interest
+  payoutBankDetails String?  // JSON
+
+  status            String   @default("active") // active, matured, liquidated, rolled_over, cancelled
   bookedBy          String?
-  createdAt         DateTime               @default(now())
-  updatedAt         DateTime               @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
   dailyAccruals     TreasuryDailyAccrual[]
-  product           TreasuryProduct        @relation(fields: [productId], references: [id])
-  user              User                   @relation(fields: [userId], references: [id])
   transactions      TreasuryTransaction[]
 
   @@index([userId])
@@ -1095,451 +1297,466 @@ model TreasuryInvestment {
 }
 
 model TreasuryDailyAccrual {
-  id                  String             @id @default(cuid())
-  investmentId        String
-  date                DateTime
+  id                String   @id @default(cuid())
+  investmentId      String
+  investment        TreasuryInvestment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+  date              DateTime
   dailyInterestEarned Float
-  dailyWht            Float
-  createdAt           DateTime           @default(now())
-  investment          TreasuryInvestment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+  dailyWht          Float
+  createdAt         DateTime @default(now())
 
   @@unique([investmentId, date])
 }
 
 model TreasuryTransaction {
-  id           String             @id @default(cuid())
-  investmentId String
-  type         String
-  amount       Float
-  direction    String
-  reference    String?
-  createdAt    DateTime           @default(now())
-  investment   TreasuryInvestment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  investmentId      String
+  investment        TreasuryInvestment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+  type              String   // subscription, full_redemption, partial_redemption, monthly_payout
+  amount            Float
+  direction         String   // debit, credit
+  reference         String?
+  createdAt         DateTime @default(now())
 
   @@index([investmentId])
 }
 
 model TreasuryBankAsset {
-  id            String    @id @default(cuid())
-  assetName     String
-  assetClass    String
-  faceValue     Float
-  purchasePrice Float
-  yieldRate     Float
-  accruedIncome Float     @default(0)
-  purchaseDate  DateTime
-  maturityDate  DateTime?
-  custodian     String?
-  status        String    @default("active")
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                String   @id @default(cuid())
+  assetName         String
+  assetClass        String   // t_bill, bond, placement, cash
+  faceValue         Float
+  purchasePrice     Float
+  yieldRate         Float
+  accruedIncome     Float    @default(0)
+  purchaseDate      DateTime
+  maturityDate      DateTime?
+  custodian         String?
+  status            String   @default("active") // active, matured, sold
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model InvestorProfile {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  sourceOfFunds   String?
-  investmentGoal  String?
-  riskTolerance   String   @default("low")
-  nokName         String?
-  nokPhone        String?
-  nokRelationship String?
-  nokEmail        String?
-  bankName        String?
-  accountNumber   String?
-  accountName     String?
-  status          String   @default("active")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  user            User     @relation(fields: [userId], references: [id])
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id])
+  sourceOfFunds     String?
+  investmentGoal    String?
+  riskTolerance     String   @default("low") // low, medium, high
+  nokName           String?
+  nokPhone          String?
+  nokRelationship   String?
+  nokEmail          String?
+  bankName          String?
+  accountNumber     String?
+  accountName       String?
+  status            String   @default("active")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
+// ============================================================================
+// 11. ACCOUNTING MODULE
+// ============================================================================
+
 model ChartOfAccount {
-  id               String            @id @default(cuid())
-  code             String            @unique
-  name             String
-  type             String
-  subType          String?
-  currency         String            @default("NGN")
-  isSystem         Boolean           @default(false)
-  isActive         Boolean           @default(true)
-  balance          Float             @default(0)
-  parentId         String?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  bankTransactions BankTransaction[]
-  parent           ChartOfAccount?   @relation("AccountHierarchy", fields: [parentId], references: [id])
-  children         ChartOfAccount[]  @relation("AccountHierarchy")
-  expenses         Expense[]
-  invoices         Invoice[]         @relation("InvoiceExpenseAccount")
-  invoicesIncome   Invoice[]         @relation("InvoiceRevenueAccount")
-  journalItems     JournalItem[]
-  payrollPayments  PayrollBatch[]    @relation("PayrollPaymentAccount")
-  payrollSalaries  PayrollBatch[]    @relation("PayrollSalaryExpenseAccount")
-  staffSalaries    StaffSalary[]     @relation("StaffSalaryExpenseAccount")
-  tellers          Teller[]          @relation("TellerCashAccount")
-  tills            Till[]            @relation("TillGlAccount")
-  vendorPayables   Vendor[]          @relation("VendorPayableAccount")
-  vendorBills      VendorBill[]
+  id                String   @id @default(cuid())
+  code              String   @unique
+  name              String
+  type              String   // asset, liability, equity, revenue, expense
+  subType           String?  // cash, bank, current_asset, fixed_asset, current_liability, etc.
+  currency          String   @default("NGN")
+  isSystem          Boolean  @default(false)
+  isActive          Boolean  @default(true)
+  balance           Float    @default(0)
+  parentId          String?
+  parent            ChartOfAccount? @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children          ChartOfAccount[] @relation("AccountHierarchy")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  journalItems      JournalItem[]
+  bankTransactions  BankTransaction[]
+  expenses          Expense[]
+  invoices          Invoice[]       @relation("InvoiceExpenseAccount")
+  invoicesIncome    Invoice[]       @relation("InvoiceRevenueAccount")
+  vendorBills       VendorBill[]
+  vendorPayables    Vendor[]        @relation("VendorPayableAccount")
+  tellers           Teller[]        @relation("TellerCashAccount")
+  tills             Till[]          @relation("TillGlAccount")
+  payrollPayments   PayrollBatch[]  @relation("PayrollPaymentAccount")
+  payrollSalaries   PayrollBatch[]  @relation("PayrollSalaryExpenseAccount")
+  staffSalaries     StaffSalary[]   @relation("StaffSalaryExpenseAccount")
 
   @@index([type])
   @@index([code])
 }
 
 model JournalEntry {
-  id             String        @id @default(cuid())
-  reference      String        @unique
-  date           DateTime
-  description    String
-  createdById    String?
-  posted         Boolean       @default(true)
-  isReversed     Boolean       @default(false)
-  reversalReason String?
-  sourceType     String?
-  sourceId       String?
-  metadata       String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  createdBy      Admin?        @relation(fields: [createdById], references: [id])
-  items          JournalItem[]
+  id                String   @id @default(cuid())
+  reference         String   @unique
+  date              DateTime
+  description       String
+  createdById       String?
+  createdBy         Admin?   @relation(fields: [createdById], references: [id])
+  posted            Boolean  @default(true)
+  isReversed        Boolean  @default(false)
+  reversalReason    String?
+  sourceType        String?  // loan, treasury, savings, manual
+  sourceId          String?
+  metadata          String?  // JSON
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  items             JournalItem[]
 
   @@index([date])
   @@index([reference])
 }
 
 model JournalItem {
-  id             String         @id @default(cuid())
-  journalEntryId String
-  accountId      String
-  debit          Float          @default(0)
-  credit         Float          @default(0)
-  createdAt      DateTime       @default(now())
-  account        ChartOfAccount @relation(fields: [accountId], references: [id])
-  journalEntry   JournalEntry   @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  journalEntryId    String
+  journalEntry      JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  accountId         String
+  account           ChartOfAccount @relation(fields: [accountId], references: [id])
+  debit             Float    @default(0)
+  credit            Float    @default(0)
+  createdAt         DateTime @default(now())
 
   @@index([journalEntryId])
   @@index([accountId])
 }
 
 model BankTransaction {
-  id                   String         @id @default(cuid())
-  chartOfAccountId     String
-  date                 DateTime
-  description          String?
-  reference            String?
-  debit                Float          @default(0)
-  credit               Float          @default(0)
-  balance              Float?
-  isReconciled         Boolean        @default(false)
+  id                String   @id @default(cuid())
+  chartOfAccountId  String
+  account           ChartOfAccount @relation(fields: [chartOfAccountId], references: [id])
+  date              DateTime
+  description       String?
+  reference         String?
+  debit             Float    @default(0)
+  credit            Float    @default(0)
+  balance           Float?
+  isReconciled      Boolean  @default(false)
   matchedJournalItemId String?
-  reconciledAt         DateTime?
-  reconciledBy         String?
-  importBatch          String?
-  createdAt            DateTime       @default(now())
-  account              ChartOfAccount @relation(fields: [chartOfAccountId], references: [id])
+  reconciledAt      DateTime?
+  reconciledBy      String?
+  importBatch       String?
+  createdAt         DateTime @default(now())
 
   @@index([chartOfAccountId])
   @@index([isReconciled])
 }
 
 model Vendor {
-  id               String          @id @default(cuid())
-  name             String
-  email            String?
-  phone            String?
-  address          String?
-  taxId            String?
-  bankName         String?
-  accountNumber    String?
-  accountName      String?
-  paymentTerms     Int             @default(30)
-  isActive         Boolean         @default(true)
-  payableAccountId String?
-  notes            String?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-  payableAccount   ChartOfAccount? @relation("VendorPayableAccount", fields: [payableAccountId], references: [id])
-  bills            VendorBill[]
-  payments         VendorPayment[]
+  id                String   @id @default(cuid())
+  name              String
+  email             String?
+  phone             String?
+  address           String?
+  taxId             String?
+  bankName          String?
+  accountNumber     String?
+  accountName       String?
+  paymentTerms      Int      @default(30) // days
+  isActive          Boolean  @default(true)
+  payableAccountId  String?
+  payableAccount    ChartOfAccount? @relation("VendorPayableAccount", fields: [payableAccountId], references: [id])
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  bills             VendorBill[]
+  payments          VendorPayment[]
 
   @@index([name])
 }
 
 model VendorBill {
-  id               String          @id @default(cuid())
-  billNumber       String
-  vendorId         String
-  date             DateTime
-  dueDate          DateTime
-  subtotal         Float
-  taxAmount        Float           @default(0)
-  totalAmount      Float
-  totalPaid        Float           @default(0)
-  status           String          @default("pending")
-  expenseAccountId String?
-  description      String?
-  journalEntryId   String?
-  createdById      String?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-  expenseAccount   ChartOfAccount? @relation(fields: [expenseAccountId], references: [id])
-  vendor           Vendor          @relation(fields: [vendorId], references: [id])
-  payments         VendorPayment[]
+  id                String   @id @default(cuid())
+  billNumber        String
+  vendorId          String
+  vendor            Vendor   @relation(fields: [vendorId], references: [id])
+  date              DateTime
+  dueDate           DateTime
+  subtotal          Float
+  taxAmount         Float    @default(0)
+  totalAmount       Float
+  totalPaid         Float    @default(0)
+  status            String   @default("pending") // pending, partial, paid, unpaid
+  expenseAccountId  String?
+  expenseAccount    ChartOfAccount? @relation(fields: [expenseAccountId], references: [id])
+  description       String?
+  journalEntryId    String?
+  createdById       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  payments          VendorPayment[]
 
   @@index([vendorId])
   @@index([status])
 }
 
 model VendorPayment {
-  id              String     @id @default(cuid())
-  vendorBillId    String
-  vendorId        String
-  paymentDate     DateTime
-  amount          Float
-  paymentMethod   String?
-  referenceNumber String?
-  bankAccountId   String?
-  journalEntryId  String?
-  notes           String?
-  createdById     String?
-  createdAt       DateTime   @default(now())
-  vendorBill      VendorBill @relation(fields: [vendorBillId], references: [id])
-  vendor          Vendor     @relation(fields: [vendorId], references: [id])
+  id                String   @id @default(cuid())
+  vendorBillId      String
+  vendorBill        VendorBill @relation(fields: [vendorBillId], references: [id])
+  vendorId          String
+  vendor            Vendor   @relation(fields: [vendorId], references: [id])
+  paymentDate       DateTime
+  amount            Float
+  paymentMethod     String?
+  referenceNumber   String?
+  bankAccountId     String?
+  journalEntryId    String?
+  notes             String?
+  createdById       String?
+  createdAt         DateTime @default(now())
 
   @@index([vendorBillId])
 }
 
 model Invoice {
-  id               String           @id @default(cuid())
-  userId           String?
-  invoiceNumber    String           @unique
-  date             DateTime
-  dueDate          DateTime
-  description      String?
-  subtotal         Float
-  taxAmount        Float            @default(0)
-  totalAmount      Float
-  totalPaid        Float            @default(0)
-  notes            String?
-  status           String           @default("draft")
-  writtenOffAt     DateTime?
-  writtenOffAmount Float            @default(0)
-  revenueAccountId String?
-  expenseAccountId String?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  expenseAccount   ChartOfAccount?  @relation("InvoiceExpenseAccount", fields: [expenseAccountId], references: [id])
-  revenueAccount   ChartOfAccount?  @relation("InvoiceRevenueAccount", fields: [revenueAccountId], references: [id])
-  payments         InvoicePayment[]
+  id                String   @id @default(cuid())
+  userId            String?
+  invoiceNumber     String   @unique
+  date              DateTime
+  dueDate           DateTime
+  description       String?
+  subtotal          Float
+  taxAmount         Float    @default(0)
+  totalAmount       Float
+  totalPaid         Float    @default(0)
+  notes             String?
+  status            String   @default("draft") // draft, sent, partial, paid, overdue, written_off, void
+  writtenOffAt      DateTime?
+  writtenOffAmount  Float    @default(0)
+  revenueAccountId  String?
+  revenueAccount    ChartOfAccount? @relation("InvoiceRevenueAccount", fields: [revenueAccountId], references: [id])
+  expenseAccountId  String?
+  expenseAccount    ChartOfAccount? @relation("InvoiceExpenseAccount", fields: [expenseAccountId], references: [id])
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  payments          InvoicePayment[]
 
   @@index([userId])
   @@index([status])
 }
 
 model InvoicePayment {
-  id             String   @id @default(cuid())
-  reference      String?  @unique
-  invoiceId      String
-  date           DateTime
-  amount         Float
-  bankAccountId  String?
-  paymentMethod  String?
-  checkNumber    String?
-  notes          String?
-  journalEntryId String?
-  receivedById   String?
-  createdAt      DateTime @default(now())
-  invoice        Invoice  @relation(fields: [invoiceId], references: [id])
+  id                String   @id @default(cuid())
+  reference         String?  @unique
+  invoiceId         String
+  invoice           Invoice  @relation(fields: [invoiceId], references: [id])
+  date              DateTime
+  amount            Float
+  bankAccountId     String?
+  paymentMethod     String?
+  checkNumber       String?
+  notes             String?
+  journalEntryId    String?
+  receivedById      String?
+  createdAt         DateTime @default(now())
 
   @@index([invoiceId])
 }
 
 model Expense {
-  id               String         @id @default(cuid())
-  date             DateTime
-  description      String
-  amount           Float
-  expenseAccountId String
-  paymentAccountId String?
-  category         String?
-  reference        String?
-  receiptNumber    String?
-  notes            String?
-  status           String         @default("pending")
-  createdById      String?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  createdBy        Admin?         @relation(fields: [createdById], references: [id])
-  expenseAccount   ChartOfAccount @relation(fields: [expenseAccountId], references: [id])
+  id                String   @id @default(cuid())
+  date              DateTime
+  description       String
+  amount            Float
+  expenseAccountId  String
+  expenseAccount    ChartOfAccount @relation(fields: [expenseAccountId], references: [id])
+  paymentAccountId  String?
+  category          String?  // Office, Travel, Utilities, Maintenance, Professional, Entertainment, Other
+  reference         String?
+  receiptNumber     String?
+  notes             String?
+  status            String   @default("pending") // pending, approved, paid, rejected
+  createdById       String?
+  createdBy         Admin?   @relation(fields: [createdById], references: [id])
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@index([status])
   @@index([category])
 }
 
 model PayrollBatch {
-  id                     String          @id @default(cuid())
-  period                 String          @unique
-  paymentDate            DateTime
-  staffCount             Int             @default(0)
-  grossPay               Float           @default(0)
-  totalAllowances        Float           @default(0)
-  totalDeductions        Float           @default(0)
-  netPay                 Float           @default(0)
-  status                 String          @default("pending")
-  paymentAccountId       String?
+  id                String   @id @default(cuid())
+  period            String   @unique // 2024-01
+  paymentDate       DateTime
+  staffCount        Int      @default(0)
+  grossPay          Float    @default(0)
+  totalAllowances   Float    @default(0)
+  totalDeductions   Float    @default(0)
+  netPay            Float    @default(0)
+  status            String   @default("pending") // pending, paid
+  paymentAccountId  String?
+  paymentAccount    ChartOfAccount? @relation("PayrollPaymentAccount", fields: [paymentAccountId], references: [id])
   salaryExpenseAccountId String?
-  journalEntryId         String?
-  processedById          String?
-  approvedById           String?
-  approvedAt             DateTime?
-  createdAt              DateTime        @default(now())
-  updatedAt              DateTime        @updatedAt
-  approvedBy             Admin?          @relation("PayrollApprovedBy", fields: [approvedById], references: [id])
-  paymentAccount         ChartOfAccount? @relation("PayrollPaymentAccount", fields: [paymentAccountId], references: [id])
-  processedBy            Admin?          @relation("PayrollProcessedBy", fields: [processedById], references: [id])
-  salaryExpenseAccount   ChartOfAccount? @relation("PayrollSalaryExpenseAccount", fields: [salaryExpenseAccountId], references: [id])
-  payslips               Payslip[]
+  salaryExpenseAccount ChartOfAccount? @relation("PayrollSalaryExpenseAccount", fields: [salaryExpenseAccountId], references: [id])
+  journalEntryId    String?
+  processedById     String?
+  processedBy       Admin?   @relation("PayrollProcessedBy", fields: [processedById], references: [id])
+  approvedById      String?
+  approvedBy        Admin?   @relation("PayrollApprovedBy", fields: [approvedById], references: [id])
+  approvedAt        DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  payslips          Payslip[]
 }
 
 model Payslip {
-  id                  String       @id @default(cuid())
-  payslipNumber       String       @unique
-  payrollBatchId      String
-  staffId             String
-  basicSalary         Float
-  totalAllowances     Float        @default(0)
-  totalDeductions     Float        @default(0)
-  taxDeduction        Float        @default(0)
-  pensionDeduction    Float        @default(0)
-  otherDeductions     Float        @default(0)
-  netPay              Float
-  status              String       @default("pending")
-  allowancesBreakdown String?
-  deductionsBreakdown String?
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
-  payrollBatch        PayrollBatch @relation(fields: [payrollBatchId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  payslipNumber     String   @unique // PS-202401-0001
+  payrollBatchId    String
+  payrollBatch      PayrollBatch @relation(fields: [payrollBatchId], references: [id], onDelete: Cascade)
+  staffId           String
+  basicSalary       Float
+  totalAllowances   Float    @default(0)
+  totalDeductions   Float    @default(0)
+  taxDeduction      Float    @default(0)
+  pensionDeduction  Float    @default(0)
+  otherDeductions   Float    @default(0)
+  netPay            Float
+  status            String   @default("pending") // pending, paid
+  allowancesBreakdown String? // JSON
+  deductionsBreakdown String? // JSON
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@index([payrollBatchId])
   @@index([staffId])
 }
 
 model StaffSalary {
-  id                 String          @id @default(cuid())
-  staffId            String
-  basicSalary        Float
-  housingAllowance   Float           @default(0)
-  transportAllowance Float           @default(0)
-  mealAllowance      Float           @default(0)
-  utilityAllowance   Float           @default(0)
-  otherAllowances    Float           @default(0)
-  taxRate            Float           @default(0)
-  pensionRate        Float           @default(8)
-  allowancesJson     String?
-  deductionsJson     String?
-  payFrequency       String          @default("monthly")
-  expenseAccountId   String?
-  isActive           Boolean         @default(true)
-  effectiveFrom      DateTime?
-  effectiveTo        DateTime?
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
-  expenseAccount     ChartOfAccount? @relation("StaffSalaryExpenseAccount", fields: [expenseAccountId], references: [id])
-  staff              Admin           @relation("StaffSalaryForAdmin", fields: [staffId], references: [id])
+  id                String   @id @default(cuid())
+  staffId           String
+  staff             Admin    @relation("StaffSalaryForAdmin", fields: [staffId], references: [id])
+  basicSalary       Float
+  housingAllowance  Float    @default(0)
+  transportAllowance Float   @default(0)
+  mealAllowance     Float    @default(0)
+  utilityAllowance  Float    @default(0)
+  otherAllowances   Float    @default(0)
+  taxRate           Float    @default(0)
+  pensionRate       Float    @default(8)
+  allowancesJson    String?  // JSON
+  deductionsJson    String?  // JSON
+  payFrequency      String   @default("monthly")
+  expenseAccountId  String?
+  expenseAccount    ChartOfAccount? @relation("StaffSalaryExpenseAccount", fields: [expenseAccountId], references: [id])
+  isActive          Boolean  @default(true)
+  effectiveFrom     DateTime?
+  effectiveTo       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@index([staffId])
 }
 
 model Teller {
-  id            String         @id @default(cuid())
-  staffId       String?
-  cashAccountId String
-  tillName      String
-  balance       Float          @default(0)
-  isActive      Boolean        @default(true)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  cashAccount   ChartOfAccount @relation("TellerCashAccount", fields: [cashAccountId], references: [id])
+  id                String   @id @default(cuid())
+  staffId           String?
+  cashAccountId     String
+  cashAccount       ChartOfAccount @relation("TellerCashAccount", fields: [cashAccountId], references: [id])
+  tillName          String
+  balance           Float    @default(0)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model Till {
-  id             String            @id @default(cuid())
-  name           String
-  code           String            @unique
-  location       String?
-  glAccountId    String
-  branchId       String?
-  currentBalance Float             @default(0)
-  balanceLimit   Float?
-  assignedUserId String?
-  openingBalance Float             @default(0)
-  status         String            @default("active")
-  lastActivity   DateTime?
-  createdById    String?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  branch         Branch?           @relation(fields: [branchId], references: [id])
-  glAccount      ChartOfAccount    @relation("TillGlAccount", fields: [glAccountId], references: [id])
-  transactions   TillTransaction[]
+  id                String   @id @default(cuid())
+  name              String
+  code              String   @unique
+  location          String?
+  glAccountId       String
+  glAccount         ChartOfAccount @relation("TillGlAccount", fields: [glAccountId], references: [id])
+  branchId          String?
+  branch            Branch?  @relation(fields: [branchId], references: [id])
+  currentBalance    Float    @default(0)
+  balanceLimit      Float?
+  assignedUserId    String?
+  openingBalance    Float    @default(0)
+  status            String   @default("active") // active, inactive, closed
+  lastActivity      DateTime?
+  createdById       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  transactions      TillTransaction[]
 
   @@index([branchId])
   @@index([status])
 }
 
 model TillTransaction {
-  id              String   @id @default(cuid())
-  tillId          String
-  type            String
-  amount          Float
-  date            DateTime
-  reference       String?
-  description     String?
-  contraAccountId String?
-  customerId      String?
-  createdById     String?
-  createdAt       DateTime @default(now())
-  createdBy       Admin?   @relation(fields: [createdById], references: [id])
-  till            Till     @relation(fields: [tillId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  tillId            String
+  till              Till     @relation(fields: [tillId], references: [id], onDelete: Cascade)
+  type              String   // deposit, withdrawal, transfer_in, transfer_out
+  amount            Float
+  date              DateTime
+  reference         String?
+  description       String?
+  contraAccountId   String?
+  customerId        String?
+  createdById       String?
+  createdBy         Admin?   @relation(fields: [createdById], references: [id])
+  createdAt         DateTime @default(now())
 
   @@index([tillId])
   @@index([type])
 }
 
+// ============================================================================
+// 12. SAVINGS & TRANSACTIONS
+// ============================================================================
+
 model Savings {
-  id           String    @id @default(cuid())
-  userId       String
-  planType     String
-  amount       Float
-  interestRate Float?
-  duration     Int?
-  status       String    @default("active")
-  refId        String?   @unique
-  partnerId    String?
-  startDate    DateTime?
-  endDate      DateTime?
-  metadata     String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  user         User      @relation(fields: [userId], references: [id])
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+  planType          String   // regular, emergency, circle, duo
+  amount            Float
+  interestRate      Float?
+  duration          Int?
+  status            String   @default("active")
+  refId             String?  @unique
+  partnerId         String?
+  startDate         DateTime?
+  endDate           DateTime?
+  metadata          String?  // JSON
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@index([userId])
   @@index([status])
 }
 
 model Transactions {
-  id           String   @id @default(cuid())
-  userId       String
-  type         String
-  amount       Float
-  charge       Float    @default(0)
-  status       String   @default("pending")
-  reference    String?  @unique
-  trxRef       String?
-  gatewayId    String?
-  balanceAfter Float?
-  metadata     String?
-  createdAt    DateTime @default(now())
-  user         User     @relation(fields: [userId], references: [id])
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+  type              String   // deposit, withdrawal, transfer, loan_disbursement, loan_repaid, interest
+  amount            Float
+  charge            Float    @default(0)
+  status            String   @default("pending") // pending, success, failed
+  reference         String?  @unique
+  trxRef            String?
+  gatewayId         String?
+  balanceAfter      Float?
+  metadata          String?  // JSON
+  createdAt         DateTime @default(now())
 
   @@index([userId])
   @@index([status])
@@ -1547,240 +1764,271 @@ model Transactions {
 }
 
 model Balance {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  amount    Float    @default(0)
-  coinId    Int      @default(1)
-  status    Int      @default(1)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id])
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id])
+  amount            Float    @default(0)
+  coinId            Int      @default(1)
+  status            Int      @default(1)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model Beneficiary {
-  id            String   @id @default(cuid())
-  userId        String
-  name          String
-  bankName      String?
-  accountNumber String?
-  type          String   @default("bank")
-  metadata      String?
-  createdAt     DateTime @default(now())
-  user          User     @relation(fields: [userId], references: [id])
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+  name              String
+  bankName          String?
+  accountNumber     String?
+  type              String   @default("bank")
+  metadata          String?  // JSON
+  createdAt         DateTime @default(now())
 
   @@index([userId])
 }
 
 model UserBank {
-  id            String   @id @default(cuid())
-  userId        String
-  bankName      String
-  accountNumber String
-  accountName   String?
-  isDefault     Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  user          User     @relation(fields: [userId], references: [id])
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+  bankName          String
+  accountNumber     String
+  accountName       String?
+  isDefault         Boolean  @default(false)
+  createdAt         DateTime @default(now())
 
   @@index([userId])
 }
 
+// ============================================================================
+// 13. COMMUNICATIONS (Tickets, Messages, Blog, Help Center)
+// ============================================================================
+
 model Ticket {
-  id        String   @id @default(cuid())
-  userId    String
-  subject   String
-  message   String
-  status    String   @default("open")
-  priority  String   @default("normal")
-  refId     String?  @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  replies   Reply[]
-  user      User     @relation(fields: [userId], references: [id])
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+  subject           String
+  message           String
+  status            String   @default("open") // open, pending, closed
+  priority          String   @default("normal") // low, normal, high, urgent
+  refId             String?  @unique
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  replies           Reply[]
 
   @@index([userId])
   @@index([status])
 }
 
 model Reply {
-  id        String   @id @default(cuid())
-  ticketId  String
-  userId    String?
-  adminId   String?
-  message   String
-  isStaff   Boolean  @default(false)
-  createdAt DateTime @default(now())
-  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  ticketId          String
+  ticket            Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  userId            String?
+  adminId           String?
+  message           String
+  isStaff           Boolean  @default(false)
+  createdAt         DateTime @default(now())
 
   @@index([ticketId])
 }
 
 model Contact {
-  id         String     @id @default(cuid())
-  firstName  String
-  lastName   String
-  email      String?
-  mobile     String?
-  userId     String?
-  subscribed Boolean    @default(true)
-  createdAt  DateTime   @default(now())
-  user       User?      @relation(fields: [userId], references: [id])
-  messages   Messages[]
+  id                String   @id @default(cuid())
+  firstName         String
+  lastName          String
+  email             String?
+  mobile            String?
+  userId            String?
+  user              User?    @relation(fields: [userId], references: [id])
+  subscribed        Boolean  @default(true)
+  createdAt         DateTime @default(now())
+
+  messages          Messages[]
 }
 
 model Messages {
-  id        String   @id @default(cuid())
-  contactId String?
-  firstName String?
-  lastName  String?
-  mobile    String?
-  email     String?
-  subject   String
-  message   String
-  isRead    Boolean  @default(false)
-  createdAt DateTime @default(now())
-  contact   Contact? @relation(fields: [contactId], references: [id])
+  id                String   @id @default(cuid())
+  contactId         String?
+  contact           Contact? @relation(fields: [contactId], references: [id])
+  firstName         String?
+  lastName          String?
+  mobile            String?
+  email             String?
+  subject           String
+  message           String
+  isRead            Boolean  @default(false)
+  createdAt         DateTime @default(now())
 
   @@index([contactId])
 }
 
 model SentEmail {
-  id       String   @id @default(cuid())
-  userId   String?
-  adminId  String?
-  to       String
-  subject  String
-  body     String
-  template String?
-  sentAt   DateTime @default(now())
-  admin    Admin?   @relation(fields: [adminId], references: [id])
+  id                String   @id @default(cuid())
+  userId            String?
+  adminId           String?
+  admin             Admin?   @relation(fields: [adminId], references: [id])
+  to                String
+  subject           String
+  body              String
+  template          String?
+  sentAt            DateTime @default(now())
 
   @@index([userId])
   @@index([adminId])
 }
 
+// ============================================================================
+// 14. SETTINGS, PAGES, BLOG
+// ============================================================================
+
 model Settings {
-  id                       Int      @id @default(1)
-  siteName                 String   @default("Watershed Capital")
-  siteShortName            String   @default("Watershed")
-  tagline                  String   @default("Banking · Credit · Treasury")
-  logoUrl                  String   @default("/watershed-logo.png")
-  logoDarkUrl              String   @default("/watershed-logo.png")
-  faviconUrl               String   @default("/watershed-logo.png")
-  siteDesc                 String?
-  email                    String?
-  supportEmail             String?
-  mobile                   String?
-  title                    String?
-  address                  String?
-  livechat                 String?
-  analyticSnippet          String?
-  currencyFormat           String   @default("ngn")
-  defaultFont              String   @default("Inter")
-  currency                 String   @default("NGN")
-  adminUrl                 String   @default("admin")
-  careerUrl                String?
-  brandColor               String   @default("#1F7A4A")
-  brandColorDark           String   @default("#145233")
-  brandColorLight          String   @default("#f1f8f4")
-  accentColor              String   @default("#0ea5e9")
-  cbnLicense               String   @default("CBN-Licensed MFB")
-  footerNote               String   @default("Watershed Capital · Licensed Loan Company")
-  heroTitle                String   @default("Loans Built for Nigerian Entrepreneurs")
-  heroHighlight            String   @default("Nigerian Entrepreneurs")
-  heroSubtitle             String   @default("SME working capital, asset finance, and LPO finance — all in one platform. Get funded in 48 hours with transparent pricing and a dedicated relationship manager.")
-  heroCtaText              String   @default("Apply for Loan")
-  heroCtaSecondary         String   @default("Sign In")
-  heroBadge                String   @default("Licensed Loan Company · Registered in Nigeria")
-  stat1Label               String   @default("Disbursed")
-  stat1Value               String   @default("₦5B+")
-  stat2Label               String   @default("Customers")
-  stat2Value               String   @default("12,000+")
-  stat3Label               String   @default("Approval Rate")
-  stat3Value               String   @default("98%")
-  stat4Label               String   @default("Disbursement")
-  stat4Value               String   @default("48hr")
-  sectionServicesTitle     String   @default("Everything your business needs to grow")
-  sectionServicesSubtitle  String   @default("Loan products designed for Nigerian SMEs — from working capital to asset finance")
-  sectionJourneyTitle      String   @default("Start Your Financial Journey in 3 Simple Steps")
-  sectionWhyTitle          String   @default("Why Choose Us?")
-  sectionWhySubtitle       String   @default("We're not just another lender — we're your growth partner")
-  sectionCtaTitle          String   @default("Ready to Grow Your Business?")
-  sectionCtaSubtitle       String   @default("Apply now and get funded in 48 hours. No hidden fees, transparent pricing, dedicated support.")
-  sectionCtaButton         String   @default("Apply for a Loan")
-  sectionTestimonialsTitle String   @default("What Our Customers Say")
-  whistleblowerPhone       String   @default("+234 800 942 8377")
-  whistleblowerEmail       String   @default("whistleblower@watershedcapital.com")
-  registration             Boolean  @default(true)
-  maintenance              Boolean  @default(false)
-  phoneVerify              Boolean  @default(true)
-  emailVerify              Boolean  @default(true)
-  language                 Boolean  @default(true)
-  referral                 Boolean  @default(true)
-  loan                     Boolean  @default(true)
-  buyNowPayLater           Boolean  @default(false)
-  savings                  Boolean  @default(true)
-  mutualFund               Boolean  @default(false)
-  projectInvestment        Boolean  @default(false)
-  recaptcha                Boolean  @default(false)
-  minPl                    Float    @default(0)
-  maxPl                    Float?
-  minAccount               Float    @default(0)
-  maxAccount               Float?
-  pct                      String?
-  percentPc                Float?
-  fiatPc                   Float?
-  minTl                    Float    @default(0)
-  maxTl                    Float?
-  tct                      String?
-  percentTc                Float?
-  fiatTc                   Float?
-  dpBankName               String?
-  bkRoutingCode            String?
-  bkAcctNo                 String?
-  bkAcctName               String?
-  bkStatus                 Boolean  @default(false)
-  recoveryEmail            String?
-  twilioAccountSid         String?
-  twilioAuthToken          String?
-  twilioNumber             String?
-  nocaptchaSecret          String?
-  nocaptchaSitekey         String?
-  privacy                  String?
-  terms                    String?
-  googleCi                 String?
-  googleCs                 String?
-  googleSl                 Boolean  @default(false)
-  facebookCi               String?
-  facebookCs               String?
-  facebookSl               Boolean  @default(false)
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  id                Int      @id @default(1)
+  siteName          String   @default("Watershed Capital")
+  siteShortName     String   @default("Watershed")
+  tagline           String   @default("Banking · Credit · Treasury")
+  logoUrl           String   @default("/watershed-logo.png")
+  logoDarkUrl       String   @default("/watershed-logo.png")
+  faviconUrl        String   @default("/watershed-logo.png")
+  siteDesc          String?
+  email             String?
+  supportEmail      String?
+  mobile            String?
+  title             String?
+  address           String?
+  livechat          String?
+  analyticSnippet   String?
+  currencyFormat    String   @default("ngn")
+  defaultFont       String   @default("Inter")
+  currency          String   @default("NGN")
+  adminUrl          String   @default("admin")
+  careerUrl         String?
+  brandColor        String   @default("#1F7A4A")
+  brandColorDark    String   @default("#145233")
+  brandColorLight   String   @default("#f1f8f4")
+  accentColor       String   @default("#0ea5e9")
+  cbnLicense        String   @default("CBN-Licensed MFB")
+  footerNote        String   @default("Watershed Capital · Licensed Loan Company")
+
+  // Homepage dynamic content (all editable from admin)
+  heroTitle         String   @default("Loans Built for Nigerian Entrepreneurs")
+  heroHighlight     String   @default("Nigerian Entrepreneurs")
+  heroSubtitle      String   @default("SME working capital, asset finance, and LPO finance — all in one platform. Get funded in 48 hours with transparent pricing and a dedicated relationship manager.")
+  heroCtaText       String   @default("Apply for Loan")
+  heroCtaSecondary  String   @default("Sign In")
+  heroBadge         String   @default("Licensed Loan Company · Registered in Nigeria")
+  heroImageUrl      String   @default("https://sfile.chatglm.cn/images-ppt/87e17a98030d.jpg")
+  heroImageAlt      String   @default("Nigerian entrepreneur in her shop")
+  stat1Label        String   @default("Disbursed")
+  stat1Value        String   @default("₦5B+")
+  stat2Label        String   @default("Customers")
+  stat2Value        String   @default("12,000+")
+  stat3Label        String   @default("Approval Rate")
+  stat3Value        String   @default("98%")
+  stat4Label        String   @default("Disbursement")
+  stat4Value        String   @default("48hr")
+  sectionServicesTitle    String @default("Everything your business needs to grow")
+  sectionServicesSubtitle String @default("Loan products designed for Nigerian SMEs — from working capital to asset finance")
+  sectionJourneyTitle     String @default("Start Your Financial Journey in 3 Simple Steps")
+  sectionWhyTitle         String @default("Why Choose Us?")
+  sectionWhySubtitle      String @default("We're not just another lender — we're your growth partner")
+  sectionCtaTitle         String @default("Ready to Grow Your Business?")
+  sectionCtaSubtitle      String @default("Apply now and get funded in 48 hours. No hidden fees, transparent pricing, dedicated support.")
+  sectionCtaButton        String @default("Apply for a Loan")
+  sectionTestimonialsTitle String @default("What Our Customers Say")
+  whistleblowerPhone      String @default("+234 800 942 8377")
+  whistleblowerEmail      String @default("whistleblower@watershedcapital.com")
+
+  // Toggles
+  registration      Boolean  @default(true)
+  maintenance       Boolean  @default(false)
+  phoneVerify       Boolean  @default(true)
+  emailVerify       Boolean  @default(true)
+  language          Boolean  @default(true)
+  referral          Boolean  @default(true)
+  loan              Boolean  @default(true)
+  buyNowPayLater    Boolean  @default(false)
+  savings           Boolean  @default(true)
+  mutualFund        Boolean  @default(false)
+  projectInvestment Boolean  @default(false)
+  recaptcha         Boolean  @default(false)
+
+  // Payout/transfer
+  minPl             Float    @default(0)
+  maxPl             Float?
+  minAccount        Float    @default(0)
+  maxAccount        Float?
+  pct               String?
+  percentPc         Float?
+  fiatPc            Float?
+  minTl             Float    @default(0)
+  maxTl             Float?
+  tct               String?
+  percentTc         Float?
+  fiatTc            Float?
+
+  // Bank deposit
+  dpBankName        String?
+  bkRoutingCode     String?
+  bkAcctNo          String?
+  bkAcctName        String?
+  bkStatus          Boolean  @default(false)
+
+  // Security
+  recoveryEmail     String?
+
+  // Twilio / SMS
+  twilioAccountSid  String?
+  twilioAuthToken    String?
+  twilioNumber      String?
+
+  // reCAPTCHA
+  nocaptchaSecret   String?
+  nocaptchaSitekey  String?
+
+  // Policies
+  privacy           String?
+  terms             String?
+
+  // Social login
+  googleCi          String?
+  googleCs          String?
+  googleSl          Boolean  @default(false)
+  facebookCi        String?
+  facebookCs        String?
+  facebookSl        Boolean  @default(false)
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model Page {
-  id        String   @id @default(cuid())
-  title     String
-  slug      String   @unique
-  body      String
-  status    String   @default("published")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String   @id @default(cuid())
+  title             String
+  slug              String   @unique
+  body              String
+  status           String   @default("published")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model Blog {
-  id         String    @id @default(cuid())
-  title      String
-  slug       String    @unique
-  body       String
-  image      String?
-  categoryId String?
-  authorId   String?
-  views      Int       @default(0)
-  status     String    @default("published")
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  author     Admin?    @relation("BlogAuthor", fields: [authorId], references: [id])
-  category   Category? @relation("BlogCategory", fields: [categoryId], references: [id])
+  id                String   @id @default(cuid())
+  title             String
+  slug              String   @unique
+  body              String
+  image             String?
+  categoryId        String?
+  category          Category? @relation("BlogCategory", fields: [categoryId], references: [id])
+  authorId          String?
+  author            Admin?    @relation("BlogAuthor", fields: [authorId], references: [id])
+  views             Int      @default(0)
+  status            String   @default("published")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@index([slug])
   @@index([categoryId])
@@ -1789,107 +2037,111 @@ model Blog {
 }
 
 model Category {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
-  type      String   @default("blog")
-  createdAt DateTime @default(now())
-  blogs     Blog[]   @relation("BlogCategory")
+  id                String   @id @default(cuid())
+  name              String
+  slug              String   @unique
+  type              String   @default("blog") // blog, help
+  createdAt         DateTime @default(now())
+  blogs             Blog[]   @relation("BlogCategory")
 
   @@index([slug])
 }
 
 model HelpCenterTopic {
-  id          String   @id @default(cuid())
-  title       String
-  slug        String   @unique
-  description String?
-  createdAt   DateTime @default(now())
+  id                String   @id @default(cuid())
+  title             String
+  slug              String   @unique
+  description       String?
+  createdAt         DateTime @default(now())
 }
 
 model HelpCenterArticle {
-  id        String   @id @default(cuid())
-  topicId   String?
-  title     String
-  slug      String   @unique
-  body      String
-  views     Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String   @id @default(cuid())
+  topicId           String?
+  title             String
+  slug              String   @unique
+  body              String
+  views             Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
+// ============================================================================
+// 15. SERVICES & SOCIAL
+// ============================================================================
+
 model Service {
-  id        String   @id @default(cuid())
-  icon      String?
-  title     String
-  details   String?
-  status    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String   @id @default(cuid())
+  icon              String?
+  title             String
+  details           String?
+  status            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model Social {
-  id        String   @id @default(cuid())
-  type      String
-  value     String
-  createdAt DateTime @default(now())
+  id                String   @id @default(cuid())
+  type              String
+  value             String
+  createdAt         DateTime @default(now())
 }
 
 model Team {
-  id        String   @id @default(cuid())
-  name      String
-  position  String?
-  image     String?
-  linkedin  String?
-  twitter   String?
-  createdAt DateTime @default(now())
+  id                String   @id @default(cuid())
+  name              String
+  position          String?
+  image             String?
+  linkedin          String?
+  twitter           String?
+  createdAt         DateTime @default(now())
 }
 
 model Review {
-  id         String   @id @default(cuid())
-  name       String
-  occupation String?
-  review     String
-  image      String?
-  status     Boolean  @default(true)
-  createdAt  DateTime @default(now())
+  id                String   @id @default(cuid())
+  name              String
+  occupation        String?
+  review            String
+  image             String?
+  status            Boolean  @default(true)
+  createdAt         DateTime @default(now())
 }
 
 model Brand {
-  id        String   @id @default(cuid())
-  name      String
-  image     String?
-  status    Boolean  @default(true)
-  createdAt DateTime @default(now())
+  id                String   @id @default(cuid())
+  name              String
+  image             String?
+  status            Boolean  @default(true)
+  createdAt         DateTime @default(now())
 }
 
 model Country {
-  id             String  @id @default(cuid())
-  name           String  @unique
-  code           String  @unique
-  iso2           String?
-  iso3           String?
-  currency       String?
-  currencySymbol String?
-  dialCode       String?
-  status         Boolean @default(true)
+  id                String   @id @default(cuid())
+  name              String   @unique
+  code              String   @unique
+  iso2              String?
+  iso3              String?
+  currency          String?
+  currencySymbol    String?
+  dialCode          String?
+  status            Boolean  @default(true)
 }
 
 model Notification {
-  id           String    @id @default(cuid())
-  userId       String?
-  adminId      String?
-  type         String
-  title        String
-  message      String
-  category     String    @default("loan")
-  isRead       Boolean   @default(false)
-  readAt       DateTime?
-  actionLabel  String?
-  actionView   String?
-  actionParams String?
-  metadata     String?
-  createdAt    DateTime  @default(now())
+  id          String   @id @default(cuid())
+  userId      String?  // for customer notifications
+  adminId     String?  // for staff notifications
+  type        String   // loan_submitted, loan_approved, loan_rejected, loan_disbursed, payment_due, payment_received, kyc_approved, kyc_rejected, ticket_reply, offer_ready, cp_verified
+  title       String
+  message     String
+  category    String   @default("loan") // loan, payment, kyc, system, ticket
+  isRead      Boolean  @default(false)
+  readAt      DateTime?
+  actionLabel String?  // e.g. "View Loan"
+  actionView  String?  // e.g. "loan-detail"
+  actionParams String? // JSON string of params
+  metadata    String?  // JSON string
+  createdAt   DateTime @default(now())
 
   @@index([userId, isRead])
   @@index([adminId, isRead])
@@ -1897,74 +2149,74 @@ model Notification {
 }
 
 model LoyaltyPoint {
-  id        String   @id @default(cuid())
-  userId    String
-  points    Int
-  reason    String
-  loanId    String?
-  metadata  String?
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  userId      String
+  points      Int
+  reason      String   // on_time_payment, early_payment, referral_success, kyc_completion, first_loan
+  loanId      String?
+  metadata    String?
+  createdAt   DateTime @default(now())
 
   @@index([userId, createdAt])
 }
 
 model CreditTier {
-  id               String   @id @default(cuid())
-  userId           String   @unique
-  tier             String   @default("BRONZE")
-  totalPoints      Int      @default(0)
-  streak           Int      @default(0)
-  bestStreak       Int      @default(0)
-  interestDiscount Float    @default(0)
-  updatedAt        DateTime @updatedAt
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  tier        String   @default("BRONZE") // BRONZE, SILVER, GOLD, PLATINUM
+  totalPoints Int      @default(0)
+  streak      Int      @default(0) // consecutive on-time payments
+  bestStreak  Int      @default(0)
+  interestDiscount Float @default(0) // 0, 0.005, 0.01, 0.015 (0.5%, 1%, 1.5%)
+  updatedAt   DateTime @updatedAt
 }
 
 model AchievementBadge {
-  id         String   @id @default(cuid())
-  userId     String
-  badgeType  String
-  badgeLabel String
-  badgeIcon  String
-  earnedAt   DateTime @default(now())
+  id          String   @id @default(cuid())
+  userId      String
+  badgeType   String   // first_loan_paid, perfect_payer, loyal_customer, early_bird, streak_5, streak_10, referral_king
+  badgeLabel  String
+  badgeIcon   String   // emoji or icon name
+  earnedAt    DateTime @default(now())
 
   @@unique([userId, badgeType])
   @@index([userId])
 }
 
 model FaqArticle {
-  id        String   @id @default(cuid())
-  question  String
-  answer    String
-  category  String   @default("General")
-  sortOrder Int      @default(0)
-  status    String   @default("published")
-  views     Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  question    String
+  answer      String
+  category    String   @default("General") // General, Loans, Payments, KYC, Account
+  sortOrder   Int      @default(0)
+  status      String   @default("published")
+  views       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model CallbackRequest {
-  id            String    @id @default(cuid())
-  userId        String
+  id          String   @id @default(cuid())
+  userId      String
   preferredTime String
-  reason        String
-  status        String    @default("pending")
-  adminId       String?
-  calledAt      DateTime?
-  notes         String?
-  createdAt     DateTime  @default(now())
+  reason      String
+  status      String   @default("pending") // pending, called, missed
+  adminId     String?
+  calledAt    DateTime?
+  notes       String?
+  createdAt   DateTime @default(now())
 }
 
 model LoanRestructuring {
   id              String   @id @default(cuid())
   loanApplicantId String
   userId          String
-  requestType     String
+  requestType     String   // extend_tenor, reduce_payment, grace_period
   currentTenor    Int
   requestedTenor  Int
   currentPayment  Float
   reason          String
-  status          String   @default("pending")
+  status          String   @default("pending") // pending, approved, rejected
   adminId         String?
   adminNotes      String?
   createdAt       DateTime @default(now())
@@ -1972,22 +2224,22 @@ model LoanRestructuring {
 }
 
 model ChatMessage {
-  id         String    @id @default(cuid())
-  userId     String?
-  adminId    String?
-  senderType String
-  message    String
-  isRead     Boolean   @default(false)
-  readAt     DateTime?
-  createdAt  DateTime  @default(now())
+  id          String   @id @default(cuid())
+  userId      String?  // customer
+  adminId     String?  // staff
+  senderType  String   // customer, staff
+  message     String
+  isRead      Boolean  @default(false)
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
 
   @@index([userId, createdAt])
   @@index([adminId, createdAt])
 }
 
 model Language {
-  id     String  @id @default(cuid())
-  name   String  @unique
-  code   String  @unique
-  status Boolean @default(true)
+  id                String   @id @default(cuid())
+  name              String   @unique
+  code              String   @unique
+  status            Boolean  @default(true)
 }
