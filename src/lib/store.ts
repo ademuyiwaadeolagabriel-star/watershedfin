@@ -103,6 +103,8 @@ export type ViewKey =
   | 'search-results'
   // Admin: blog CMS
   | 'blog-manager'
+  // First-run setup wizard
+  | 'setup'
   // Communication module
   | 'comm-announcements'
   | 'comm-message-center'

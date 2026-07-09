@@ -74,14 +74,34 @@ import { ClientDatabaseView } from '@/components/views/admin/client-database';
 import { StaffDetailView } from '@/components/views/admin/staff-detail';
 import { BlogManagerView } from '@/components/views/admin/blog-manager';
 import { SearchResultsView } from '@/components/views/search-results';
+import { SetupView } from '@/components/views/setup';
 import {
   AnnouncementsView, MessageCenterView, NotificationCenterView,
   EmailTemplatesView, SmsBroadcastView, EmailCampaignsView, CustomerServiceView,
 } from '@/components/views/communications';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function Home() {
   const { currentAdmin, currentUser, currentView, theme } = useAppStore();
+  const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
+
+  // Check if system needs first-run setup (only when no admin is logged in)
+  useEffect(() => {
+    if (!currentAdmin && !currentUser) {
+      fetch('/api/setup')
+        .then(r => r.json())
+        .then(data => {
+          if (data.needsSetup) {
+            setNeedsSetup(true);
+          } else {
+            setNeedsSetup(false);
+          }
+        })
+        .catch(() => setNeedsSetup(false));
+    } else {
+      setNeedsSetup(false);
+    }
+  }, [currentAdmin, currentUser]);
 
   // Apply theme to document
   useEffect(() => {
@@ -89,6 +109,24 @@ export default function Home() {
       document.documentElement.classList.toggle('dark', theme === 'dark');
     }
   }, [theme]);
+
+  // ── First-run setup wizard ─────────────────────────────────────────────
+  // If no admin exists and system needs setup, show the setup wizard
+  if (needsSetup === true && !currentAdmin && !currentUser) {
+    return <SetupView />;
+  }
+
+  // Show loading state while checking setup status
+  if (needsSetup === null && !currentAdmin && !currentUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-2"></div>
+          <p className="text-xs text-slate-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   // ── Public marketing site ────────────────────────────────────────────────
   // Rendered when no admin and no customer is signed in.
