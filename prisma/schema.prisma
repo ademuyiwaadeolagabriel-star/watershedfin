@@ -100,6 +100,13 @@ model Admin {
   loginHistory        LoginHistory[]
   blogPosts           Blog[]        @relation("BlogAuthor")
 
+  // BM/LO Target tracking
+  monthlyDisbursementTarget Float? // target loan disbursement volume (₦)
+  monthlyLoanCountTarget   Int?    // target number of loans
+  targetMonth             String? // YYYY-MM format for current target
+  targetSetAt             DateTime?
+  targetSetBy             String? // Admin ID who set the target
+
   @@index([branchId])
   @@index([role])
 }
@@ -125,9 +132,11 @@ model User {
   staffId           String?  // assigned Loan Officer (Admin.id)
   loanOfficer       Admin?   @relation("UserLoanOfficer", fields: [staffId], references: [id])
   assignedBranchId  String?
+  assignedBmId      String?  // Branch Manager assigned to this client
   assignedBy        String?
   assignedAt        DateTime?
   assignmentStatus  String   @default("unassigned") // unassigned, pending_lo_assignment, assigned
+  profileStatus     String   @default("incomplete") // incomplete, complete, pending_review
   onboardingChannel String?  // self_onboard, loan_officer, front_desk, bm
   createdBy         String?
   role              String?  // optional role for hybrid users

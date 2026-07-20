@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { WORKFLOW_TRANSITIONS, STEP_PERMISSIONS, hasPermission, ROLE_TO_MCC } from '@/lib/constants';
 import { createNotification, notifyNextGateStaff } from '@/lib/notifications';
 import { getAuthFromRequest, getAdminFromRequest } from '@/lib/auth';
+import { notifyLoanSubmitted, notifyLoanApproved, notifyLoanDeclined, notifyLoanQueried, notifyLoanDisbursed } from '@/lib/notification-service';
 
 // POST /api/loans/[id]/transition
 // A1 FIX: Requires Bearer token authentication
@@ -420,6 +421,30 @@ export async function POST(
         customerName,
         amount: Number(loan.amount) || undefined,
       });
+    }
+
+    // ── EMAIL NOTIFICATIONS (fire-and-forget) ──────────────────────────
+    // Send branded emails to customer at key workflow milestones
+    if (action === 'query') {
+      void notifyLoanQueried(loan, comment || 'Please contact your loan officer.');
+    } else if (action === 'reject') {
+      void notifyLoanDeclined(loan, comment);
+    } else if (action === 'forward') {
+      // Send approval email when MD approves
+      if (currentStep === 'MD_APPROVAL' && mccDecision) {
+        const approvedAmount = Number(mccDecision.recommendedAmount) || Number(loan.amount);
+        const tenor = Number(mccDecision.duration) || Number(loan.duration);
+        const rate = Number(mccDecision.interestRatePercentage) || 24;
+        const monthlyRate = rate / 100 / 12;
+        const monthlyPayment = monthlyRate === 0
+          ? approvedAmount / tenor
+          : (approvedAmount * monthlyRate * Math.pow(1 + monthlyRate, tenor)) / (Math.pow(1 + monthlyRate, tenor) - 1);
+        void notifyLoanApproved(loan, approvedAmount, monthlyPayment, tenor);
+      }
+      // Send disbursement email when CFO disburses
+      if (currentStep === 'CFO_DISBURSEMENT') {
+        void notifyLoanDisbursed(loan);
+      }
     }
 
     return NextResponse.json({

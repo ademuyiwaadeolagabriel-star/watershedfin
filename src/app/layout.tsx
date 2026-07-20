@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { BrandingBootstrap } from "@/components/branding-bootstrap";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -49,7 +50,9 @@ export default function RootLayout({
         className={`${inter.variable} antialiased bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100`}
       >
         <BrandingBootstrap />
-        {children}
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
         <Toaster />
       </body>
     </html>

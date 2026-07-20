@@ -18,6 +18,7 @@ import {
   TrendingUp, TrendingDown, Shield, Cpu, FileText, ChevronRight,
   User, Building2, Boxes, Receipt, Landmark, ShieldCheck, MapPin, Lightbulb,
   CheckSquare, Plus, Trash2, Camera, Users, CreditCard, AlertCircle, Download,
+  ShieldAlert,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { executeFullAppraisal, EngineInput, EngineResult } from '@/lib/credit-engine';
@@ -447,6 +448,37 @@ export function CamView() {
     return () => clearTimeout(timer);
   }, [data, loading]);
 
+  // S6: Keyboard shortcuts
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      // Ctrl+S = Save draft
+      if ((e.ctrlKey || e.metaKey) && e.key === 's' && canEdit) {
+        e.preventDefault();
+        handleSave();
+      }
+      // Ctrl+Enter = Submit CAM
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && canEdit && validationErrors.length === 0) {
+        e.preventDefault();
+        handleSubmitLock();
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [canEdit, data, validationErrors]);
+
+  // R4: Unsaved changes warning
+  useEffect(() => {
+    if (!canEdit || isLocked) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      if (!saved) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [canEdit, isLocked, saved]);
+
   const updateField = (key: string, value: any) => {
     setData(prev => ({ ...prev, [key]: value }));
     setSaved(false);
@@ -785,8 +817,10 @@ export function CamView() {
     if (!currentAdmin) return false;
     if (currentAdmin.role === 'super') return !isLocked; // super can edit anytime (if not locked)
 
-    // LO can edit during LO_ENTRY and LO_ASSESSMENT (before lock)
+    // G2: LO GUARD — LO can only edit if the client is assigned to them
     if (currentAdmin.role === 'loan' || currentAdmin.loanOrigination) {
+      const isAssignedToMe = loan?.staffId === currentAdmin.id || loan?.user?.staffId === currentAdmin.id;
+      if (!isAssignedToMe) return false; // Not assigned to this LO — read-only
       return !isLocked && ['LO_ENTRY', 'LO_ASSESSMENT', 'DRAFT', 'QUERY_RESPONSE'].includes(currentStep);
     }
 
@@ -803,6 +837,9 @@ export function CamView() {
     // BM, CRO, CFO, Legal, MD — can NEVER edit the LO data (read-only + create own snapshot)
     return false;
   })();
+
+  // G2: Show warning if LO is not assigned to this client
+  const isLONotAssigned = currentAdmin?.role === 'loan' && loan && loan.staffId !== currentAdmin.id && loan.user?.staffId !== currentAdmin.id;
 
   // ── L4: Role-specific snapshot creation ──
   // Each approver role can create their own frozen snapshot
@@ -826,7 +863,7 @@ export function CamView() {
   const fmtPct = (n: number) => (n || 0).toFixed(2) + '%';
 
   return (
-    <div className="p-4 lg:p-6 bg-slate-50 min-h-full space-y-4">
+    <div className="p-4 lg:p-6 bg-slate-50 dark:bg-slate-900 dark:bg-slate-950 min-h-full space-y-4" role="main" aria-label="Credit Appraisal Memorandum">
       {/* Header */}
       <div className="flex items-center gap-3 flex-wrap">
         <Button variant="outline" size="sm" onClick={() => setView('loan-detail', { loanId })}>
@@ -834,9 +871,9 @@ export function CamView() {
         </Button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl font-bold text-slate-900">Universal CAM</h1>
+            <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">Universal CAM</h1>
             <Badge variant="outline" className="font-mono text-[10px]">{loan.applicationRef}</Badge>
-            <Badge className="bg-slate-100 text-slate-700 text-[10px]">
+            <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-700 text-[10px]">
               {LOAN_STEP_LABELS[loan.currentStep]}
             </Badge>
             {isLocked && (
@@ -845,22 +882,25 @@ export function CamView() {
               </Badge>
             )}
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Borrower: {loan.user?.firstName} {loan.user?.lastName} · {loan.user?.business?.name || '—'}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button onClick={recalcEngine} variant="outline" size="sm">
+          <Button onClick={() => window.print()} variant="outline" size="sm" className="hidden">
+            <FileText className="h-4 w-4 mr-1" /> Print
+          </Button>
+          <Button onClick={recalcEngine} variant="outline" size="sm" aria-label="Recalculate engine">
             <Calculator className="h-4 w-4 mr-1" /> Recalculate
           </Button>
           {canEdit && (
-            <Button onClick={handleSave} disabled={saving || isLocked} variant="outline" size="sm">
+            <Button onClick={handleSave} disabled={saving || isLocked} variant="outline" size="sm" aria-label="Save CAM draft">
               <Save className="h-4 w-4 mr-1" /> {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Draft'}
             </Button>
           )}
           {canEdit && (currentAdmin?.role === 'loan' || currentAdmin?.role === 'super') && (
             <Button
-              onClick={handleSubmitLock}
+              onClick={handleSubmitLock} aria-label="Lock and submit CAM"
               disabled={submitting || isLocked || validationErrors.length > 0}
               className="bg-emerald-600 hover:bg-emerald-700"
               size="sm"
@@ -948,7 +988,7 @@ export function CamView() {
             engineResult.riskGrade.grade === 'D' && 'border-orange-300 bg-orange-50',
             engineResult.riskGrade.grade === 'F' && 'border-red-300 bg-red-50',
           )}>
-            <p className="text-[9px] uppercase text-slate-500 font-semibold">Risk Grade</p>
+            <p className="text-[9px] uppercase text-slate-500 dark:text-slate-400 font-semibold">Risk Grade</p>
             <p className={cn('text-2xl font-bold',
               engineResult.riskGrade.grade === 'A' && 'text-emerald-700',
               engineResult.riskGrade.grade === 'B' && 'text-green-700',
@@ -965,7 +1005,7 @@ export function CamView() {
             engineResult.ratios.dsr > 0.35 ? 'border-amber-300 bg-amber-50' :
             'border-emerald-300 bg-emerald-50'
           )}>
-            <p className="text-[9px] uppercase text-slate-500 font-semibold">DSR</p>
+            <p className="text-[9px] uppercase text-slate-500 dark:text-slate-400 font-semibold">DSR</p>
             <p className={cn('text-2xl font-bold',
               engineResult.ratios.dsr > 0.45 ? 'text-red-600' :
               engineResult.ratios.dsr > 0.35 ? 'text-amber-600' :
@@ -980,7 +1020,7 @@ export function CamView() {
             engineResult.ratios.gearingRatio > 0.25 ? 'border-amber-300 bg-amber-50' :
             'border-emerald-300 bg-emerald-50'
           )}>
-            <p className="text-[9px] uppercase text-slate-500 font-semibold">Gearing</p>
+            <p className="text-[9px] uppercase text-slate-500 dark:text-slate-400 font-semibold">Gearing</p>
             <p className={cn('text-2xl font-bold',
               engineResult.ratios.gearingRatio > 0.35 ? 'text-red-600' :
               engineResult.ratios.gearingRatio > 0.25 ? 'text-amber-600' :
@@ -995,7 +1035,7 @@ export function CamView() {
             engineResult.collateralCoverage.coveragePercent < 150 ? 'border-amber-300 bg-amber-50' :
             'border-emerald-300 bg-emerald-50'
           )}>
-            <p className="text-[9px] uppercase text-slate-500 font-semibold">Coverage</p>
+            <p className="text-[9px] uppercase text-slate-500 dark:text-slate-400 font-semibold">Coverage</p>
             <p className={cn('text-2xl font-bold',
               engineResult.collateralCoverage.coveragePercent < 100 ? 'text-red-600' :
               engineResult.collateralCoverage.coveragePercent < 150 ? 'text-amber-600' :
@@ -1009,7 +1049,7 @@ export function CamView() {
             engineResult.pnl.netProfit < 0 ? 'border-red-300 bg-red-50' :
             'border-emerald-300 bg-emerald-50'
           )}>
-            <p className="text-[9px] uppercase text-slate-500 font-semibold">Net Profit/mo</p>
+            <p className="text-[9px] uppercase text-slate-500 dark:text-slate-400 font-semibold">Net Profit/mo</p>
             <p className={cn('text-lg font-bold',
               engineResult.pnl.netProfit < 0 ? 'text-red-600' : 'text-emerald-600'
             )}>₦{(engineResult.pnl.netProfit || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p>
@@ -1022,7 +1062,7 @@ export function CamView() {
             engineResult.engineVerdict === 'REVIEW' ? 'border-amber-300 bg-amber-50' :
             'border-emerald-300 bg-emerald-50'
           )}>
-            <p className="text-[9px] uppercase text-slate-500 font-semibold">Verdict</p>
+            <p className="text-[9px] uppercase text-slate-500 dark:text-slate-400 font-semibold">Verdict</p>
             <p className={cn('text-lg font-bold',
               engineResult.engineVerdict === 'REJECT' ? 'text-red-600' :
               engineResult.engineVerdict === 'REVIEW' ? 'text-amber-600' :
@@ -1055,6 +1095,17 @@ export function CamView() {
         </div>
       )}
 
+      {/* G2: LO Not Assigned Warning */}
+      {isLONotAssigned && (
+        <div className="rounded-md bg-amber-50 border border-amber-300 px-4 py-3 flex items-center gap-3">
+          <ShieldAlert className="h-5 w-5 text-amber-600 flex-shrink-0" />
+          <div>
+            <p className="text-xs font-bold text-amber-800">This client is not assigned to you.</p>
+            <p className="text-[11px] text-amber-700">You can view this CAM in read-only mode. Ask your Branch Manager to assign the client to you if you need to make changes.</p>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700 whitespace-pre-line">
           {error}
@@ -1083,7 +1134,7 @@ export function CamView() {
                   'flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-medium whitespace-nowrap transition-colors',
                   active
                     ? 'bg-emerald-600 text-white'
-                    : 'text-slate-600 hover:bg-slate-100'
+                    : 'text-slate-600 hover:bg-slate-100 dark:bg-slate-800'
                 )}
               >
                 <Icon className="h-3.5 w-3.5" />
@@ -1120,7 +1171,7 @@ export function CamView() {
         >
           <ArrowLeft className="h-4 w-4 mr-1" /> Previous
         </Button>
-        <p className="text-xs text-slate-500">Tab {activeTab + 1} of {CAM_TABS.length}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">Tab {activeTab + 1} of {CAM_TABS.length}</p>
         <Button
           variant="outline"
           size="sm"
@@ -1217,7 +1268,7 @@ function EngineHud({ result }: { result: EngineResult }) {
         <div>
           <p className="text-[10px] text-slate-400 uppercase">Considered Sales</p>
           <p className="font-bold">₦{result.forensics.consideredSales.toLocaleString()}</p>
-          <p className="text-[9px] text-slate-500">Source: {result.forensics.sourceUsed}</p>
+          <p className="text-[9px] text-slate-500 dark:text-slate-400">Source: {result.forensics.sourceUsed}</p>
         </div>
         <div>
           <p className="text-[10px] text-slate-400 uppercase">Weighted Margin</p>
@@ -1228,7 +1279,7 @@ function EngineHud({ result }: { result: EngineResult }) {
           <p className={cn('font-bold', result.stress.verdict === 'PASS' ? 'text-emerald-400' : 'text-red-400')}>
             {result.stress.verdict}
           </p>
-          <p className="text-[9px] text-slate-500">Stressed DSR: {(result.stress.stressedDSR * 100).toFixed(1)}%</p>
+          <p className="text-[9px] text-slate-500 dark:text-slate-400">Stressed DSR: {(result.stress.stressedDSR * 100).toFixed(1)}%</p>
         </div>
       </div>
     </Card>
@@ -1245,7 +1296,7 @@ function RatioCard({ label, value, target, status }: { label: string; value: str
     )}>
       <p className="text-[9px] text-slate-400 uppercase">{label}</p>
       <p className="text-sm font-bold">{value}</p>
-      <p className="text-[9px] text-slate-500">Target: {target}</p>
+      <p className="text-[9px] text-slate-500 dark:text-slate-400">Target: {target}</p>
     </div>
   );
 }
@@ -1274,7 +1325,7 @@ function SectorAutoLookupSection({ data, update }: any) {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Boxes className="h-4 w-4 text-emerald-700" />
-          <h3 className="text-sm font-bold text-slate-900">Sector &amp; Business Nature Lookup</h3>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Sector &amp; Business Nature Lookup</h3>
         </div>
         <Badge className="bg-emerald-100 text-emerald-700 text-[10px]">{DEFAULT_SECTORS.length} sectors</Badge>
       </div>
@@ -1345,14 +1396,14 @@ function ZonificationLookupSection({ data, update }: any) {
       : lookup.rating <= 6
         ? 'bg-amber-100 text-amber-700 border-amber-300'
         : 'bg-red-100 text-red-700 border-red-300'
-    : 'bg-slate-100 text-slate-500 border-slate-300';
+    : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-300';
 
   return (
     <Card className="p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <MapPin className="h-4 w-4 text-emerald-700" />
-          <h3 className="text-sm font-bold text-slate-900">Zonification Check (Location Rating)</h3>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Zonification Check (Location Rating)</h3>
         </div>
         <Badge className={cn('text-[10px] border', ratingColor)}>
           {lookup ? `Rating: ${lookup.rating}` : 'No match'}
@@ -1402,7 +1453,7 @@ function CashflowInputsSection({ data, update }: any) {
     <Card className="p-4 bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-200">
       <div className="flex items-center gap-2 mb-3">
         <Calculator className="h-4 w-4 text-indigo-700" />
-        <h3 className="text-sm font-bold text-slate-900">Cashflow Test Inputs (G1)</h3>
+        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Cashflow Test Inputs (G1)</h3>
       </div>
       <p className="text-xs text-slate-600 mb-3">
         These inputs feed the 22-row × 12-month Monthly Cashflow Test in the Engine tab (Excel MONTHLY CASHFLOW TEST sheet parity).
@@ -1431,7 +1482,7 @@ function PreviousBalanceSheetSection({ data, update }: any) {
     <Card className="p-4 bg-gradient-to-br from-purple-50 to-pink-50 border-purple-200">
       <div className="flex items-center gap-2 mb-3">
         <TrendingDown className="h-4 w-4 text-purple-700" />
-        <h3 className="text-sm font-bold text-slate-900">Previous Period Balance Sheet (G2)</h3>
+        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Previous Period Balance Sheet (G2)</h3>
       </div>
       <p className="text-xs text-slate-600 mb-3">
         Captures the previous reporting period's totals for trend analysis. The engine computes differences and % change in the Engine tab.
@@ -1462,7 +1513,7 @@ function ProfileTab({ data, update, loan }: any) {
     <div className="space-y-6">
       {/* Client Identity — from onboarding (read-only) */}
       <div>
-        <h3 className="text-base font-bold text-slate-900 mb-1">Client Identity</h3>
+        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Client Identity</h3>
         <p className="text-xs text-slate-400 mb-3">Auto-populated from onboarding — read only</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Field label="First Name" value={u?.firstName} readOnly />
@@ -1478,7 +1529,7 @@ function ProfileTab({ data, update, loan }: any) {
 
       {/* Loan Terms — from onboarding (read-only during LO phase) */}
       <div>
-        <h3 className="text-base font-bold text-slate-900 mb-1">Loan Terms (Requested)</h3>
+        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Loan Terms (Requested)</h3>
         <p className="text-xs text-slate-400 mb-3">Auto-populated from customer application — HOC may adjust during structuring</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Field label="Loan Principal (₦)" type="number" value={data.loanPrincipal} onChange={(v: any) => update('loanPrincipal', Number(v))} />
@@ -1494,7 +1545,7 @@ function ProfileTab({ data, update, loan }: any) {
 
       {/* CAM-Specific Risk Assessment Fields */}
       <div>
-        <h3 className="text-base font-bold text-slate-900 mb-1">CAM Risk Assessment</h3>
+        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">CAM Risk Assessment</h3>
         <p className="text-xs text-slate-400 mb-3">Fields specific to credit appraisal — completed by Loan Officer</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Field label="Applicant Age" type="number" value={data.applicantAge} onChange={(v: any) => update('applicantAge', Number(v))} />
@@ -1515,7 +1566,7 @@ function ProfileTab({ data, update, loan }: any) {
 
       {/* Sector & Zonification — auto-populated, read-only */}
       <div>
-        <h3 className="text-base font-bold text-slate-900 mb-1">Sector & Zonification (Auto)</h3>
+        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Sector & Zonification (Auto)</h3>
         <p className="text-xs text-slate-400 mb-3">Auto-populated from business sector and location</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Field label="Sector Risk Score (auto)" type="number" value={data.sectorRiskScore} readOnly />
@@ -1555,7 +1606,7 @@ function RunningWflLoanSection({ data, update }: any) {
 
   // "Can Customer Get Another Loan?" indicator
   let pctPaid = 0;
-  let verdict: { label: string; color: string } = { label: '—', color: 'bg-slate-100 text-slate-700' };
+  let verdict: { label: string; color: string } = { label: '—', color: 'bg-slate-100 dark:bg-slate-800 text-slate-700' };
   if (r.isActive && r.amount > 0) {
     const paid = Math.max(0, r.amount - (Number(r.balance) || 0));
     pctPaid = (paid / r.amount) * 100;
@@ -1569,7 +1620,7 @@ function RunningWflLoanSection({ data, update }: any) {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <CreditCard className="h-4 w-4 text-emerald-700" />
-          <h3 className="text-sm font-bold text-slate-900">Running WFL Loan Details</h3>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Running WFL Loan Details</h3>
         </div>
         <CheckField label="Client is on a running WFL loan" checked={!!r.isActive} onChange={(v: any) => upd('isActive', v)} />
       </div>
@@ -1584,11 +1635,11 @@ function RunningWflLoanSection({ data, update }: any) {
             <Field label="Installments Paid" type="number" value={r.installmentsPaid} onChange={(v: any) => upd('installmentsPaid', Number(v))} />
             <Field label="Loan Balance (₦)" type="number" value={r.balance} onChange={(v: any) => upd('balance', Number(v))} />
           </div>
-          <div className="mt-4 p-3 rounded-md bg-slate-50 border border-slate-200 flex items-center justify-between">
+          <div className="mt-4 p-3 rounded-md bg-slate-50 dark:bg-slate-900 border border-slate-200 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertCircle className="h-4 w-4 text-slate-600" />
               <div>
-                <p className="text-[10px] uppercase text-slate-500">Can Customer Get Another Loan?</p>
+                <p className="text-[10px] uppercase text-slate-500 dark:text-slate-400">Can Customer Get Another Loan?</p>
                 <p className="text-xs text-slate-600">
                   Based on {pctPaid.toFixed(1)}% of principal paid on running WFL loan.
                 </p>
@@ -1630,15 +1681,15 @@ function OtherLenderLoansSection({ data, update }: any) {
     <Card className="p-4">
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h3 className="text-sm font-bold text-slate-900">Running Loans with Other Lenders</h3>
-          <p className="text-xs text-slate-500">Capture up to 15 external obligations. Status uses CBN prudential classification.</p>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Running Loans with Other Lenders</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Capture up to 15 external obligations. Status uses CBN prudential classification.</p>
         </div>
         <Button size="sm" variant="outline" onClick={addRow}><Plus className="h-3.5 w-3.5 mr-1" />Add Row</Button>
       </div>
       <div className="overflow-x-auto max-h-96 overflow-y-auto">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 sticky top-0">
-            <tr className="text-left text-[9px] uppercase text-slate-500">
+          <thead className="bg-slate-50 dark:bg-slate-900 sticky top-0">
+            <tr className="text-left text-[9px] uppercase text-slate-500 dark:text-slate-400">
               <th className="px-2 py-2">S/N</th>
               <th className="px-2 py-2">Institution</th>
               <th className="px-2 py-2 text-right">Loan Amount</th>
@@ -1676,7 +1727,7 @@ function OtherLenderLoansSection({ data, update }: any) {
           </tbody>
           <tfoot className="bg-emerald-50 font-bold">
             <tr>
-              <td colSpan={3} className="px-2 py-2 text-right text-[10px] uppercase text-slate-500">Totals</td>
+              <td colSpan={3} className="px-2 py-2 text-right text-[10px] uppercase text-slate-500 dark:text-slate-400">Totals</td>
               <td className="px-2 py-2 text-right font-mono text-emerald-700">{fmtNaira(totalInstallment)}</td>
               <td className="px-2 py-2 text-right font-mono text-emerald-700">{fmtNaira(totalBalance)}</td>
               <td colSpan={5}></td>
@@ -1700,11 +1751,11 @@ function ReferencesSection({ data, update }: any) {
     <Card className="p-4">
       <div className="flex items-center gap-2 mb-3">
         <Users className="h-4 w-4 text-emerald-700" />
-        <h3 className="text-sm font-bold text-slate-900">References (4 persons)</h3>
+        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">References (4 persons)</h3>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {refs.map((r: any, idx: number) => (
-          <Card key={idx} className="p-3 bg-slate-50">
+          <Card key={idx} className="p-3 bg-slate-50 dark:bg-slate-900">
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-xs font-bold text-emerald-700 uppercase">{r.type}</h4>
               <Badge variant="outline" className="text-[9px]">#{idx + 1}</Badge>
@@ -1741,7 +1792,7 @@ function BusinessTab({ data, update, loan }: any) {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-base font-bold text-slate-900 mb-1">Business Profile (From Onboarding)</h3>
+        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Business Profile (From Onboarding)</h3>
         <p className="text-xs text-slate-400 mb-3">Auto-populated from customer onboarding — verify during field visitation</p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <Field label="Business Name" value={b?.name} readOnly />
@@ -1753,7 +1804,7 @@ function BusinessTab({ data, update, loan }: any) {
         </div>
       </div>
       <div>
-        <h3 className="text-base font-bold text-slate-900 mb-3">Business Location</h3>
+        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-3">Business Location</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Field label="Shop Address" value={b?.shopAddress} readOnly />
           <Field label="Landmark" value={b?.landmark} readOnly />
@@ -1763,7 +1814,7 @@ function BusinessTab({ data, update, loan }: any) {
       </div>
       {/* Business Verification Checkboxes */}
       <div>
-        <h3 className="text-base font-bold text-slate-900 mb-3">Business Verification</h3>
+        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-3">Business Verification</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <CheckField label="Business visually confirmed during visitation" checked={data.businessVerified || false} onChange={(v: any) => update('businessVerified', v)} />
           <CheckField label="Stock level matches declared value" checked={data.stockMatchesDeclared || false} onChange={(v: any) => update('stockMatchesDeclared', v)} />
@@ -1908,14 +1959,14 @@ function SalesTab({ data, update, engineResult }: any) {
       {/* ── METHOD 1: Sales According to Client's Estimation (Weekly Grid) ── */}
       <Card className="p-4 border-2 border-emerald-200">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-slate-900">1. Sales According to Client&apos;s Estimation</h3>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">1. Sales According to Client&apos;s Estimation</h3>
           <Badge className="bg-emerald-100 text-emerald-700 text-[10px]">Source 1</Badge>
         </div>
-        <p className="text-xs text-slate-500 mb-3">Weekly grid: capture Good / Average / Bad day amounts for each day of the week. Monthly = Weekly Total × 4.</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Weekly grid: capture Good / Average / Bad day amounts for each day of the week. Monthly = Weekly Total × 4.</p>
         <div className="overflow-x-auto">
           <table className="w-full text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-100">
+              <tr className="bg-slate-100 dark:bg-slate-800">
                 <th className="px-2 py-2 border text-left text-[10px] uppercase text-slate-600">WEEKLY</th>
                 {dayLabels.map((d) => <th key={d} className="px-2 py-2 border text-center text-[10px] uppercase text-slate-600">{d}</th>)}
               </tr>
@@ -1958,14 +2009,14 @@ function SalesTab({ data, update, engineResult }: any) {
       {/* ── METHOD 2: Monthly Sales According to 3-Day Sales ── */}
       <Card className="p-4 border-2 border-amber-200">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-slate-900">2. Monthly Sales According to 3-Day Sales</h3>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">2. Monthly Sales According to 3-Day Sales</h3>
           <Badge className="bg-amber-100 text-amber-700 text-[10px]">Source 2</Badge>
         </div>
-        <p className="text-xs text-slate-500 mb-3">Capture sales for the last 3 observed days. Monthly = Total × 8 (extrapolation factor).</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Capture sales for the last 3 observed days. Monthly = Total × 8 (extrapolation factor).</p>
         <div className="overflow-x-auto">
           <table className="w-full text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-100">
+              <tr className="bg-slate-100 dark:bg-slate-800">
                 <th className="px-2 py-2 border text-left text-[10px] uppercase text-slate-600">Sales for the last 3 days</th>
                 <th className="px-2 py-2 border text-right text-[10px] uppercase text-slate-600">Cash Sales (₦)</th>
                 <th className="px-2 py-2 border text-right text-[10px] uppercase text-slate-600">Total (₦)</th>
@@ -1985,7 +2036,7 @@ function SalesTab({ data, update, engineResult }: any) {
                   <td className="px-2 py-1 border text-right font-mono">{fmtNaira(Number(threeDaySales[r.key]) || 0)}</td>
                 </tr>
               ))}
-              <tr className="bg-slate-100 font-bold">
+              <tr className="bg-slate-100 dark:bg-slate-800 font-bold">
                 <td className="px-2 py-1 border text-right text-[10px] uppercase">Total</td>
                 <td className="px-2 py-1 border text-right font-mono">{fmtNaira(threeDayTotal)}</td>
                 <td className="px-2 py-1 border text-right font-mono">{fmtNaira(threeDayTotal)}</td>
@@ -2002,21 +2053,21 @@ function SalesTab({ data, update, engineResult }: any) {
       {/* ── METHOD 3: Monthly Sales from Account Statement (12 months) ── */}
       <Card className="p-4 border-2 border-blue-200">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-slate-900">3. Monthly Sales from Account Statement</h3>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">3. Monthly Sales from Account Statement</h3>
           <Badge className="bg-blue-100 text-blue-700 text-[10px]">Source 3</Badge>
         </div>
-        <p className="text-xs text-slate-500 mb-3">Credit side of bank account statement — 12 months of inflow data.</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Credit side of bank account statement — 12 months of inflow data.</p>
         <div className="overflow-x-auto">
           <table className="w-full text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-100">
+              <tr className="bg-slate-100 dark:bg-slate-800">
                 <th className="px-2 py-2 border text-left text-[10px] uppercase text-slate-600">Period</th>
                 <th className="px-2 py-2 border text-right text-[10px] uppercase text-slate-600">Amount (₦)</th>
               </tr>
             </thead>
             <tbody>
               {bankMonths.map((val: number, i: number) => (
-                <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50 dark:bg-slate-900'}>
                   <td className="px-2 py-1 border font-medium text-slate-700">Month {i + 1}</td>
                   <td className="px-1 py-1 border">
                     <Input type="number" value={val} onChange={(e) => updBankMonth(i, Number(e.target.value))} className="h-7 w-full text-right text-xs border-0" />
@@ -2041,10 +2092,10 @@ function SalesTab({ data, update, engineResult }: any) {
       {/* ── METHOD 4: Monthly Sales from Sales Records / Invoice (6 months) ── */}
       <Card className="p-4 border-2 border-purple-200">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-slate-900">4. Monthly Sales from Sales Records / Invoice</h3>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">4. Monthly Sales from Sales Records / Invoice</h3>
           <Badge className="bg-purple-100 text-purple-700 text-[10px]">Source 4</Badge>
         </div>
-        <p className="text-xs text-slate-500 mb-3">Sales records or invoice books — 6 months of data, averaged.</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Sales records or invoice books — 6 months of data, averaged.</p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {invoiceMonths.map((val: number, i: number) => (
             <div key={i}>
@@ -2101,13 +2152,13 @@ function SalesTab({ data, update, engineResult }: any) {
       {/* ── P1: Purchase According to Client Estimation (Supplier table) ── */}
       <Card className="p-4 border-2 border-orange-200">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-slate-900">1. Purchase According to Client Estimation</h3>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">1. Purchase According to Client Estimation</h3>
           <Button size="sm" variant="outline" onClick={addSupplier}><Plus className="h-3 w-3 mr-1" />Add Supplier</Button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
-            <thead className="bg-slate-50">
-              <tr className="text-left text-[10px] uppercase text-slate-500">
+            <thead className="bg-slate-50 dark:bg-slate-900">
+              <tr className="text-left text-[10px] uppercase text-slate-500 dark:text-slate-400">
                 <th className="px-2 py-2">Supplier</th>
                 <th className="px-2 py-2">Location / Town / Country</th>
                 <th className="px-2 py-2 text-center">Frequency</th>
@@ -2129,7 +2180,7 @@ function SalesTab({ data, update, engineResult }: any) {
             </tbody>
             <tfoot className="bg-orange-50 font-bold">
               <tr>
-                <td colSpan={3} className="px-2 py-2 text-right text-[10px] uppercase text-slate-500">TOTAL</td>
+                <td colSpan={3} className="px-2 py-2 text-right text-[10px] uppercase text-slate-500 dark:text-slate-400">TOTAL</td>
                 <td className="px-2 py-2 text-right font-mono text-orange-700">{fmtNaira(purchaseClientTotal)}</td>
                 <td></td>
               </tr>
@@ -2141,10 +2192,10 @@ function SalesTab({ data, update, engineResult }: any) {
       {/* ── P2: Purchase from Account Statement (Debit side, 12 months) ── */}
       <Card className="p-4 border-2 border-red-200">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-slate-900">2. Purchase According to Account Statement (Debit Side)</h3>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">2. Purchase According to Account Statement (Debit Side)</h3>
           <Badge className="bg-red-100 text-red-700 text-[10px]">Source 2</Badge>
         </div>
-        <p className="text-xs text-slate-500 mb-3">Debit side of bank account statement — 12 months of outflow data.</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Debit side of bank account statement — 12 months of outflow data.</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {purchaseBankMonths.map((val: number, i: number) => (
             <div key={i}>
@@ -2155,11 +2206,11 @@ function SalesTab({ data, update, engineResult }: any) {
         </div>
         <div className="mt-3 grid grid-cols-2 gap-3">
           <div className="p-2 bg-red-50 rounded border border-red-200 text-center">
-            <p className="text-[10px] uppercase text-slate-500">Sub Total</p>
+            <p className="text-[10px] uppercase text-slate-500 dark:text-slate-400">Sub Total</p>
             <p className="font-bold font-mono text-red-700">{fmtNaira(purchaseBankSubTotal)}</p>
           </div>
           <div className="p-2 bg-red-100 rounded border border-red-300 text-center">
-            <p className="text-[10px] uppercase text-slate-500">Average Outflow</p>
+            <p className="text-[10px] uppercase text-slate-500 dark:text-slate-400">Average Outflow</p>
             <p className="font-bold font-mono text-red-700">{fmtNaira(purchaseBankAvg)}</p>
           </div>
         </div>
@@ -2168,10 +2219,10 @@ function SalesTab({ data, update, engineResult }: any) {
       {/* ── P3: Purchase from Receipts/Invoices (6 months) ── */}
       <Card className="p-4 border-2 border-cyan-200">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-slate-900">3. Purchase from Purchase Receipts / Invoices</h3>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">3. Purchase from Purchase Receipts / Invoices</h3>
           <Badge className="bg-cyan-100 text-cyan-700 text-[10px]">Source 3</Badge>
         </div>
-        <p className="text-xs text-slate-500 mb-3">Documented purchase invoices — 6 months, averaged.</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Documented purchase invoices — 6 months, averaged.</p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {purchaseInvoiceMonths.map((val: number, i: number) => (
             <div key={i}>
@@ -2189,18 +2240,18 @@ function SalesTab({ data, update, engineResult }: any) {
       {/* ── P4: Purchase Verification from Margin ── */}
       <Card className="p-4 border-2 border-green-300 bg-green-50">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-slate-900">4. Purchase Verification from Margin</h3>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">4. Purchase Verification from Margin</h3>
           <Badge className="bg-green-200 text-green-800 text-[10px]">Source 4 (Truth)</Badge>
         </div>
         <p className="text-xs text-slate-600 mb-3">Formula: P = S × (1 − GWM) where S = considered sales and GWM = weighted margin.</p>
         <div className="grid grid-cols-3 gap-3 text-center">
           <div className="p-2 bg-white rounded border">
-            <p className="text-[10px] uppercase text-slate-500">Considered Sales (S)</p>
-            <p className="font-bold font-mono text-slate-900">{fmtNaira(consideredSales)}</p>
+            <p className="text-[10px] uppercase text-slate-500 dark:text-slate-400">Considered Sales (S)</p>
+            <p className="font-bold font-mono text-slate-900 dark:text-slate-100">{fmtNaira(consideredSales)}</p>
           </div>
           <div className="p-2 bg-white rounded border">
-            <p className="text-[10px] uppercase text-slate-500">Weighted Margin (GWM)</p>
-            <p className="font-bold font-mono text-slate-900">{(gwm * 100).toFixed(2)}%</p>
+            <p className="text-[10px] uppercase text-slate-500 dark:text-slate-400">Weighted Margin (GWM)</p>
+            <p className="font-bold font-mono text-slate-900 dark:text-slate-100">{(gwm * 100).toFixed(2)}%</p>
           </div>
           <div className="p-2 bg-green-600 text-white rounded border">
             <p className="text-[10px] uppercase text-green-100">Derived Purchases (P)</p>
@@ -2242,21 +2293,21 @@ function SalesTab({ data, update, engineResult }: any) {
           <h4 className="text-sm font-bold text-emerald-900 mb-2">Engine Result</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
             <div>
-              <p className="text-[10px] text-slate-500 uppercase">Considered Sales</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Considered Sales</p>
               <p className="font-bold text-emerald-700">{fmtNaira(engineResult.forensics.consideredSales)}</p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase">Source Used</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Source Used</p>
               <p className="font-bold">{engineResult.forensics.sourceUsed}</p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase">Variance</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Variance</p>
               <p className={cn('font-bold', engineResult.forensics.variancePercent > 20 ? 'text-red-600' : 'text-emerald-700')}>
                 {engineResult.forensics.variancePercent.toFixed(2)}%
               </p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase">Status</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Status</p>
               <Badge className={engineResult.forensics.status === 'VERIFIED' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}>
                 {engineResult.forensics.status}
               </Badge>
@@ -2267,7 +2318,7 @@ function SalesTab({ data, update, engineResult }: any) {
 
       {/* ── Stress Test Simulator ── */}
       <Card className="p-4">
-        <h3 className="text-sm font-bold text-slate-900 mb-3">Stress Test Simulator</h3>
+        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-3">Stress Test Simulator</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <SliderField label="Sales Haircut (%)" value={data.stressSalesHaircut} min={0} max={50} step={5} onChange={(v: any) => update('stressSalesHaircut', Number(v))} />
           <SliderField label="Margin Compression (pp)" value={data.stressMarginCompression} min={0} max={30} step={1} onChange={(v: any) => update('stressMarginCompression', Number(v))} />
@@ -2276,17 +2327,17 @@ function SalesTab({ data, update, engineResult }: any) {
         {engineResult && (
           <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
             <div>
-              <p className="text-[10px] text-slate-500 uppercase">Original DSR</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Original DSR</p>
               <p className="font-bold">{(engineResult.stress.originalDSR * 100).toFixed(1)}%</p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase">Stressed DSR</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Stressed DSR</p>
               <p className={cn('font-bold', engineResult.stress.verdict === 'PASS' ? 'text-emerald-600' : 'text-red-600')}>
                 {(engineResult.stress.stressedDSR * 100).toFixed(1)}%
               </p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase">Verdict</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Verdict</p>
               <Badge className={engineResult.stress.verdict === 'PASS' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}>
                 {engineResult.stress.verdict}
               </Badge>
@@ -2316,16 +2367,16 @@ function InventoryTab({ data, update, engineResult }: any) {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-base font-bold text-slate-900">Stock Inventory</h3>
-          <p className="text-xs text-slate-500">Each item contributes to weighted margin calculation</p>
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Stock Inventory</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Each item contributes to weighted margin calculation</p>
         </div>
         <Button size="sm" variant="outline" onClick={addItem}>+ Add Item</Button>
       </div>
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50">
-            <tr className="text-left text-[10px] uppercase text-slate-500">
+          <thead className="bg-slate-50 dark:bg-slate-900">
+            <tr className="text-left text-[10px] uppercase text-slate-500 dark:text-slate-400">
               <th className="px-2 py-2">Description</th>
               <th className="px-2 py-2 text-right">Qty</th>
               <th className="px-2 py-2 text-right">Cost (₦)</th>
@@ -2359,10 +2410,10 @@ function InventoryTab({ data, update, engineResult }: any) {
         <Card className="p-4 bg-emerald-50">
           <h4 className="text-sm font-bold text-emerald-900 mb-2">Margin Analysis</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-            <div><p className="text-[10px] text-slate-500 uppercase">Total Stock Value</p><p className="font-bold">₦{engineResult.weightedMargin.totalStockCostValue.toLocaleString()}</p></div>
-            <div><p className="text-[10px] text-slate-500 uppercase">Weighted Margin</p><p className="font-bold text-emerald-700">{(engineResult.weightedMargin.weightedMargin * 100).toFixed(2)}%</p></div>
-            <div><p className="text-[10px] text-slate-500 uppercase">Simple Average</p><p className="font-bold">{(engineResult.weightedMargin.simpleAverage * 100).toFixed(2)}%</p></div>
-            <div><p className="text-[10px] text-slate-500 uppercase">Sector Benchmark</p><p className="font-bold">{data.sectorBenchmarkMargin}%</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Total Stock Value</p><p className="font-bold">₦{engineResult.weightedMargin.totalStockCostValue.toLocaleString()}</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Weighted Margin</p><p className="font-bold text-emerald-700">{(engineResult.weightedMargin.weightedMargin * 100).toFixed(2)}%</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Simple Average</p><p className="font-bold">{(engineResult.weightedMargin.simpleAverage * 100).toFixed(2)}%</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Sector Benchmark</p><p className="font-bold">{data.sectorBenchmarkMargin}%</p></div>
           </div>
         </Card>
       )}
@@ -2412,8 +2463,8 @@ function ExpensesTab({ data, update, engineResult }: any) {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-base font-bold text-slate-900 mb-1">Monthly Expenses — Categorized</h3>
-        <p className="text-xs text-slate-500 mb-3">
+        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Monthly Expenses — Categorized</h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
           Subtotal of each group gets a {(bufferRate * 100).toFixed(0)}% unforeseen buffer added. Irregular categories do not receive a buffer.
         </p>
 
@@ -2421,7 +2472,7 @@ function ExpensesTab({ data, update, engineResult }: any) {
           {/* BUSINESS EXPENSES */}
           <Card className="p-4">
             <div className="flex items-center justify-between mb-3">
-              <h4 className="text-sm font-bold text-slate-900">Business Expenses (11 categories)</h4>
+              <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Business Expenses (11 categories)</h4>
               <Badge variant="outline" className="text-[10px]">Monthly</Badge>
             </div>
             <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
@@ -2440,21 +2491,21 @@ function ExpensesTab({ data, update, engineResult }: any) {
               ))}
             </div>
             <div className="mt-3 pt-3 border-t border-slate-200 space-y-1 text-xs">
-              <div className="flex justify-between"><span className="text-slate-500">Subtotal</span><span className="font-mono font-semibold">{fmtNaira(businessSubtotal)}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">20% Unforeseen Buffer</span><span className="font-mono text-amber-700">+{fmtNaira(businessBuffer)}</span></div>
-              <div className="flex justify-between text-sm"><span className="font-bold text-slate-900">Total Business Expenses</span><span className="font-mono font-bold text-red-700">{fmtNaira(businessTotal)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Subtotal</span><span className="font-mono font-semibold">{fmtNaira(businessSubtotal)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">20% Unforeseen Buffer</span><span className="font-mono text-amber-700">+{fmtNaira(businessBuffer)}</span></div>
+              <div className="flex justify-between text-sm"><span className="font-bold text-slate-900 dark:text-slate-100">Total Business Expenses</span><span className="font-mono font-bold text-red-700">{fmtNaira(businessTotal)}</span></div>
             </div>
           </Card>
 
           {/* FAMILY EXPENSES */}
           <Card className="p-4">
             <div className="flex items-center justify-between mb-3">
-              <h4 className="text-sm font-bold text-slate-900">Family / Household Expenses</h4>
+              <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Family / Household Expenses</h4>
               <Badge variant="outline" className="text-[10px]">Monthly</Badge>
             </div>
             <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
               <div>
-                <p className="text-[10px] uppercase text-slate-500 mb-1">Regular (9 categories — buffered)</p>
+                <p className="text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1">Regular (9 categories — buffered)</p>
                 <div className="space-y-2">
                   {familyRegular.map((e: any, idx: number) => (
                     <div key={idx} className="grid grid-cols-12 gap-2 items-center">
@@ -2471,13 +2522,13 @@ function ExpensesTab({ data, update, engineResult }: any) {
                   ))}
                 </div>
                 <div className="mt-2 pt-2 border-t border-slate-200 space-y-1 text-xs">
-                  <div className="flex justify-between"><span className="text-slate-500">Subtotal</span><span className="font-mono font-semibold">{fmtNaira(familyRegSubtotal)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">20% Buffer</span><span className="font-mono text-amber-700">+{fmtNaira(familyRegBuffer)}</span></div>
-                  <div className="flex justify-between"><span className="font-bold text-slate-900">Total (Regular)</span><span className="font-mono font-bold text-red-700">{fmtNaira(familyRegTotal)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Subtotal</span><span className="font-mono font-semibold">{fmtNaira(familyRegSubtotal)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">20% Buffer</span><span className="font-mono text-amber-700">+{fmtNaira(familyRegBuffer)}</span></div>
+                  <div className="flex justify-between"><span className="font-bold text-slate-900 dark:text-slate-100">Total (Regular)</span><span className="font-mono font-bold text-red-700">{fmtNaira(familyRegTotal)}</span></div>
                 </div>
               </div>
               <div>
-                <p className="text-[10px] uppercase text-slate-500 mb-1">Irregular (5 categories — no buffer)</p>
+                <p className="text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1">Irregular (5 categories — no buffer)</p>
                 <div className="space-y-2">
                   {familyIrregular.map((e: any, idx: number) => (
                     <div key={idx} className="grid grid-cols-12 gap-2 items-center">
@@ -2494,7 +2545,7 @@ function ExpensesTab({ data, update, engineResult }: any) {
                   ))}
                 </div>
                 <div className="mt-2 pt-2 border-t border-slate-200 space-y-1 text-xs">
-                  <div className="flex justify-between"><span className="font-bold text-slate-900">Subtotal (Irregular)</span><span className="font-mono font-bold text-red-700">{fmtNaira(familyIrrSubtotal)}</span></div>
+                  <div className="flex justify-between"><span className="font-bold text-slate-900 dark:text-slate-100">Subtotal (Irregular)</span><span className="font-mono font-bold text-red-700">{fmtNaira(familyIrrSubtotal)}</span></div>
                 </div>
               </div>
             </div>
@@ -2511,13 +2562,13 @@ function ExpensesTab({ data, update, engineResult }: any) {
         <Card className="p-4 bg-blue-50">
           <h4 className="text-sm font-bold text-blue-900 mb-2">P&L Summary (Monthly)</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-            <div><p className="text-[10px] text-slate-500 uppercase">Gross Profit</p><p className="font-bold">₦{engineResult.pnl.grossProfit.toLocaleString()}</p></div>
-            <div><p className="text-[10px] text-slate-500 uppercase">Opex (buffered)</p><p className="font-bold text-red-600">₦{engineResult.pnl.opex.toLocaleString()}</p></div>
-            <div><p className="text-[10px] text-slate-500 uppercase">Living (buffered)</p><p className="font-bold text-red-600">₦{engineResult.pnl.living.toLocaleString()}</p></div>
-            <div><p className="text-[10px] text-slate-500 uppercase">Repayment Capacity</p><p className="font-bold text-emerald-700">₦{engineResult.pnl.netCashflowAvailable.toLocaleString()}</p></div>
-            <div><p className="text-[10px] text-slate-500 uppercase">New Loan Installment</p><p className="font-bold">₦{engineResult.pnl.installment.toLocaleString()}</p></div>
-            <div><p className="text-[10px] text-slate-500 uppercase">Net Profit (after loan)</p><p className={cn('font-bold', engineResult.pnl.netProfit < 0 ? 'text-red-600' : 'text-emerald-700')}>₦{engineResult.pnl.netProfit.toLocaleString()}</p></div>
-            <div><p className="text-[10px] text-slate-500 uppercase">Net Profit Margin</p><p className="font-bold">{engineResult.pnl.netProfitMargin.toFixed(2)}%</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Gross Profit</p><p className="font-bold">₦{engineResult.pnl.grossProfit.toLocaleString()}</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Opex (buffered)</p><p className="font-bold text-red-600">₦{engineResult.pnl.opex.toLocaleString()}</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Living (buffered)</p><p className="font-bold text-red-600">₦{engineResult.pnl.living.toLocaleString()}</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Repayment Capacity</p><p className="font-bold text-emerald-700">₦{engineResult.pnl.netCashflowAvailable.toLocaleString()}</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">New Loan Installment</p><p className="font-bold">₦{engineResult.pnl.installment.toLocaleString()}</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Net Profit (after loan)</p><p className={cn('font-bold', engineResult.pnl.netProfit < 0 ? 'text-red-600' : 'text-emerald-700')}>₦{engineResult.pnl.netProfit.toLocaleString()}</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Net Profit Margin</p><p className="font-bold">{engineResult.pnl.netProfitMargin.toFixed(2)}%</p></div>
           </div>
         </Card>
       )}
@@ -2587,8 +2638,8 @@ function AssetsTab({ data, update, engineResult }: any) {
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50">
-            <tr className="text-left text-[9px] uppercase text-slate-500">
+          <thead className="bg-slate-50 dark:bg-slate-900">
+            <tr className="text-left text-[9px] uppercase text-slate-500 dark:text-slate-400">
               <th className="px-2 py-1">Item</th>
               <th className="px-2 py-1">Condition</th>
               <th className="px-2 py-1 text-right">Market Value</th>
@@ -2612,9 +2663,9 @@ function AssetsTab({ data, update, engineResult }: any) {
               <tr><td colSpan={4} className="text-center text-[10px] text-slate-400 py-2">No items added</td></tr>
             )}
           </tbody>
-          <tfoot className="bg-slate-50 font-semibold">
+          <tfoot className="bg-slate-50 dark:bg-slate-900 font-semibold">
             <tr>
-              <td colSpan={2} className="px-2 py-1 text-right text-[10px] uppercase text-slate-500">Subtotal</td>
+              <td colSpan={2} className="px-2 py-1 text-right text-[10px] uppercase text-slate-500 dark:text-slate-400">Subtotal</td>
               <td className="px-2 py-1 text-right font-mono text-[11px]">{fmtNaira(total)}</td>
               <td></td>
             </tr>
@@ -2638,8 +2689,8 @@ function AssetsTab({ data, update, engineResult }: any) {
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50">
-            <tr className="text-left text-[9px] uppercase text-slate-500">
+          <thead className="bg-slate-50 dark:bg-slate-900">
+            <tr className="text-left text-[9px] uppercase text-slate-500 dark:text-slate-400">
               <th className="px-2 py-1">Item</th>
               <th className="px-2 py-1">License Plate</th>
               <th className="px-2 py-1 text-right">Market Value</th>
@@ -2659,9 +2710,9 @@ function AssetsTab({ data, update, engineResult }: any) {
               <tr><td colSpan={4} className="text-center text-[10px] text-slate-400 py-2">No items added</td></tr>
             )}
           </tbody>
-          <tfoot className="bg-slate-50 font-semibold">
+          <tfoot className="bg-slate-50 dark:bg-slate-900 font-semibold">
             <tr>
-              <td colSpan={2} className="px-2 py-1 text-right text-[10px] uppercase text-slate-500">Subtotal</td>
+              <td colSpan={2} className="px-2 py-1 text-right text-[10px] uppercase text-slate-500 dark:text-slate-400">Subtotal</td>
               <td className="px-2 py-1 text-right font-mono text-[11px]">{fmtNaira(total)}</td>
               <td></td>
             </tr>
@@ -2685,8 +2736,8 @@ function AssetsTab({ data, update, engineResult }: any) {
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50">
-            <tr className="text-left text-[9px] uppercase text-slate-500">
+          <thead className="bg-slate-50 dark:bg-slate-900">
+            <tr className="text-left text-[9px] uppercase text-slate-500 dark:text-slate-400">
               <th className="px-2 py-1">Item</th>
               <th className="px-2 py-1">Location</th>
               <th className="px-2 py-1 text-right">Market Value</th>
@@ -2706,9 +2757,9 @@ function AssetsTab({ data, update, engineResult }: any) {
               <tr><td colSpan={4} className="text-center text-[10px] text-slate-400 py-2">No items added</td></tr>
             )}
           </tbody>
-          <tfoot className="bg-slate-50 font-semibold">
+          <tfoot className="bg-slate-50 dark:bg-slate-900 font-semibold">
             <tr>
-              <td colSpan={2} className="px-2 py-1 text-right text-[10px] uppercase text-slate-500">Subtotal</td>
+              <td colSpan={2} className="px-2 py-1 text-right text-[10px] uppercase text-slate-500 dark:text-slate-400">Subtotal</td>
               <td className="px-2 py-1 text-right font-mono text-[11px]">{fmtNaira(total)}</td>
               <td></td>
             </tr>
@@ -2741,7 +2792,7 @@ function AssetsTab({ data, update, engineResult }: any) {
       <Card className="p-4 bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-200">
         <div className="flex justify-between items-center mb-3">
           <div>
-            <h3 className="text-base font-bold text-slate-900">Bank / Other Lender Balances (G11)</h3>
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Bank / Other Lender Balances (G11)</h3>
             <p className="text-xs text-slate-600">Excel FINANCIAL ANALYSIS rows 35-42. Total auto-feeds Cash in Banks below.</p>
           </div>
           <div className="flex items-center gap-2">
@@ -2753,8 +2804,8 @@ function AssetsTab({ data, update, engineResult }: any) {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
-            <thead className="bg-slate-50">
-              <tr className="text-left text-[10px] uppercase text-slate-500">
+            <thead className="bg-slate-50 dark:bg-slate-900">
+              <tr className="text-left text-[10px] uppercase text-slate-500 dark:text-slate-400">
                 <th className="px-2 py-2">S/N</th>
                 <th className="px-2 py-2">Bank Name</th>
                 <th className="px-2 py-2">Account Name</th>
@@ -2781,7 +2832,7 @@ function AssetsTab({ data, update, engineResult }: any) {
             {bankBalances.length > 0 && (
               <tfoot className="bg-emerald-50 font-bold">
                 <tr>
-                  <td colSpan={4} className="px-2 py-2 text-right text-[10px] uppercase text-slate-500">TOTAL BANK BALANCES</td>
+                  <td colSpan={4} className="px-2 py-2 text-right text-[10px] uppercase text-slate-500 dark:text-slate-400">TOTAL BANK BALANCES</td>
                   <td className="px-2 py-2 text-right font-mono text-emerald-700">{fmtNaira(totalBankBalance)}</td>
                   <td></td>
                 </tr>
@@ -2800,7 +2851,7 @@ function AssetsTab({ data, update, engineResult }: any) {
       </Card>
 
       <div>
-        <h3 className="text-base font-bold text-slate-900 mb-3">Balance Sheet — Liquid Assets &amp; Liabilities</h3>
+        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-3">Balance Sheet — Liquid Assets &amp; Liabilities</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card className="p-4">
             <h4 className="text-sm font-bold text-emerald-700 mb-3">Liquid Assets</h4>
@@ -2842,7 +2893,7 @@ function AssetsTab({ data, update, engineResult }: any) {
       {/* BUSINESS ASSETS — structured tables */}
       <Card className="p-4">
         <div className="flex justify-between items-center mb-3">
-          <h4 className="text-sm font-bold text-slate-900">Business Fixed Assets (Structured)</h4>
+          <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Business Fixed Assets (Structured)</h4>
           <Badge className="bg-emerald-100 text-emerald-700 text-[10px]">Grand Total: {fmtNaira(baGrand)}</Badge>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -2873,7 +2924,7 @@ function AssetsTab({ data, update, engineResult }: any) {
       {/* FAMILY ASSETS — structured tables */}
       <Card className="p-4">
         <div className="flex justify-between items-center mb-3">
-          <h4 className="text-sm font-bold text-slate-900">Family Fixed Assets (Structured)</h4>
+          <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Family Fixed Assets (Structured)</h4>
           <Badge className="bg-emerald-100 text-emerald-700 text-[10px]">Grand Total: {fmtNaira(faGrand)}</Badge>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -2905,12 +2956,12 @@ function AssetsTab({ data, update, engineResult }: any) {
         <Card className="p-4 bg-purple-50">
           <h4 className="text-sm font-bold text-purple-900 mb-2">Computed Ratios</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-            <div><p className="text-[10px] text-slate-500 uppercase">Net Worth</p><p className="font-bold">₦{((data.cashAtHand + data.cashInBanks + data.receivables + baGrand + faGrand) - (data.shortTermLiabilities + data.longTermLiabilities)).toLocaleString()}</p></div>
-            <div><p className="text-[10px] text-slate-500 uppercase">Current Ratio</p><p className="font-bold">{engineResult.ratios.currentRatio.toFixed(2)}</p></div>
-            <div><p className="text-[10px] text-slate-500 uppercase">Quick Ratio</p><p className="font-bold">{engineResult.ratios.quickRatio.toFixed(2)}</p></div>
-            <div><p className="text-[10px] text-slate-500 uppercase">Equity Ratio</p><p className="font-bold">{engineResult.ratios.equityRatio.toFixed(1)}%</p></div>
-            <div><p className="text-[10px] text-slate-500 uppercase">Gearing Ratio</p><p className={cn('font-bold', engineResult.ratios.gearingRatio > 0.35 ? 'text-red-600' : 'text-emerald-700')}>{(engineResult.ratios.gearingRatio * 100).toFixed(1)}%</p></div>
-            <div><p className="text-[10px] text-slate-500 uppercase">Debt to Assets</p><p className="font-bold">{engineResult.ratios.debtToAssets.toFixed(1)}%</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Net Worth</p><p className="font-bold">₦{((data.cashAtHand + data.cashInBanks + data.receivables + baGrand + faGrand) - (data.shortTermLiabilities + data.longTermLiabilities)).toLocaleString()}</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Current Ratio</p><p className="font-bold">{engineResult.ratios.currentRatio.toFixed(2)}</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Quick Ratio</p><p className="font-bold">{engineResult.ratios.quickRatio.toFixed(2)}</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Equity Ratio</p><p className="font-bold">{engineResult.ratios.equityRatio.toFixed(1)}%</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Gearing Ratio</p><p className={cn('font-bold', engineResult.ratios.gearingRatio > 0.35 ? 'text-red-600' : 'text-emerald-700')}>{(engineResult.ratios.gearingRatio * 100).toFixed(1)}%</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Debt to Assets</p><p className="font-bold">{engineResult.ratios.debtToAssets.toFixed(1)}%</p></div>
           </div>
         </Card>
       )}
@@ -2981,8 +3032,8 @@ function CollateralRegisterSection({ data, update }: any) {
     <Card className="p-4">
       <div className="flex justify-between items-center mb-3">
         <div>
-          <h3 className="text-base font-bold text-slate-900">Collateral Registry (Excel Parity)</h3>
-          <p className="text-xs text-slate-500">
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Collateral Registry (Excel Parity)</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             Full collateral detail per Excel COLLATERAL PLEDGE sheet. FSV haircuts: MOVABLE × 0.80, IMMOVABLE × 0.60, CASH × 1.00.
             Coverage % auto-computed against loan principal.
           </p>
@@ -2994,7 +3045,7 @@ function CollateralRegisterSection({ data, update }: any) {
 
       <div className="space-y-4">
         {collaterals.map((c: any, idx: number) => (
-          <Card key={idx} className="p-3 bg-slate-50 border-slate-200">
+          <Card key={idx} className="p-3 bg-slate-50 dark:bg-slate-900 border-slate-200">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <Badge className="bg-emerald-100 text-emerald-700 text-[10px]">#{idx + 1}</Badge>
@@ -3113,7 +3164,7 @@ function CollateralMixSection({ data, update }: any) {
   return (
     <Card className="p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-base font-bold text-slate-900">Collateral Mix &amp; Coverage</h3>
+        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Collateral Mix &amp; Coverage</h3>
         <Badge className={cn(
           'text-xs',
           coveragePercent >= 150 ? 'bg-emerald-100 text-emerald-700' :
@@ -3125,8 +3176,8 @@ function CollateralMixSection({ data, update }: any) {
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50">
-            <tr className="text-left text-[10px] uppercase text-slate-500">
+          <thead className="bg-slate-50 dark:bg-slate-900">
+            <tr className="text-left text-[10px] uppercase text-slate-500 dark:text-slate-400">
               <th className="px-2 py-2">S/N</th>
               <th className="px-2 py-2">Type</th>
               <th className="px-2 py-2 text-right">Total FSV Value (₦)</th>
@@ -3147,7 +3198,7 @@ function CollateralMixSection({ data, update }: any) {
           </tbody>
           <tfoot className="bg-emerald-50 font-bold">
             <tr>
-              <td colSpan={2} className="px-2 py-2 text-right text-[10px] uppercase text-slate-500">TOTAL</td>
+              <td colSpan={2} className="px-2 py-2 text-right text-[10px] uppercase text-slate-500 dark:text-slate-400">TOTAL</td>
               <td className="px-2 py-2 text-right font-mono text-emerald-700">{fmtNaira(grandTotal)}</td>
               <td className="px-2 py-2 text-right font-mono">100.0%</td>
             </tr>
@@ -3193,19 +3244,19 @@ function GuarantorRegisterSection({ data, update }: any) {
       <div className="flex justify-between items-center mb-3">
         <div className="flex items-center gap-2">
           <Users className="h-4 w-4 text-emerald-700" />
-          <h3 className="text-base font-bold text-slate-900">Guarantor Register (Full Info — up to 2)</h3>
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Guarantor Register (Full Info — up to 2)</h3>
         </div>
         <Button size="sm" variant="outline" onClick={addG} disabled={guarantors.length >= 2}>
           <Plus className="h-3.5 w-3.5 mr-1" />Add Guarantor
         </Button>
       </div>
-      <p className="text-xs text-slate-500 mb-3">
+      <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
         Full guarantor details per Excel GUARANTORS&apos; INFO sheet. Maximum 2 guarantors per loan.
       </p>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {guarantors.map((g: any, idx: number) => (
-          <Card key={idx} className="p-3 bg-slate-50 border-slate-200">
+          <Card key={idx} className="p-3 bg-slate-50 dark:bg-slate-900 border-slate-200">
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-xs font-bold text-emerald-700 uppercase">Guarantor #{idx + 1}</h4>
               <Button size="sm" variant="ghost" onClick={() => removeG(idx)} className="h-6 w-6 p-0">
@@ -3214,7 +3265,7 @@ function GuarantorRegisterSection({ data, update }: any) {
             </div>
 
             {/* Personal */}
-            <p className="text-[10px] uppercase text-slate-500 font-semibold mt-2 mb-1">Personal Information</p>
+            <p className="text-[10px] uppercase text-slate-500 dark:text-slate-400 font-semibold mt-2 mb-1">Personal Information</p>
             <div className="grid grid-cols-2 gap-2">
               <Field label="Full Name" value={g.guarantorName} onChange={(v: any) => updateG(idx, 'guarantorName', v)} />
               <SelectField label="Sex" value={g.sex} onChange={(v: any) => updateG(idx, 'sex', v)} options={['Male', 'Female']} />
@@ -3244,7 +3295,7 @@ function GuarantorRegisterSection({ data, update }: any) {
             </div>
 
             {/* Business */}
-            <p className="text-[10px] uppercase text-slate-500 font-semibold mt-3 mb-1">Business Information</p>
+            <p className="text-[10px] uppercase text-slate-500 dark:text-slate-400 font-semibold mt-3 mb-1">Business Information</p>
             <div className="grid grid-cols-2 gap-2">
               <Field label="Business/Company Name" value={g.businessOrCompanyName} onChange={(v: any) => updateG(idx, 'businessOrCompanyName', v)} />
               <Field label="Brief Description" value={g.briefDescriptionOfBusiness} onChange={(v: any) => updateG(idx, 'briefDescriptionOfBusiness', v)} />
@@ -3254,7 +3305,7 @@ function GuarantorRegisterSection({ data, update }: any) {
             </div>
 
             {/* Financial for DSR */}
-            <p className="text-[10px] uppercase text-slate-500 font-semibold mt-3 mb-1">Financial (for DSR calculation)</p>
+            <p className="text-[10px] uppercase text-slate-500 dark:text-slate-400 font-semibold mt-3 mb-1">Financial (for DSR calculation)</p>
             <div className="grid grid-cols-2 gap-2">
               <Field label="Monthly Income (₦)" type="number" value={g.monthlyIncome} onChange={(v: any) => updateG(idx, 'monthlyIncome', Number(v))} />
               <Field label="Monthly COGS (₦)" type="number" value={g.monthlyCogs} onChange={(v: any) => updateG(idx, 'monthlyCogs', Number(v))} />
@@ -3302,8 +3353,8 @@ function GuarantorBizVerificationSection({ data, update }: any) {
     <Card className="p-4">
       <div className="flex justify-between items-center mb-3">
         <div>
-          <h3 className="text-base font-bold text-slate-900">Guarantor Business Verification</h3>
-          <p className="text-xs text-slate-500">Excel GUARANTORS&apos; BIZ VERIFICATION sheet — verify each guarantor&apos;s business independently.</p>
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Guarantor Business Verification</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Excel GUARANTORS&apos; BIZ VERIFICATION sheet — verify each guarantor&apos;s business independently.</p>
         </div>
         <Button size="sm" variant="outline" onClick={addV} disabled={verifications.length >= 2}>
           <Plus className="h-3.5 w-3.5 mr-1" />Add Verification
@@ -3374,7 +3425,7 @@ function GuarantorBizVerificationSection({ data, update }: any) {
 function GuarantorDsrAnalysisSection({ data, update, engineResult }: any) {
   return (
     <Card className="p-4">
-      <h3 className="text-base font-bold text-slate-900 mb-3">Guarantor DSR Analysis (Legacy)</h3>
+      <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-3">Guarantor DSR Analysis (Legacy)</h3>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Field label="Monthly Income (₦)" type="number" value={data.guarantorIncome} onChange={(v: any) => update('guarantorIncome', Number(v))} />
         <Field label="Monthly COGS (₦)" type="number" value={data.guarantorCogs} onChange={(v: any) => update('guarantorCogs', Number(v))} />
@@ -3383,9 +3434,9 @@ function GuarantorDsrAnalysisSection({ data, update, engineResult }: any) {
       </div>
       {engineResult && (
         <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-          <div><p className="text-[10px] text-slate-500 uppercase">Total FSV</p><p className="font-bold">₦{engineResult.collateralCoverage?.totalFSV?.toLocaleString() || 0}</p></div>
-          <div><p className="text-[10px] text-slate-500 uppercase">Coverage %</p><p className="font-bold">{engineResult.collateralCoverage?.coveragePercent?.toFixed(0) || 0}%</p></div>
-          <div><p className="text-[10px] text-slate-500 uppercase">Status</p>
+          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Total FSV</p><p className="font-bold">₦{engineResult.collateralCoverage?.totalFSV?.toLocaleString() || 0}</p></div>
+          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Coverage %</p><p className="font-bold">{engineResult.collateralCoverage?.coveragePercent?.toFixed(0) || 0}%</p></div>
+          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Status</p>
             <Badge className={
               engineResult.collateralCoverage?.status === 'EXCELLENT' ? 'bg-emerald-100 text-emerald-700' :
               engineResult.collateralCoverage?.status === 'GOOD' ? 'bg-green-100 text-green-700' :
@@ -3393,7 +3444,7 @@ function GuarantorDsrAnalysisSection({ data, update, engineResult }: any) {
               'bg-red-100 text-red-700'
             }>{engineResult.collateralCoverage?.status || '—'}</Badge>
           </div>
-          <div><p className="text-[10px] text-slate-500 uppercase">Guarantor DSR</p><p className={cn('font-bold', (engineResult.guarantorDSR || 0) > 45 ? 'text-red-600' : 'text-emerald-700')}>{(engineResult.guarantorDSR || 0).toFixed(1)}%</p></div>
+          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Guarantor DSR</p><p className={cn('font-bold', (engineResult.guarantorDSR || 0) > 45 ? 'text-red-600' : 'text-emerald-700')}>{(engineResult.guarantorDSR || 0).toFixed(1)}%</p></div>
         </div>
       )}
     </Card>
@@ -3438,7 +3489,7 @@ function VisitationTab({ data, update, loan }: any) {
     accent: string,
   ) => (
     <Card className={cn('p-4', accent)}>
-      <h3 className="text-sm font-bold text-slate-900 mb-3">{title}</h3>
+      <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-3">{title}</h3>
       <div className="space-y-3">
         {sections.map((s) => (
           <div key={s.key}>
@@ -3459,8 +3510,8 @@ function VisitationTab({ data, update, loan }: any) {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-base font-bold text-slate-900 mb-1">Physical Visitation Report — 7-Point Structured</h3>
-        <p className="text-xs text-slate-500 mb-3">
+        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Physical Visitation Report — 7-Point Structured</h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
           Replaces free-text comment with seven structured sections (Business Dynamics, Location, Capacity, Character, Ownership, Collateral, Guarantors).
         </p>
       </div>
@@ -3482,7 +3533,7 @@ function VisitationTab({ data, update, loan }: any) {
 
       {/* GPS Coordinates */}
       <div>
-        <h3 className="text-base font-bold text-slate-900 mb-3">GPS Coordinates</h3>
+        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-3">GPS Coordinates</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <Field label="Latitude" type="number" value={data.appraisalGpsLat} onChange={(v: any) => update('appraisalGpsLat', Number(v))} />
           <Field label="Longitude" type="number" value={data.appraisalGpsLong} onChange={(v: any) => update('appraisalGpsLong', Number(v))} />
@@ -3508,12 +3559,12 @@ function VisitationTab({ data, update, loan }: any) {
       <div>
         <div className="flex items-center gap-2 mb-3">
           <Camera className="h-4 w-4 text-emerald-700" />
-          <h3 className="text-base font-bold text-slate-900">Photo Evidence Gallery (6 categories)</h3>
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Photo Evidence Gallery (6 categories)</h3>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {photoEvidence.map((p: any, idx: number) => (
             <Card key={idx} className="p-3">
-              <p className="text-xs font-bold text-slate-900 mb-1">{p.type}</p>
+              <p className="text-xs font-bold text-slate-900 dark:text-slate-100 mb-1">{p.type}</p>
               <p className="text-[9px] text-amber-700 mb-2 italic">⚠ {p.geoNote}</p>
               <div className="border-2 border-dashed border-slate-300 rounded-md p-3 text-slate-400 text-xs text-center mb-2">
                 <Camera className="h-6 w-6 mx-auto mb-1 text-slate-400" />
@@ -3545,7 +3596,7 @@ function VisitationTab({ data, update, loan }: any) {
       </div>
 
       <div>
-        <h3 className="text-base font-bold text-slate-900 mb-3">Fraud Check</h3>
+        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-3">Fraud Check</h3>
         <CheckField label="Physical stock matches declared inventory" checked={data.physicalStockMatches || false} onChange={(v: any) => update('physicalStockMatches', v)} />
       </div>
 
@@ -3587,7 +3638,7 @@ function PictorialEvidenceGallery({ data }: any) {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Camera className="h-4 w-4 text-slate-700" />
-          <h3 className="text-base font-bold text-slate-900">Pictorial Evidence Gallery (G14)</h3>
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Pictorial Evidence Gallery (G14)</h3>
         </div>
         <Badge className="bg-slate-200 text-slate-700 text-[10px]">{totalPhotos} photos · {categories.length} categories</Badge>
       </div>
@@ -3648,10 +3699,10 @@ function PictorialEvidenceGallery({ data }: any) {
         >
           <div className="bg-white rounded-lg max-w-2xl w-full p-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
-              <h4 className="text-sm font-bold text-slate-900">{allPhotos[lightbox].type || 'Photo'}</h4>
+              <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">{allPhotos[lightbox].type || 'Photo'}</h4>
               <Button size="sm" variant="ghost" onClick={() => setLightbox(null)}>✕</Button>
             </div>
-            <div className="aspect-video bg-slate-100 rounded flex items-center justify-center mb-3">
+            <div className="aspect-video bg-slate-100 dark:bg-slate-800 rounded flex items-center justify-center mb-3">
               <Camera className="h-16 w-16 text-slate-300" />
             </div>
             <div className="grid grid-cols-2 gap-3 text-xs">
@@ -3687,7 +3738,7 @@ function CrossChecksTab({ result }: { result: EngineResult | null }) {
     return (
       <div className="text-center py-12">
         <CheckSquare className="h-12 w-12 text-slate-300 mx-auto mb-2" />
-        <p className="text-sm text-slate-500">Engine has not been run yet. Click "Recalculate" to compute cross-checks.</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Engine has not been run yet. Click "Recalculate" to compute cross-checks.</p>
       </div>
     );
   }
@@ -3710,8 +3761,8 @@ function CrossChecksTab({ result }: { result: EngineResult | null }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-base font-bold text-slate-900">Sales &amp; Purchases Cross-Checks</h3>
-          <p className="text-xs text-slate-500">Excel SALES &amp; PURCHASES CROSS CHECKS sheet — capitalization, treasury, debt rotation &amp; turnover.</p>
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Sales &amp; Purchases Cross-Checks</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Excel SALES &amp; PURCHASES CROSS CHECKS sheet — capitalization, treasury, debt rotation &amp; turnover.</p>
         </div>
         <Badge variant="outline" className="text-[10px] font-mono">{result.policyVersion}</Badge>
       </div>
@@ -3720,14 +3771,14 @@ function CrossChecksTab({ result }: { result: EngineResult | null }) {
         {/* Zonification */}
         <Card className={cn('p-4 border', z ? ratingColor : '')}>
           <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-bold text-slate-900">Zonification Check</h4>
+            <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Zonification Check</h4>
             {z && <Badge className={cn('text-[10px]', ratingColor)}>{z.ratingLabel}</Badge>}
           </div>
           {z ? (
             <div className="space-y-1 text-xs">
-              <div className="flex justify-between"><span className="text-slate-500">Location</span><span className="font-mono font-semibold">{z.location}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Rating</span><span className="font-mono font-semibold">{z.rating}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Decision</span><span className="font-semibold">{z.decision}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Location</span><span className="font-mono font-semibold">{z.location}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Rating</span><span className="font-mono font-semibold">{z.rating}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Decision</span><span className="font-semibold">{z.decision}</span></div>
               <p className="text-slate-600 pt-1">{z.description}</p>
             </div>
           ) : (
@@ -3738,7 +3789,7 @@ function CrossChecksTab({ result }: { result: EngineResult | null }) {
         {/* Loan Cycle Grade */}
         <Card className="p-4">
           <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-bold text-slate-900">Loan Cycle Grade</h4>
+            <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Loan Cycle Grade</h4>
             {lc && (
               <Badge className={cn(
                 'text-[10px]',
@@ -3754,10 +3805,10 @@ function CrossChecksTab({ result }: { result: EngineResult | null }) {
           </div>
           {lc ? (
             <div className="space-y-1 text-xs">
-              <div className="flex justify-between"><span className="text-slate-500">Cumulative Overdue Days</span><span className="font-mono font-semibold">{lc.cumulativeOverdueDays}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Installments Overdue</span><span className="font-mono font-semibold">{lc.installmentOverdueCount}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Cumulative Overdue Days</span><span className="font-mono font-semibold">{lc.cumulativeOverdueDays}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Installments Overdue</span><span className="font-mono font-semibold">{lc.installmentOverdueCount}</span></div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Interest Increment</span>
+                <span className="text-slate-500 dark:text-slate-400">Interest Increment</span>
                 <span className="font-semibold">
                   {lc.interestIncrement < 0 ? 'DECLINE' : `+${(lc.interestIncrement * 100).toFixed(0)}%`}
                 </span>
@@ -3772,7 +3823,7 @@ function CrossChecksTab({ result }: { result: EngineResult | null }) {
         {/* Capitalization */}
         <Card className="p-4">
           <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-bold text-slate-900">Cross-Check 3 — Capitalization</h4>
+            <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Cross-Check 3 — Capitalization</h4>
             {cap && (
               <Badge className={cn(
                 'text-[10px]',
@@ -3784,12 +3835,12 @@ function CrossChecksTab({ result }: { result: EngineResult | null }) {
           </div>
           {cap ? (
             <div className="space-y-1 text-xs">
-              <div className="flex justify-between"><span className="text-slate-500">Current Equity</span><span className="font-mono font-semibold">{fmtNaira(cap.currentEquity)}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Previous Equity</span><span className="font-mono font-semibold">{fmtNaira(cap.previousEquity)}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Equity Variation</span><span className="font-mono font-semibold">{fmtNaira(cap.equityVariation)}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Monthly Reinvestment</span><span className="font-mono font-semibold">{fmtNaira(cap.monthlyReinvestmentCapacity)}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Months Analysed</span><span className="font-mono font-semibold">{cap.monthsBetweenAnalyses}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Accrued Profit</span><span className="font-mono font-semibold">{fmtNaira(cap.accruedProfit)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Current Equity</span><span className="font-mono font-semibold">{fmtNaira(cap.currentEquity)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Previous Equity</span><span className="font-mono font-semibold">{fmtNaira(cap.previousEquity)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Equity Variation</span><span className="font-mono font-semibold">{fmtNaira(cap.equityVariation)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Monthly Reinvestment</span><span className="font-mono font-semibold">{fmtNaira(cap.monthlyReinvestmentCapacity)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Months Analysed</span><span className="font-mono font-semibold">{cap.monthsBetweenAnalyses}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Accrued Profit</span><span className="font-mono font-semibold">{fmtNaira(cap.accruedProfit)}</span></div>
             </div>
           ) : (
             <p className="text-xs text-slate-400">No equity snapshots provided for this appraisal.</p>
@@ -3799,7 +3850,7 @@ function CrossChecksTab({ result }: { result: EngineResult | null }) {
         {/* Treasury variance */}
         <Card className="p-4">
           <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-bold text-slate-900">Cross-Check 4 — Treasury vs Cash Sales</h4>
+            <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Cross-Check 4 — Treasury vs Cash Sales</h4>
             {tv && (
               <Badge className={cn(
                 'text-[10px]',
@@ -3811,11 +3862,11 @@ function CrossChecksTab({ result }: { result: EngineResult | null }) {
           </div>
           {tv ? (
             <div className="space-y-1 text-xs">
-              <div className="flex justify-between"><span className="text-slate-500">Cash Sales / Day</span><span className="font-mono font-semibold">{fmtNaira(tv.cashSalesPerDay)}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Days Since Last Purchase</span><span className="font-mono font-semibold">{tv.daysBetweenDates}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Estimated Treasury</span><span className="font-mono font-semibold">{fmtNaira(tv.estimatedTreasury)}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Treasury per Balance Sheet</span><span className="font-mono font-semibold">{fmtNaira(tv.treasuryPerBalanceSheet)}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Variance</span><span className="font-mono font-semibold">{fmtNaira(tv.variance)} ({fmtNum(tv.variancePercent, 1)}%)</span></div>
+              <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Cash Sales / Day</span><span className="font-mono font-semibold">{fmtNaira(tv.cashSalesPerDay)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Days Since Last Purchase</span><span className="font-mono font-semibold">{tv.daysBetweenDates}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Estimated Treasury</span><span className="font-mono font-semibold">{fmtNaira(tv.estimatedTreasury)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Treasury per Balance Sheet</span><span className="font-mono font-semibold">{fmtNaira(tv.treasuryPerBalanceSheet)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Variance</span><span className="font-mono font-semibold">{fmtNaira(tv.variance)} ({fmtNum(tv.variancePercent, 1)}%)</span></div>
             </div>
           ) : (
             <p className="text-xs text-slate-400">No treasury check dates provided for this appraisal.</p>
@@ -3824,11 +3875,11 @@ function CrossChecksTab({ result }: { result: EngineResult | null }) {
 
         {/* Debt rotation */}
         <Card className="p-4">
-          <h4 className="text-sm font-bold text-slate-900 mb-2">Debt Rotation</h4>
+          <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-2">Debt Rotation</h4>
           <div className="space-y-2 text-xs">
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-bold font-mono text-emerald-700">{fmtNum(result.debtRotationDays ?? 0, 1)}</span>
-              <span className="text-slate-500">operating days</span>
+              <span className="text-slate-500 dark:text-slate-400">operating days</span>
             </div>
             <p className="text-slate-600">Number of operating days to extinguish the current short-term debt out of purchases (liabilities &divide; daily purchases).</p>
           </div>
@@ -3837,7 +3888,7 @@ function CrossChecksTab({ result }: { result: EngineResult | null }) {
         {/* Turnover to loan */}
         <Card className="p-4">
           <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-bold text-slate-900">Turnover-to-Loan Ratio</h4>
+            <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Turnover-to-Loan Ratio</h4>
             {ttl && (
               <Badge className={cn(
                 'text-[10px]',
@@ -3851,10 +3902,10 @@ function CrossChecksTab({ result }: { result: EngineResult | null }) {
           </div>
           {ttl ? (
             <div className="space-y-1 text-xs">
-              <div className="flex justify-between"><span className="text-slate-500">Annual Inflow</span><span className="font-mono font-semibold">{fmtNaira(ttl.annualInflow)}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Avg. Monthly Inflow</span><span className="font-mono font-semibold">{fmtNaira(ttl.averageMonthlyInflow)}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Loan Principal</span><span className="font-mono font-semibold">{fmtNaira(ttl.loanPrincipal)}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Turnover Ratio</span><span className="font-mono font-bold">{fmtNum(ttl.turnoverRatio)}x</span></div>
+              <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Annual Inflow</span><span className="font-mono font-semibold">{fmtNaira(ttl.annualInflow)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Avg. Monthly Inflow</span><span className="font-mono font-semibold">{fmtNaira(ttl.averageMonthlyInflow)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Loan Principal</span><span className="font-mono font-semibold">{fmtNaira(ttl.loanPrincipal)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Turnover Ratio</span><span className="font-mono font-bold">{fmtNum(ttl.turnoverRatio)}x</span></div>
             </div>
           ) : (
             <p className="text-xs text-slate-400">No annual inflow provided for this appraisal.</p>
@@ -3876,7 +3927,7 @@ function VerificationsTab({ result }: { result: EngineResult | null }) {
     return (
       <div className="text-center py-12">
         <ShieldCheck className="h-12 w-12 text-slate-300 mx-auto mb-2" />
-        <p className="text-sm text-slate-500">Engine has not been run yet. Click "Recalculate" to compute verifications.</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Engine has not been run yet. Click "Recalculate" to compute verifications.</p>
       </div>
     );
   }
@@ -3889,8 +3940,8 @@ function VerificationsTab({ result }: { result: EngineResult | null }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-base font-bold text-slate-900">Verifications</h3>
-          <p className="text-xs text-slate-500">Excel FINANCIAL ANALYSIS bank-balances table &amp; GUARANTORS&#39; BIZ VERIFICATION sheet.</p>
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Verifications</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Excel FINANCIAL ANALYSIS bank-balances table &amp; GUARANTORS&#39; BIZ VERIFICATION sheet.</p>
         </div>
         <Badge variant="outline" className="text-[10px] font-mono">{result.policyVersion}</Badge>
       </div>
@@ -3898,7 +3949,7 @@ function VerificationsTab({ result }: { result: EngineResult | null }) {
       {/* Bank / Lender balances */}
       <Card className="p-4">
         <div className="flex items-center justify-between mb-3">
-          <h4 className="text-sm font-bold text-slate-900">Bank / Other Lender Balances</h4>
+          <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Bank / Other Lender Balances</h4>
           <Badge variant="outline" className="text-[10px]">Total: {fmtNaira(total)}</Badge>
         </div>
         {balances.length === 0 ? (
@@ -3906,8 +3957,8 @@ function VerificationsTab({ result }: { result: EngineResult | null }) {
         ) : (
           <div className="overflow-x-auto max-h-72 overflow-y-auto">
             <table className="w-full text-xs">
-              <thead className="bg-slate-50 sticky top-0">
-                <tr className="text-left text-[9px] uppercase text-slate-500">
+              <thead className="bg-slate-50 dark:bg-slate-900 sticky top-0">
+                <tr className="text-left text-[9px] uppercase text-slate-500 dark:text-slate-400">
                   <th className="px-2 py-2">S/N</th>
                   <th className="px-2 py-2">Bank Name</th>
                   <th className="px-2 py-2">Account Name</th>
@@ -3940,7 +3991,7 @@ function VerificationsTab({ result }: { result: EngineResult | null }) {
       {/* Guarantor business verification */}
       <Card className="p-4">
         <div className="flex items-center justify-between mb-3">
-          <h4 className="text-sm font-bold text-slate-900">Guarantor Business Verification</h4>
+          <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Guarantor Business Verification</h4>
           {gbv && (
             <Badge className={cn(
               'text-[10px]',
@@ -3953,14 +4004,14 @@ function VerificationsTab({ result }: { result: EngineResult | null }) {
         {gbv ? (
           <div className="space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-              <div><p className="text-[10px] text-slate-500 uppercase">Guarantor Name</p><p className="font-semibold">{gbv.guarantorName || '—'}</p></div>
-              <div><p className="text-[10px] text-slate-500 uppercase">Business Name</p><p className="font-semibold">{gbv.businessName || '—'}</p></div>
-              <div className="md:col-span-2"><p className="text-[10px] text-slate-500 uppercase">Business Address</p><p className="font-semibold">{gbv.businessAddress || '—'}</p></div>
-              <div><p className="text-[10px] text-slate-500 uppercase">Years in Operation</p><p className="font-mono font-semibold">{gbv.yearsInOperation}</p></div>
-              <div><p className="text-[10px] text-slate-500 uppercase">Stock Value</p><p className="font-mono font-semibold">{fmtNaira(gbv.stockValue)}</p></div>
-              <div><p className="text-[10px] text-slate-500 uppercase">Monthly Sales</p><p className="font-mono font-semibold">{fmtNaira(gbv.monthlySales)}</p></div>
-              <div><p className="text-[10px] text-slate-500 uppercase">Monthly Expenses</p><p className="font-mono font-semibold">{fmtNaira(gbv.monthlyExpenses)}</p></div>
-              <div><p className="text-[10px] text-slate-500 uppercase">Net Profit</p><p className="font-mono font-semibold text-emerald-700">{fmtNaira(gbv.netProfit)}</p></div>
+              <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Guarantor Name</p><p className="font-semibold">{gbv.guarantorName || '—'}</p></div>
+              <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Business Name</p><p className="font-semibold">{gbv.businessName || '—'}</p></div>
+              <div className="md:col-span-2"><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Business Address</p><p className="font-semibold">{gbv.businessAddress || '—'}</p></div>
+              <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Years in Operation</p><p className="font-mono font-semibold">{gbv.yearsInOperation}</p></div>
+              <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Stock Value</p><p className="font-mono font-semibold">{fmtNaira(gbv.stockValue)}</p></div>
+              <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Monthly Sales</p><p className="font-mono font-semibold">{fmtNaira(gbv.monthlySales)}</p></div>
+              <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Monthly Expenses</p><p className="font-mono font-semibold">{fmtNaira(gbv.monthlyExpenses)}</p></div>
+              <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Net Profit</p><p className="font-mono font-semibold text-emerald-700">{fmtNaira(gbv.netProfit)}</p></div>
             </div>
             <div className={cn(
               'rounded-md p-3 text-xs border',
@@ -3986,7 +4037,7 @@ function SwotTab({ data, update, engineResult }: any) {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-base font-bold text-slate-900 mb-3">SWOT Analysis</h3>
+        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-3">SWOT Analysis</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card className="p-4 border-emerald-200 bg-emerald-50">
             <h4 className="text-sm font-bold text-emerald-700 mb-2">Strengths</h4>
@@ -4039,7 +4090,7 @@ function EngineTab({ result }: { result: EngineResult | null }) {
     return (
       <div className="text-center py-12">
         <Cpu className="h-12 w-12 text-slate-300 mx-auto mb-2" />
-        <p className="text-sm text-slate-500">Engine has not been run yet. Click "Recalculate" to compute ratios.</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Engine has not been run yet. Click "Recalculate" to compute ratios.</p>
       </div>
     );
   }
@@ -4048,7 +4099,7 @@ function EngineTab({ result }: { result: EngineResult | null }) {
     <div className="space-y-4">
       <Card className="p-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-slate-900">Engine Output — Full Detail</h3>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Engine Output — Full Detail</h3>
           <Badge variant="outline" className="text-[10px] font-mono">{result.policyVersion}</Badge>
         </div>
         <pre className="text-[10px] bg-slate-900 text-emerald-400 p-4 rounded-md overflow-x-auto max-h-96 overflow-y-auto">
@@ -4058,11 +4109,11 @@ function EngineTab({ result }: { result: EngineResult | null }) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card className="p-4">
-          <h4 className="text-sm font-bold text-slate-900 mb-3">12-Month Projection</h4>
+          <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-3">12-Month Projection</h4>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
-              <thead className="bg-slate-50">
-                <tr className="text-left text-[9px] uppercase text-slate-500">
+              <thead className="bg-slate-50 dark:bg-slate-900">
+                <tr className="text-left text-[9px] uppercase text-slate-500 dark:text-slate-400">
                   <th className="px-2 py-1">M</th>
                   <th className="px-2 py-1 text-right">Opening</th>
                   <th className="px-2 py-1 text-right">Surplus</th>
@@ -4077,7 +4128,7 @@ function EngineTab({ result }: { result: EngineResult | null }) {
                     <td className="px-2 py-1 text-right font-mono">₦{row.opening.toLocaleString()}</td>
                     <td className="px-2 py-1 text-right font-mono text-emerald-700">₦{row.monthlySurplus.toLocaleString()}</td>
                     <td className="px-2 py-1 text-right font-mono text-red-600">₦{row.loanOutflow.toLocaleString()}</td>
-                    <td className={cn('px-2 py-1 text-right font-mono font-bold', row.isNegative ? 'text-red-600' : 'text-slate-900')}>
+                    <td className={cn('px-2 py-1 text-right font-mono font-bold', row.isNegative ? 'text-red-600' : 'text-slate-900 dark:text-slate-100')}>
                       ₦{row.closing.toLocaleString()}
                     </td>
                   </tr>
@@ -4088,12 +4139,12 @@ function EngineTab({ result }: { result: EngineResult | null }) {
         </Card>
 
         <Card className="p-4">
-          <h4 className="text-sm font-bold text-slate-900 mb-3">Red Flags Detail</h4>
+          <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-3">Red Flags Detail</h4>
           <div className="space-y-2">
             {result.redFlags.length === 0 ? (
               <div className="text-center py-4">
                 <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-1" />
-                <p className="text-xs text-slate-500">No red flags detected</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">No red flags detected</p>
               </div>
             ) : (
               result.redFlags.map((f, i) => (
@@ -4104,11 +4155,11 @@ function EngineTab({ result }: { result: EngineResult | null }) {
                   f.severity === 'info' && 'bg-blue-50 border border-blue-200',
                 )}>
                   <div className="flex justify-between items-start">
-                    <p className="font-bold text-slate-900">{f.code}</p>
+                    <p className="font-bold text-slate-900 dark:text-slate-100">{f.code}</p>
                     <Badge variant="outline" className="text-[9px]">{f.severity}</Badge>
                   </div>
                   <p className="text-slate-600 mt-1">{f.message}</p>
-                  <p className="text-[10px] text-slate-500 mt-1">Points: {f.pointsDeducted}</p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">Points: {f.pointsDeducted}</p>
                 </div>
               ))
             )}
@@ -4117,16 +4168,16 @@ function EngineTab({ result }: { result: EngineResult | null }) {
       </div>
 
       <Card className="p-4">
-        <h4 className="text-sm font-bold text-slate-900 mb-3">Bank Yield Analysis</h4>
+        <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-3">Bank Yield Analysis</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-          <div><p className="text-[10px] text-slate-500 uppercase">Interest Income</p><p className="font-bold text-emerald-700">₦{result.bankYield.interestIncome.toLocaleString()}</p></div>
-          <div><p className="text-[10px] text-slate-500 uppercase">Processing Fee</p><p className="font-bold">₦{result.bankYield.processingFee.toLocaleString()}</p></div>
-          <div><p className="text-[10px] text-slate-500 uppercase">CCD Income</p><p className="font-bold">₦{result.bankYield.cashDepositIncome.toLocaleString()}</p></div>
-          <div><p className="text-[10px] text-slate-500 uppercase">Total Earnings</p><p className="font-bold">₦{result.bankYield.totalEarnings.toLocaleString()}</p></div>
-          <div><p className="text-[10px] text-slate-500 uppercase">Cost of Fund (30% p.a.)</p><p className="font-bold text-red-600">₦{result.bankYield.costOfFund.toLocaleString()}</p></div>
-          <div><p className="text-[10px] text-slate-500 uppercase">Admin Cost (5% p.a.)</p><p className="font-bold text-red-600">₦{result.bankYield.adminCost.toLocaleString()}</p></div>
-          <div><p className="text-[10px] text-slate-500 uppercase">Net Yield</p><p className="font-bold">₦{result.bankYield.netYield.toLocaleString()}</p></div>
-          <div><p className="text-[10px] text-slate-500 uppercase">Annualized %</p><p className={cn('font-bold', result.bankYield.netYieldPercent < 0 ? 'text-red-600' : 'text-emerald-700')}>{result.bankYield.netYieldPercent.toFixed(2)}%</p></div>
+          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Interest Income</p><p className="font-bold text-emerald-700">₦{result.bankYield.interestIncome.toLocaleString()}</p></div>
+          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Processing Fee</p><p className="font-bold">₦{result.bankYield.processingFee.toLocaleString()}</p></div>
+          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">CCD Income</p><p className="font-bold">₦{result.bankYield.cashDepositIncome.toLocaleString()}</p></div>
+          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Total Earnings</p><p className="font-bold">₦{result.bankYield.totalEarnings.toLocaleString()}</p></div>
+          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Cost of Fund (30% p.a.)</p><p className="font-bold text-red-600">₦{result.bankYield.costOfFund.toLocaleString()}</p></div>
+          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Admin Cost (5% p.a.)</p><p className="font-bold text-red-600">₦{result.bankYield.adminCost.toLocaleString()}</p></div>
+          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Net Yield</p><p className="font-bold">₦{result.bankYield.netYield.toLocaleString()}</p></div>
+          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Annualized %</p><p className={cn('font-bold', result.bankYield.netYieldPercent < 0 ? 'text-red-600' : 'text-emerald-700')}>{result.bankYield.netYieldPercent.toFixed(2)}%</p></div>
         </div>
       </Card>
 
@@ -4135,14 +4186,14 @@ function EngineTab({ result }: { result: EngineResult | null }) {
         <Card className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h4 className="text-sm font-bold text-slate-900">G1: Monthly Cashflow Test (Excel Parity)</h4>
+              <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">G1: Monthly Cashflow Test (Excel Parity)</h4>
               <p className="text-xs text-slate-600">22 line items × 12 months — mirrors Excel MONTHLY CASHFLOW TEST sheet</p>
             </div>
             <Badge className="bg-blue-100 text-blue-700 text-[10px]">{result.detailedCashflow.length} months</Badge>
           </div>
           <div className="overflow-x-auto max-h-96 overflow-y-auto">
             <table className="w-full text-[10px] border-collapse">
-              <thead className="bg-slate-100 sticky top-0">
+              <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0">
                 <tr className="text-left text-[9px] uppercase text-slate-600">
                   <th className="px-1 py-1 border">Description</th>
                   {result.detailedCashflow.map((row: any) => (
@@ -4172,7 +4223,7 @@ function EngineTab({ result }: { result: EngineResult | null }) {
                   { label: 'First Liquidity', key: 'firstLiquidity' },
                   { label: 'Accrued Flow', key: 'accruedFlow' },
                 ].map((line) => (
-                  <tr key={line.key} className="hover:bg-slate-50">
+                  <tr key={line.key} className="hover:bg-slate-50 dark:bg-slate-900">
                     <td className="px-1 py-1 border font-medium text-slate-700">{line.label}</td>
                     {result.detailedCashflow!.map((row: any) => {
                       const val = Number(row[line.key]) || 0;
@@ -4198,7 +4249,7 @@ function EngineTab({ result }: { result: EngineResult | null }) {
       {result.balanceSheetComparison && (
         <Card className="p-4 bg-gradient-to-br from-purple-50 to-pink-50 border-purple-200">
           <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-bold text-slate-900">G2: Balance Sheet Comparison (Current vs Previous)</h4>
+            <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">G2: Balance Sheet Comparison (Current vs Previous)</h4>
             <Badge className={cn(
               'text-[10px]',
               result.balanceSheetComparison.verdict === 'GROWING' ? 'bg-emerald-100 text-emerald-700' :
@@ -4210,30 +4261,30 @@ function EngineTab({ result }: { result: EngineResult | null }) {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="p-3 bg-white rounded border border-slate-200">
-              <p className="text-[10px] uppercase text-slate-500 font-semibold mb-2">Total Assets</p>
+              <p className="text-[10px] uppercase text-slate-500 dark:text-slate-400 font-semibold mb-2">Total Assets</p>
               <div className="space-y-1 text-xs">
-                <div className="flex justify-between"><span className="text-slate-500">Current:</span><span className="font-mono font-bold">₦{result.balanceSheetComparison.currentTotalAssets.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Previous:</span><span className="font-mono">₦{result.balanceSheetComparison.previousTotalAssets.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Difference:</span><span className={cn('font-mono font-bold', result.balanceSheetComparison.assetsDifference >= 0 ? 'text-emerald-600' : 'text-red-600')}>₦{result.balanceSheetComparison.assetsDifference.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">% Change:</span><span className={cn('font-mono font-bold', result.balanceSheetComparison.assetsPercentChange >= 0 ? 'text-emerald-600' : 'text-red-600')}>{result.balanceSheetComparison.assetsPercentChange.toFixed(1)}%</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Current:</span><span className="font-mono font-bold">₦{result.balanceSheetComparison.currentTotalAssets.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Previous:</span><span className="font-mono">₦{result.balanceSheetComparison.previousTotalAssets.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Difference:</span><span className={cn('font-mono font-bold', result.balanceSheetComparison.assetsDifference >= 0 ? 'text-emerald-600' : 'text-red-600')}>₦{result.balanceSheetComparison.assetsDifference.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">% Change:</span><span className={cn('font-mono font-bold', result.balanceSheetComparison.assetsPercentChange >= 0 ? 'text-emerald-600' : 'text-red-600')}>{result.balanceSheetComparison.assetsPercentChange.toFixed(1)}%</span></div>
               </div>
             </div>
             <div className="p-3 bg-white rounded border border-slate-200">
-              <p className="text-[10px] uppercase text-slate-500 font-semibold mb-2">Total Liabilities</p>
+              <p className="text-[10px] uppercase text-slate-500 dark:text-slate-400 font-semibold mb-2">Total Liabilities</p>
               <div className="space-y-1 text-xs">
-                <div className="flex justify-between"><span className="text-slate-500">Current:</span><span className="font-mono font-bold">₦{result.balanceSheetComparison.currentTotalLiabilities.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Previous:</span><span className="font-mono">₦{result.balanceSheetComparison.previousTotalLiabilities.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Difference:</span><span className={cn('font-mono font-bold', result.balanceSheetComparison.liabilitiesDifference >= 0 ? 'text-red-600' : 'text-emerald-600')}>₦{result.balanceSheetComparison.liabilitiesDifference.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">% Change:</span><span className={cn('font-mono font-bold', result.balanceSheetComparison.liabilitiesPercentChange >= 0 ? 'text-red-600' : 'text-emerald-600')}>{result.balanceSheetComparison.liabilitiesPercentChange.toFixed(1)}%</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Current:</span><span className="font-mono font-bold">₦{result.balanceSheetComparison.currentTotalLiabilities.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Previous:</span><span className="font-mono">₦{result.balanceSheetComparison.previousTotalLiabilities.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Difference:</span><span className={cn('font-mono font-bold', result.balanceSheetComparison.liabilitiesDifference >= 0 ? 'text-red-600' : 'text-emerald-600')}>₦{result.balanceSheetComparison.liabilitiesDifference.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">% Change:</span><span className={cn('font-mono font-bold', result.balanceSheetComparison.liabilitiesPercentChange >= 0 ? 'text-red-600' : 'text-emerald-600')}>{result.balanceSheetComparison.liabilitiesPercentChange.toFixed(1)}%</span></div>
               </div>
             </div>
             <div className="p-3 bg-white rounded border border-slate-200">
-              <p className="text-[10px] uppercase text-slate-500 font-semibold mb-2">Equity (Net Worth)</p>
+              <p className="text-[10px] uppercase text-slate-500 dark:text-slate-400 font-semibold mb-2">Equity (Net Worth)</p>
               <div className="space-y-1 text-xs">
-                <div className="flex justify-between"><span className="text-slate-500">Current:</span><span className="font-mono font-bold">₦{result.balanceSheetComparison.currentEquity.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Previous:</span><span className="font-mono">₦{result.balanceSheetComparison.previousEquity.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Difference:</span><span className={cn('font-mono font-bold', result.balanceSheetComparison.equityDifference >= 0 ? 'text-emerald-600' : 'text-red-600')}>₦{result.balanceSheetComparison.equityDifference.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">% Change:</span><span className={cn('font-mono font-bold', result.balanceSheetComparison.equityPercentChange >= 0 ? 'text-emerald-600' : 'text-red-600')}>{result.balanceSheetComparison.equityPercentChange.toFixed(1)}%</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Current:</span><span className="font-mono font-bold">₦{result.balanceSheetComparison.currentEquity.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Previous:</span><span className="font-mono">₦{result.balanceSheetComparison.previousEquity.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Difference:</span><span className={cn('font-mono font-bold', result.balanceSheetComparison.equityDifference >= 0 ? 'text-emerald-600' : 'text-red-600')}>₦{result.balanceSheetComparison.equityDifference.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">% Change:</span><span className={cn('font-mono font-bold', result.balanceSheetComparison.equityPercentChange >= 0 ? 'text-emerald-600' : 'text-red-600')}>{result.balanceSheetComparison.equityPercentChange.toFixed(1)}%</span></div>
               </div>
             </div>
           </div>
@@ -4245,16 +4296,16 @@ function EngineTab({ result }: { result: EngineResult | null }) {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Cost of Fund Schedule */}
           <Card className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200">
-            <h4 className="text-sm font-bold text-slate-900 mb-1">G8: Cost-of-Fund Schedule (30% PA)</h4>
+            <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">G8: Cost-of-Fund Schedule (30% PA)</h4>
             <p className="text-xs text-slate-600 mb-3">Bank's true cost of capital over loan tenure</p>
             <div className="grid grid-cols-3 gap-2 mb-3 text-xs">
-              <div><p className="text-[9px] text-slate-500 uppercase">Monthly</p><p className="font-mono font-bold">₦{result.costOfFundSchedule.monthlyInstallment.toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
-              <div><p className="text-[9px] text-slate-500 uppercase">Total Interest</p><p className="font-mono font-bold text-red-600">₦{result.costOfFundSchedule.totalInterest.toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
-              <div><p className="text-[9px] text-slate-500 uppercase">Total Payable</p><p className="font-mono font-bold">₦{result.costOfFundSchedule.totalPayable.toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
+              <div><p className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Monthly</p><p className="font-mono font-bold">₦{result.costOfFundSchedule.monthlyInstallment.toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
+              <div><p className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Total Interest</p><p className="font-mono font-bold text-red-600">₦{result.costOfFundSchedule.totalInterest.toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
+              <div><p className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Total Payable</p><p className="font-mono font-bold">₦{result.costOfFundSchedule.totalPayable.toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
             </div>
             <div className="overflow-x-auto max-h-48 overflow-y-auto">
               <table className="w-full text-[10px]">
-                <thead className="bg-slate-100 sticky top-0">
+                <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0">
                   <tr className="text-left text-[9px] uppercase text-slate-600">
                     <th className="px-1 py-1">M</th>
                     <th className="px-1 py-1 text-right">Opening</th>
@@ -4282,17 +4333,17 @@ function EngineTab({ result }: { result: EngineResult | null }) {
 
           {/* Convert-to-Loan Schedule */}
           <Card className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-200">
-            <h4 className="text-sm font-bold text-slate-900 mb-1">G8: Convert-to-Loan Schedule</h4>
+            <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">G8: Convert-to-Loan Schedule</h4>
             <p className="text-xs text-slate-600 mb-3">Principal + upfront + CCD + admin cost amortized</p>
             <div className="grid grid-cols-2 gap-2 mb-2 text-[10px]">
-              <div><p className="text-[9px] text-slate-500 uppercase">Upfront Fee</p><p className="font-mono font-bold">₦{(result.convertToLoanSchedule.summary.upfrontFee || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
-              <div><p className="text-[9px] text-slate-500 uppercase">CCD Amount</p><p className="font-mono font-bold">₦{(result.convertToLoanSchedule.summary.ccdAmount || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
-              <div><p className="text-[9px] text-slate-500 uppercase">Admin Cost Total</p><p className="font-mono font-bold">₦{(result.convertToLoanSchedule.summary.adminCostTotal || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
-              <div><p className="text-[9px] text-slate-500 uppercase">Monthly Installment</p><p className="font-mono font-bold">₦{result.convertToLoanSchedule.monthlyInstallment.toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
+              <div><p className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Upfront Fee</p><p className="font-mono font-bold">₦{(result.convertToLoanSchedule.summary.upfrontFee || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
+              <div><p className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">CCD Amount</p><p className="font-mono font-bold">₦{(result.convertToLoanSchedule.summary.ccdAmount || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
+              <div><p className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Admin Cost Total</p><p className="font-mono font-bold">₦{(result.convertToLoanSchedule.summary.adminCostTotal || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
+              <div><p className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Monthly Installment</p><p className="font-mono font-bold">₦{result.convertToLoanSchedule.monthlyInstallment.toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
             </div>
             <div className="overflow-x-auto max-h-48 overflow-y-auto">
               <table className="w-full text-[10px]">
-                <thead className="bg-slate-100 sticky top-0">
+                <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0">
                   <tr className="text-left text-[9px] uppercase text-slate-600">
                     <th className="px-1 py-1">M</th>
                     <th className="px-1 py-1 text-right">Opening</th>
@@ -4336,7 +4387,7 @@ function Field({ label, value, onChange, type = 'text', readOnly }: any) {
         value={value ?? ''}
         onChange={onChange ? (e) => onChange(e.target.value) : undefined}
         readOnly={readOnly}
-        className={cn('mt-1', readOnly && 'bg-slate-50 text-slate-600')}
+        className={cn('mt-1', readOnly && 'bg-slate-50 dark:bg-slate-900 text-slate-600')}
       />
     </div>
   );

@@ -1,24 +1,37 @@
-// Frontend auth helper — manages JWT token in memory + localStorage
+// Frontend auth helper — manages JWT token in localStorage
 // Used by all API calls to include the Bearer token
 
-const TOKEN_KEY = 'watershed_auth_token';
+const ADMIN_TOKEN_KEY = 'watershed_admin_token';
+const CUSTOMER_TOKEN_KEY = 'watershed_customer_token';
 
-/** Get the current JWT token from localStorage */
+/** Get the current JWT token from localStorage (checks admin first, then customer) */
 export function getAuthToken(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem(TOKEN_KEY);
+  return localStorage.getItem(ADMIN_TOKEN_KEY) || localStorage.getItem(CUSTOMER_TOKEN_KEY);
 }
 
-/** Save the JWT token after login */
+/** Save the admin JWT token after login */
 export function setAuthToken(token: string): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(TOKEN_KEY, token);
+  localStorage.setItem(ADMIN_TOKEN_KEY, token);
 }
 
-/** Clear the JWT token on logout */
+/** Save the customer JWT token after login */
+export function setCustomerAuthToken(token: string): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(CUSTOMER_TOKEN_KEY, token);
+}
+
+/** Clear the admin JWT token on logout */
 export function clearAuthToken(): void {
   if (typeof window === 'undefined') return;
-  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(ADMIN_TOKEN_KEY);
+}
+
+/** Clear the customer JWT token on logout */
+export function clearCustomerAuthToken(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(CUSTOMER_TOKEN_KEY);
 }
 
 /** Add Authorization header to fetch options */
@@ -36,9 +49,18 @@ export function withAuth(options: RequestInit = {}): RequestInit {
 export async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const response = await fetch(url, withAuth(options));
 
-  // If 401, clear token (expired/invalid) — the app will redirect to login
+  // G3: If 401, clear token and redirect to login
   if (response.status === 401) {
     clearAuthToken();
+    clearCustomerAuthToken();
+    if (typeof window !== 'undefined') {
+      const currentPath = window.location.pathname;
+      if (!currentPath.includes('login') && !currentPath.includes('setup')) {
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 100);
+      }
+    }
   }
 
   return response;

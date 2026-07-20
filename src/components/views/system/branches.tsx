@@ -10,10 +10,12 @@ import { Building2, Plus, Pencil, Trash2, Power, Users } from 'lucide-react';
 import { NIGERIAN_STATES } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { authFetch } from '@/lib/auth-client';
+import { useToast } from '@/hooks/use-toast';
 
 const empty = { name: '', code: '', state: '', address: '', phoneContact: '', managerId: '', status: 'active' };
 
 export function BranchesView() {
+  const { toast } = useToast();
   const [branches, setBranches] = useState<any[]>([]);
   const [staff, setStaff] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

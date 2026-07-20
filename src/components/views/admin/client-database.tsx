@@ -21,9 +21,16 @@ import { useToast } from '@/hooks/use-toast';
 import {
   Users, Search, Eye, ChevronLeft, ChevronRight,
   Building2, CheckCircle2, Clock, XCircle,
+  UserCog, KeyRound, Pencil, ShieldAlert, X,
 } from 'lucide-react';
 import { TableSkeleton } from '@/components/ui/skeleton';
 import { authFetch } from '@/lib/auth-client';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { useAppStore as useStore } from '@/lib/store';
 
 interface Customer {
   id: string;
@@ -50,7 +57,7 @@ interface Stats {
 const PAGE_SIZE = 50;
 
 export function ClientDatabaseView() {
-  const { setView } = useAppStore();
+  const { setView, currentAdmin } = useStore();
   const { toast } = useToast();
 
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -63,6 +70,110 @@ export function ClientDatabaseView() {
   const [kycStatus, setKycStatus] = useState<string>('all');
   const [branchId, setBranchId] = useState<string>('all');
   const [branches, setBranches] = useState<{ id: string; name: string; code: string }[]>([]);
+
+  // G1: Assignment + Password Reset + Profile Edit state
+  const [assignModal, setAssignModal] = useState<{ open: boolean; customer: Customer | null }>({ open: false, customer: null });
+  const [resetModal, setResetModal] = useState<{ open: boolean; customer: Customer | null; tempPwd?: string }>({ open: false, customer: null });
+  const [staffList, setStaffList] = useState<{ id: string; firstName: string; lastName: string; role: string; branchId?: string }[]>([]);
+  const [assignTo, setAssignTo] = useState<'bm' | 'lo'>('bm');
+  const [selectedStaffId, setSelectedStaffId] = useState('');
+  const [assigning, setAssigning] = useState(false);
+  const [resetting, setResetting] = useState(false);
+
+  // G1b: Profile edit state
+  const [editModal, setEditModal] = useState<{ open: boolean; customer: Customer | null }>({ open: false, customer: null });
+  const [editForm, setEditForm] = useState<any>({});
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  // G1b: Open edit modal with customer data
+  const openEditModal = (c: Customer) => {
+    setEditForm({
+      firstName: c.firstName || '',
+      lastName: c.lastName || '',
+      email: c.email || '',
+      phone: c.phone || '',
+      bvn: c.bvn || '',
+      nin: c.nin || '',
+      address: '',
+      state: '',
+      accountNumber: c.accountNumber || '',
+    });
+    setEditModal({ open: true, customer: c });
+  };
+
+  // G1b: Save profile
+  const handleSaveProfile = async () => {
+    if (!editModal.customer) return;
+    setSavingProfile(true);
+    try {
+      const res = await authFetch(`/api/customers/${editModal.customer.id}/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error);
+      toast({ title: '✅ Profile Updated', description: 'Customer profile has been updated successfully.' });
+      setEditModal({ open: false, customer: null });
+      load();
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  // G1: Load staff for assignment dropdowns
+  useEffect(() => {
+    authFetch('/api/staff').then(r => r.json()).then(d => setStaffList(d.staff || [])).catch(() => {});
+  }, []);
+
+  // G1: Handle assignment
+  const handleAssign = async () => {
+    if (!assignModal.customer || !selectedStaffId) return;
+    setAssigning(true);
+    try {
+      const res = await authFetch(`/api/customers/${assignModal.customer.id}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assignTo,
+          [assignTo === 'bm' ? 'bmId' : 'loId']: selectedStaffId,
+          branchId: assignModal.customer.branch?.id,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error);
+      toast({ title: '✅ Assigned', description: d.message || 'Client assigned successfully' });
+      setAssignModal({ open: false, customer: null });
+      setSelectedStaffId('');
+      load();
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  // G1: Handle password reset
+  const handleResetPassword = async () => {
+    if (!resetModal.customer) return;
+    setResetting(true);
+    try {
+      const res = await authFetch(`/api/customers/${resetModal.customer.id}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error);
+      setResetModal({ open: true, customer: resetModal.customer, tempPwd: d.tempPassword });
+      toast({ title: '✅ Password Reset', description: 'Temporary password generated and sent to customer email.' });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -265,14 +376,53 @@ export function ClientDatabaseView() {
                     </TableCell>
                     <TableCell className="text-xs text-slate-600">{fmtDate(c.createdAt)}</TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 px-2"
-                        onClick={() => setView('customer-detail', { userId: c.id })}
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2"
+                          onClick={() => setView('customer-detail', { userId: c.id })}
+                          title="View Profile"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </Button>
+                        {/* G1: Assign button — visible to frontdesk, bm, super */}
+                        {(currentAdmin?.role === 'super' || currentAdmin?.role === 'frontdesk' || currentAdmin?.role === 'bm') && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-blue-600 hover:text-blue-700"
+                            onClick={() => { setAssignModal({ open: true, customer: c }); setAssignTo(currentAdmin.role === 'bm' ? 'lo' : 'bm'); }}
+                            title="Assign to staff"
+                          >
+                            <UserCog className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        {/* G1: Password reset button — visible to frontdesk, bm, super */}
+                        {(currentAdmin?.role === 'super' || currentAdmin?.role === 'frontdesk' || currentAdmin?.role === 'bm') && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-amber-600 hover:text-amber-700"
+                            onClick={() => setResetModal({ open: true, customer: c })}
+                            title="Reset password"
+                          >
+                            <KeyRound className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        {/* G1b: Edit profile button — visible to frontdesk, bm, super */}
+                        {(currentAdmin?.role === 'super' || currentAdmin?.role === 'frontdesk' || currentAdmin?.role === 'bm') && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-emerald-600 hover:text-emerald-700"
+                            onClick={() => openEditModal(c)}
+                            title="Edit profile"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -312,6 +462,174 @@ export function ClientDatabaseView() {
           </div>
         )}
       </Card>
+
+      {/* G1: Assignment Modal */}
+      <Dialog open={assignModal.open} onOpenChange={(o) => setAssignModal({ open: o, customer: assignModal.customer })}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Assign Client</DialogTitle>
+            <DialogDescription>
+              Assign {assignModal.customer?.firstName} {assignModal.customer?.lastName} to a {assignTo === 'bm' ? 'Branch Manager' : 'Loan Officer'}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant={assignTo === 'bm' ? 'default' : 'outline'}
+                onClick={() => setAssignTo('bm')}
+                className={assignTo === 'bm' ? 'bg-emerald-600' : ''}
+              >
+                Branch Manager
+              </Button>
+              <Button
+                size="sm"
+                variant={assignTo === 'lo' ? 'default' : 'outline'}
+                onClick={() => setAssignTo('lo')}
+                className={assignTo === 'lo' ? 'bg-emerald-600' : ''}
+              >
+                Loan Officer
+              </Button>
+            </div>
+            <div>
+              <Label className="text-xs text-slate-600">
+                Select {assignTo === 'bm' ? 'Branch Manager' : 'Loan Officer'}
+              </Label>
+              <select
+                value={selectedStaffId}
+                onChange={(e) => setSelectedStaffId(e.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500"
+              >
+                <option value="">— Select staff —</option>
+                {staffList
+                  .filter(s => assignTo === 'bm' ? s.role === 'bm' : s.role === 'loan')
+                  .map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.firstName} {s.lastName} ({s.role.toUpperCase()})
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <p className="text-[11px] text-slate-500 bg-blue-50 border border-blue-100 rounded p-2">
+              ℹ️ The selected staff member will receive a dashboard notification and email about this assignment.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignModal({ open: false, customer: null })}>Cancel</Button>
+            <Button onClick={handleAssign} disabled={!selectedStaffId || assigning} className="bg-emerald-600 hover:bg-emerald-700">
+              {assigning ? 'Assigning...' : 'Assign Client'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* G1: Password Reset Modal */}
+      <Dialog open={resetModal.open} onOpenChange={(o) => setResetModal({ open: o, customer: resetModal.customer })}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+            <DialogDescription>
+              Reset the password for {resetModal.customer?.firstName} {resetModal.customer?.lastName}.
+            </DialogDescription>
+          </DialogHeader>
+          {resetModal.tempPwd ? (
+            <div className="space-y-3 py-2">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 text-center">
+                <p className="text-xs text-emerald-700 font-semibold mb-1">Temporary Password:</p>
+                <p className="text-2xl font-bold text-emerald-800 font-mono tracking-wider">{resetModal.tempPwd}</p>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                ✅ This password has been sent to the customer's email.
+                Please also share it with the customer in person or via phone.
+                The customer should change it immediately after logging in.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3 py-2">
+              <p className="text-sm text-slate-600">
+                A new random password will be generated and sent to the customer's email address.
+                The customer will need to change it after their first login.
+              </p>
+              <div className="bg-amber-50 border border-amber-200 rounded p-3">
+                <p className="text-xs text-amber-700">
+                  ⚠️ <strong>Customer Email:</strong> {resetModal.customer?.email || 'No email on file'}
+                  {resetModal.customer?.email ? '' : ' — Password will only be shown to you.'}
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            {resetModal.tempPwd ? (
+              <Button onClick={() => setResetModal({ open: false, customer: null })} className="bg-emerald-600 hover:bg-emerald-700">
+                Done
+              </Button>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => setResetModal({ open: false, customer: null })}>Cancel</Button>
+                <Button onClick={handleResetPassword} disabled={resetting} className="bg-amber-600 hover:bg-amber-700">
+                  {resetting ? 'Resetting...' : 'Reset Password'}
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* G1b: Edit Profile Modal */}
+      <Dialog open={editModal.open} onOpenChange={(o) => setEditModal({ open: o, customer: editModal.customer })}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Customer Profile</DialogTitle>
+            <DialogDescription>
+              Update {editModal.customer?.firstName} {editModal.customer?.lastName}'s profile information.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 py-2 max-h-[60vh] overflow-y-auto">
+            <div>
+              <Label className="text-xs text-slate-600">First Name</Label>
+              <Input value={editForm.firstName || ''} onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <Label className="text-xs text-slate-600">Last Name</Label>
+              <Input value={editForm.lastName || ''} onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <Label className="text-xs text-slate-600">Email</Label>
+              <Input value={editForm.email || ''} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <Label className="text-xs text-slate-600">Phone</Label>
+              <Input value={editForm.phone || ''} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <Label className="text-xs text-slate-600">BVN (11 digits)</Label>
+              <Input value={editForm.bvn || ''} onChange={(e) => setEditForm({ ...editForm, bvn: e.target.value })} className="mt-1" maxLength={11} />
+            </div>
+            <div>
+              <Label className="text-xs text-slate-600">NIN (11 digits)</Label>
+              <Input value={editForm.nin || ''} onChange={(e) => setEditForm({ ...editForm, nin: e.target.value })} className="mt-1" maxLength={11} />
+            </div>
+            <div>
+              <Label className="text-xs text-slate-600">Account Number</Label>
+              <Input value={editForm.accountNumber || ''} onChange={(e) => setEditForm({ ...editForm, accountNumber: e.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <Label className="text-xs text-slate-600">State</Label>
+              <Input value={editForm.state || ''} onChange={(e) => setEditForm({ ...editForm, state: e.target.value })} className="mt-1" />
+            </div>
+            <div className="col-span-2">
+              <Label className="text-xs text-slate-600">Residential Address</Label>
+              <Textarea value={editForm.address || ''} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} rows={2} className="mt-1" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditModal({ open: false, customer: null })}>Cancel</Button>
+            <Button onClick={handleSaveProfile} disabled={savingProfile} className="bg-emerald-600 hover:bg-emerald-700">
+              {savingProfile ? 'Saving...' : 'Save Profile'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

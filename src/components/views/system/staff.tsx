@@ -19,10 +19,12 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { authFetch } from '@/lib/auth-client';
+import { useToast } from '@/hooks/use-toast';
 
 const ROLES = Object.keys(ROLE_LABELS);
 
 export function StaffView() {
+  const { toast } = useToast();
   const { currentAdmin } = useAppStore();
   const [staff, setStaff] = useState<any[]>([]);
   const [branches, setBranches] = useState<any[]>([]);

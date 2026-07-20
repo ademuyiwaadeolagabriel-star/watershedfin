@@ -13,6 +13,7 @@ import {
 import { Package, Plus, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { authFetch } from '@/lib/auth-client';
+import { useToast } from '@/hooks/use-toast';
 
 const empty = {
   name: '', slug: '', description: '', duration: 12, interest: 0,
@@ -20,6 +21,7 @@ const empty = {
 };
 
 export function LoanProductsView() {
+  const { toast } = useToast();
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);

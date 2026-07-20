@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
+import { notifyWelcome } from '@/lib/notification-service';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -69,11 +70,54 @@ export async function POST(req: NextRequest) {
     const adminId = url.searchParams.get('adminId') || undefined;
 
     const body = await req.json();
+
+    // G6: Input validation
+    const { personal, business, loan } = body;
+    if (!personal?.firstName || !personal?.lastName) {
+      return NextResponse.json({ error: 'First name and last name are required' }, { status: 400 });
+    }
+    if (personal.bvn && !/^\d{11}$/.test(String(personal.bvn).replace(/\s/g, ''))) {
+      return NextResponse.json({ error: 'BVN must be exactly 11 digits' }, { status: 400 });
+    }
+    if (personal.nin && !/^\d{11}$/.test(String(personal.nin).replace(/\s/g, ''))) {
+      return NextResponse.json({ error: 'NIN must be exactly 11 digits' }, { status: 400 });
+    }
+    if (personal.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(personal.email)) {
+      return NextResponse.json({ error: 'Invalid email format' }, { status: 400 });
+    }
+    if (personal.phone && String(personal.phone).replace(/\D/g, '').length < 10) {
+      return NextResponse.json({ error: 'Phone number must be at least 10 digits' }, { status: 400 });
+    }
+    if (loan?.loanAmount && Number(loan.loanAmount) <= 0) {
+      return NextResponse.json({ error: 'Loan amount must be greater than 0' }, { status: 400 });
+    }
+    if (loan?.loanDuration && Number(loan.loanDuration) <= 0) {
+      return NextResponse.json({ error: 'Loan duration must be at least 1 month' }, { status: 400 });
+    }
+
+    // S2: Smart duplicate detection
+    if (personal.bvn || personal.email || personal.phone) {
+      const existing = await db.user.findFirst({
+        where: {
+          OR: [
+            ...(personal.bvn ? [{ bvn: String(personal.bvn).replace(/\s/g, '') }] : []),
+            ...(personal.email ? [{ email: personal.email.toLowerCase() }] : []),
+            ...(personal.phone ? [{ phone: personal.phone }] : []),
+          ],
+        },
+        select: { id: true, firstName: true, lastName: true, email: true, accountNumber: true },
+      });
+      if (existing) {
+        return NextResponse.json({
+          error: 'Duplicate account detected',
+          duplicate: existing,
+          message: `A customer account already exists for ${existing.firstName} ${existing.lastName} (Account: ${existing.accountNumber || 'N/A'}). Please use the existing account or contact support.`,
+        }, { status: 409 });
+      }
+    }
+
     const {
       channel,
-      personal,
-      business,
-      loan,
       assignment,
     } = body as {
       channel: 'self_onboard' | 'desk_onboard' | 'bm_onboard' | 'field_onboard';
@@ -314,6 +358,16 @@ export async function POST(req: NextRequest) {
     // ----- strip sensitive fields -----
     const { password: _pw, ...safeUser } = user as any;
     const safeBusiness = businessRow;
+
+    // ----- send welcome notification (email + dashboard) -----
+    const customerName = `${user.firstName} ${user.lastName}`.trim();
+    void notifyWelcome(user.id, customerName, user.email || '');
+
+    // ----- send loan submitted notification if loan was created -----
+    if (loanRow) {
+      const { notifyLoanSubmitted } = await import('@/lib/notification-service');
+      void notifyLoanSubmitted(loanRow);
+    }
 
     return NextResponse.json(
       {

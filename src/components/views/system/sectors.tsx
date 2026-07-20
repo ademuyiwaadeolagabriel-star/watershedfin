@@ -12,6 +12,7 @@ import {
 import { Layers, Plus, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { authFetch } from '@/lib/auth-client';
+import { useToast } from '@/hooks/use-toast';
 
 const empty = { name: '', riskScore: 0.5, riskScoreInt: 3, benchmarkedMargin: 18 };
 
@@ -30,6 +31,7 @@ function riskLabel(score: number): string {
 }
 
 export function SectorsView() {
+  const { toast } = useToast();
   const [sectors, setSectors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);

@@ -22,22 +22,27 @@ export function DashboardView() {
   const [recentAudit, setRecentAudit] = useState<any[]>([]);
   const [myQueue, setMyQueue] = useState<any[]>([]);
 
+  const loadDashboard = async () => {
+    try {
+      const url = currentAdmin
+        ? `/api/dashboard/stats?adminId=${currentAdmin.id}&role=${currentAdmin.role}&branchId=${currentAdmin.branchId || ''}`
+        : '/api/dashboard/stats';
+      const res = await authFetch(url);
+      const data = await res.json();
+      if (data.stats) setStats(data.stats);
+      if (data.recentLoans) setRecentLoans(data.recentLoans);
+      if (data.recentAudit) setRecentAudit(data.recentAudit);
+      if (data.myQueue) setMyQueue(data.myQueue);
+    } catch (e) {
+      console.error('Dashboard load error:', e);
+    }
+  };
+
   useEffect(() => {
-    (async () => {
-      try {
-        const url = currentAdmin
-          ? `/api/dashboard/stats?adminId=${currentAdmin.id}&role=${currentAdmin.role}&branchId=${currentAdmin.branchId || ''}`
-          : '/api/dashboard/stats';
-        const res = await fetch(url);
-        const data = await res.json();
-        if (data.stats) setStats(data.stats);
-        if (data.recentLoans) setRecentLoans(data.recentLoans);
-        if (data.recentAudit) setRecentAudit(data.recentAudit);
-        if (data.myQueue) setMyQueue(data.myQueue);
-      } catch (e) {
-        console.error('Dashboard load error:', e);
-      }
-    })();
+    loadDashboard();
+    // R9: Auto-refresh dashboard every 30 seconds for real-time updates
+    const interval = setInterval(loadDashboard, 30000);
+    return () => clearInterval(interval);
   }, [currentAdmin]);
 
   if (!stats) {
@@ -113,6 +118,64 @@ export function DashboardView() {
           color="red"
           onClick={() => setView('loan-npl')}
         />
+      </div>
+
+      {/* R3: Dashboard Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Loan Status Distribution */}
+        <Card className="p-5">
+          <h3 className="text-sm font-bold text-slate-900 mb-4">Loan Status Distribution</h3>
+          {stats && (
+            <div className="space-y-2">
+              {[
+                { label: 'Active/Running', value: stats.activeLoans || 0, color: 'bg-emerald-500' },
+                { label: 'Processing', value: stats.processingLoans || 0, color: 'bg-blue-500' },
+                { label: 'Pending', value: stats.pendingLoans || 0, color: 'bg-amber-500' },
+                { label: 'NPL/Defaulted', value: stats.nplLoans || 0, color: 'bg-red-500' },
+                { label: 'Declined', value: stats.declinedLoans || 0, color: 'bg-slate-400' },
+              ].map((item) => {
+                const total = (stats.activeLoans || 0) + (stats.processingLoans || 0) + (stats.pendingLoans || 0) + (stats.nplLoans || 0) + (stats.declinedLoans || 0);
+                const pct = total > 0 ? (item.value / total) * 100 : 0;
+                return (
+                  <div key={item.label}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-slate-600">{item.label}</span>
+                      <span className="font-semibold text-slate-900">{item.value} ({pct.toFixed(0)}%)</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                      <div className={`h-full ${item.color} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+
+        {/* Portfolio Summary */}
+        <Card className="p-5">
+          <h3 className="text-sm font-bold text-slate-900 mb-4">Portfolio Summary</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-emerald-50 rounded-lg p-4">
+              <p className="text-[10px] uppercase text-emerald-700 font-semibold">Total Disbursed</p>
+              <p className="text-xl font-bold text-emerald-800 mt-1">{fmtNaira(stats?.totalDisbursed ?? 0)}</p>
+            </div>
+            <div className="bg-blue-50 rounded-lg p-4">
+              <p className="text-[10px] uppercase text-blue-700 font-semibold">Total Customers</p>
+              <p className="text-xl font-bold text-blue-800 mt-1">{stats?.customers ?? 0}</p>
+            </div>
+            <div className="bg-purple-50 rounded-lg p-4">
+              <p className="text-[10px] uppercase text-purple-700 font-semibold">Branches</p>
+              <p className="text-xl font-bold text-purple-800 mt-1">{stats?.branches ?? 0}</p>
+            </div>
+            <div className="bg-amber-50 rounded-lg p-4">
+              <p className="text-[10px] uppercase text-amber-700 font-semibold">Avg Loan Size</p>
+              <p className="text-xl font-bold text-amber-800 mt-1">
+                {stats?.activeLoans > 0 ? fmtNaira((stats?.totalDisbursed ?? 0) / stats.activeLoans) : '₦0'}
+              </p>
+            </div>
+          </div>
+        </Card>
       </div>
 
       {/* My queue + workflow snapshot */}
