@@ -15,7 +15,7 @@ import {
   ROLE_LABELS, ROLE_PERMISSIONS, PERMISSION_FLAGS,
 } from '@/lib/constants';
 import {
-  Users, Plus, Pencil, KeyRound, ShieldCheck, Search, Gavel,
+  Users, Plus, Pencil, KeyRound, ShieldCheck, Search, Gavel, UserPlus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { authFetch } from '@/lib/auth-client';
@@ -153,9 +153,14 @@ export function StaffView() {
             </h2>
             <p className="text-xs text-slate-500">Manage admin users, roles, branches, and granular permission flags.</p>
           </div>
-          <Button onClick={() => setCreateOpen(true)} className="bg-emerald-600 hover:bg-emerald-700">
-            <Plus className="h-4 w-4" /> Add Staff
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setCreateOpen(true)} variant="outline">
+              <Plus className="h-4 w-4" /> Quick Add
+            </Button>
+            <Button onClick={() => useAppStore.getState().setView('staff-create')} className="bg-emerald-600 hover:bg-emerald-700">
+              <UserPlus className="h-4 w-4" /> Create Staff with Toggle Matrix
+            </Button>
+          </div>
         </div>
       </Card>
 

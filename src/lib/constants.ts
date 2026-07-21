@@ -9,6 +9,7 @@ export const ROLES = {
   HOC: 'hoc',
   CRO: 'cro',
   LEGAL: 'legal',
+  CS: 'cs',
   BM: 'bm',
   ANALYST: 'analyst',
   CREDIT_ANALYST: 'credit_analyst',
@@ -25,6 +26,7 @@ export const ROLE_LABELS: Record<string, string> = {
   hoc: 'Head of Credit',
   cro: 'Chief Risk Officer',
   legal: 'Legal Officer',
+  cs: 'Customer Service',
   bm: 'Branch Manager',
   analyst: 'Credit Analyst',
   credit_analyst: 'Credit Analyst',
@@ -44,23 +46,41 @@ export const LOAN_STEPS = {
   LO_ASSESSMENT: 'LO_ASSESSMENT',
   QUERY_RESPONSE: 'QUERY_RESPONSE',
   LEGAL_CAC_CHECK: 'LEGAL_CAC_CHECK',
+  // v26 — new onboarding-stage step (CS KYC + Legal CAC search happen before LOAN creation)
+  CS_KYC_REVIEW: 'CS_KYC_REVIEW',
+  LEGAL_CAC_SEARCH: 'LEGAL_CAC_SEARCH',
   BM_QC: 'BM_QC',
+  // v26 — BM vetting renamed alias
+  BM_VETTING: 'BM_VETTING',
   HOC_STRUCTURING: 'HOC_STRUCTURING',
+  HOC_ASSIGNMENT: 'HOC_ASSIGNMENT',
   ANALYST_STRUCTURING: 'ANALYST_STRUCTURING',
+  // v26 — HOC confirmation step (review analyst work)
+  HOC_CONFIRMATION: 'HOC_CONFIRMATION',
   HOC_APPROVAL: 'HOC_APPROVAL',
   CRO_VERIFICATION: 'CRO_VERIFICATION',
   CRO_RISK: 'CRO_RISK',
+  CRO_REVIEW: 'CRO_REVIEW',
   CFO_REVIEW: 'CFO_REVIEW',
   LEGAL_REVIEW: 'LEGAL_REVIEW',
   LEGAL_FINAL_REVIEW: 'LEGAL_FINAL_REVIEW',
+  // v26 — Legal MCC compliance step
+  LEGAL_MCC: 'LEGAL_MCC',
   HOC_AGGREGATION: 'HOC_AGGREGATION',
   MD_APPROVAL: 'MD_APPROVAL',
+  // v26 — MD/MCC approval alias
+  MD_MCC_APPROVAL: 'MD_MCC_APPROVAL',
   INTERNAL_CONTROL_CHECK: 'INTERNAL_CONTROL_CHECK',
+  INTERNAL_CONTROL: 'INTERNAL_CONTROL',
+  // v26 — Compliance review step
+  COMPLIANCE_REVIEW: 'COMPLIANCE_REVIEW',
   HOC_FINALIZATION: 'HOC_FINALIZATION',
   CUSTOMER_ACCEPTANCE: 'CUSTOMER_ACCEPTANCE',
   HOC_SCHEDULING: 'HOC_SCHEDULING',
   CFO_DISBURSEMENT: 'CFO_DISBURSEMENT',
   TREASURY_PAYOUT: 'TREASURY_PAYOUT',
+  // v26 — post-disbursement handoff
+  POST_DISBURSEMENT_HANDOFF: 'POST_DISBURSEMENT_HANDOFF',
 } as const;
 
 // ============================================================================
@@ -73,23 +93,35 @@ export const LOAN_STEP_LABELS: Record<string, string> = {
   // Pre-Qualification Phase
   DRAFT: 'Draft',
   LO_ENTRY: '1. LO Entry',
+  CS_KYC_REVIEW: '2. Customer Service KYC Review',
+  LEGAL_CAC_SEARCH: '3. Legal CAC Name Search',
   LEGAL_KYC_CHECK: '2. Legal KYC/CAC Verification',
-  BM_QC: '3. Branch Manager Vetting',
+  BM_QC: '4. Branch Manager Vetting',
+  BM_VETTING: '4. Branch Manager Vetting',
   QUERY_RESPONSE: 'Query Response',
   CUSTOMER_NEGOTIATION: 'Customer Negotiation',
   // Engine Room (Structuring)
-  HOC_ASSIGNMENT: '4. HOC Assignment',
-  ANALYST_STRUCTURING: '5. Analyst Structuring',
+  HOC_ASSIGNMENT: '5. HOC Assignment',
+  ANALYST_STRUCTURING: '6. Analyst Structuring',
+  HOC_CONFIRMATION: '7. HOC Confirmation',
   HOC_REVIEW: '6. HOC Review',
+  HOC_STRUCTURING: 'HOC Structuring',
   // Governance Layer
-  CRO_RISK: '7. CRO Risk Assessment',
-  CFO_REVIEW: '8. CFO Liquidity Review',
+  CRO_RISK: '8. CRO Risk Assessment',
+  CRO_REVIEW: '8. CRO Review',
+  CFO_REVIEW: '9. CFO Liquidity Review',
+  LEGAL_MCC: '10. Legal MCC Compliance',
   LEGAL_AGGREGATION: '9. Legal Aggregation (Executive Credit Pack)',
-  MD_APPROVAL: '10. MD Executive Approval',
+  MD_APPROVAL: '11. MD/MCC Executive Approval',
+  MD_MCC_APPROVAL: '11. MD/MCC Executive Approval',
   // Closing Phase
+  INTERNAL_CONTROL: '12. Internal Control Documentation',
+  INTERNAL_CONTROL_CHECK: '12. Internal Control Check',
+  COMPLIANCE_REVIEW: '13. Compliance Review',
   CUSTOMER_ACCEPTANCE: '11. Customer Acceptance',
-  HOC_SCHEDULING: '12. HOC Go-Live (Activation)',
-  CFO_DISBURSEMENT: '13. CFO Disbursement',
+  HOC_SCHEDULING: '14. HOC Go-Live (Activation)',
+  CFO_DISBURSEMENT: '15. CFO Disbursement',
+  POST_DISBURSEMENT_HANDOFF: '16. Post-Disbursement Handoff',
   // Post-Disbursement Monitoring
   ACTIVE_MONITORING: 'Active Monitoring',
   REPAYMENT_TRACKING: 'Repayment Tracking',
@@ -944,6 +976,10 @@ export const PERMISSION_FLAGS = [
   'treasuryOnboard', 'treasuryBook', 'treasuryAssets', 'branchManage',
   'auditAccess', 'internalControl', 'compliance', 'reportsGlobal',
   'generalSettings', 'message', 'support',
+  // v26 — Customer Service granular toggles
+  'csKycVerify', 'csPaymentVerify',
+  // v26 — Legal dual role toggles
+  'legalCacSearch', 'legalMcc',
 ] as const;
 
 // Role → implicit permissions
@@ -953,8 +989,9 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
   cfo: ['loanCfoReview', 'loanDisbursement', 'accountingView', 'accountingPost', 'treasuryBook', 'treasuryAssets', 'reportsGlobal'],
   hoc: ['loanStructuring', 'loanFinalization', 'loanPortfolio', 'loanSupervisor'],
   cro: ['loanRisk', 'internalControl', 'reportsGlobal'],
-  legal: ['loanLegal', 'compliance'],
-  bm: ['loanVetting', 'onboarding', 'kycVerify', 'branchManage', 'loanPortfolio'],
+  legal: ['loanLegal', 'compliance', 'legalCacSearch', 'legalMcc'],
+  cs: ['csKycVerify', 'csPaymentVerify', 'kycVerify', 'support', 'message'],
+  bm: ['loanVetting', 'loanOrigination', 'onboarding', 'kycVerify', 'branchManage', 'loanPortfolio'],
   analyst: ['loanAnalyst'],
   credit_analyst: ['loanAnalyst'],
   loan: ['loanOrigination', 'onboarding'],

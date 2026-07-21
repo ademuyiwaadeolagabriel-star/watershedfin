@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { signAuthToken } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
@@ -52,10 +53,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Update last login
+    // Update last login + capture IP/UA
+    const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
+    const userAgent = req.headers.get('user-agent') || undefined;
     await db.admin.update({
       where: { id: admin.id },
-      data: { lastLogin: new Date() },
+      data: { lastLogin: new Date(), lastLoginIp: ip },
     }).catch(() => {});
 
     // A1 FIX: Issue JWT token for API authentication
@@ -64,6 +67,30 @@ export async function POST(req: NextRequest) {
       role: admin.role,
       branchId: admin.branchId,
     });
+
+    // v25 — Track active session for force-logout feature
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000); // 8 hours
+    await db.activeSession.create({
+      data: {
+        adminId: admin.id,
+        tokenHash,
+        ip,
+        userAgent,
+        expiresAt,
+      },
+    }).catch((e) => console.error('ActiveSession create error:', e));
+
+    // Log login history
+    await db.loginHistory.create({
+      data: {
+        adminId: admin.id,
+        guard: 'admin',
+        status: 'success',
+        ipAddress: ip,
+        userAgent,
+      },
+    }).catch(() => {});
 
     const { password: _pw, ...safeAdmin } = admin;
     return NextResponse.json({ admin: safeAdmin, token });

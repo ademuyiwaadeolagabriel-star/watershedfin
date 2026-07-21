@@ -29,10 +29,13 @@ export function DashboardView() {
         : '/api/dashboard/stats';
       const res = await authFetch(url);
       const data = await res.json();
-      if (data.stats) setStats(data.stats);
-      if (data.recentLoans) setRecentLoans(data.recentLoans);
-      if (data.recentAudit) setRecentAudit(data.recentAudit);
-      if (data.myQueue) setMyQueue(data.myQueue);
+      // Defer setState to avoid synchronous state update in effect
+      setTimeout(() => {
+        if (data.stats) setStats(data.stats);
+        if (data.recentLoans) setRecentLoans(data.recentLoans);
+        if (data.recentAudit) setRecentAudit(data.recentAudit);
+        if (data.myQueue) setMyQueue(data.myQueue);
+      }, 0);
     } catch (e) {
       console.error('Dashboard load error:', e);
     }

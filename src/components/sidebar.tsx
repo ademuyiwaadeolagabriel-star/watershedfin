@@ -11,7 +11,8 @@ import {
   BarChart3, Bell, Search, Menu, X, Banknote, Receipt, FileCheck,
   GitBranch, Lock, Activity, ScrollText, Coins, ArrowRightLeft, Palette,
   Newspaper, CheckCircle2,
-  Server, ToggleRight, Power, Clock,
+  Server, ToggleRight, Power, Clock, FormInput, PieChart, DollarSign,
+  Headphones, Briefcase, Search as SearchIcon,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -42,6 +43,7 @@ const NAV_GROUPS: NavGroup[] = [
         permission: ['onboarding', 'loanOrigination'],
       },
       { key: 'kyc', label: 'KYC Verification', icon: ShieldCheck, permission: 'kycVerify' },
+      { key: 'kyc-field-manager', label: 'KYC Field Manager', icon: FormInput, permission: 'kycVerify' },
       { key: 'customers', label: 'Client Database', icon: Users },
     ],
   },
@@ -139,12 +141,42 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'System Administration',
     icon: Settings,
     items: [
+      { key: 'staff-performance', label: 'Performance Dashboard', icon: PieChart, permission: 'generalSettings' },
+      { key: 'staff-create', label: 'Create Staff', icon: UserPlus, permission: 'generalSettings' },
       { key: 'branches', label: 'Branch Network', icon: Building2, permission: 'branchManage' },
       { key: 'staff', label: 'Staff & Access Control', icon: Users, permission: 'generalSettings' },
       { key: 'loan-products', label: 'Loan Products', icon: FileText, permission: 'generalSettings' },
       { key: 'sectors', label: 'Business Sectors', icon: TrendingUp, permission: 'generalSettings' },
       { key: 'branding-settings', label: 'Branding & Identity', icon: Palette },
+      { key: 'change-password', label: 'Change Password', icon: Lock },
       { key: 'settings', label: 'Global Config', icon: Settings, permission: 'generalSettings' },
+    ],
+  },
+  {
+    id: 'cs',
+    label: 'Customer Service',
+    icon: Headphones,
+    items: [
+      { key: 'cs-kyc-queue', label: 'KYC Verification Queue', icon: ShieldCheck, permission: 'csKycVerify' },
+      { key: 'kyc', label: 'Legacy KYC Queue', icon: ShieldCheck, permission: 'kycVerify' },
+      { key: 'cs-payment-verification', label: 'Payment Verification', icon: DollarSign, permission: 'csPaymentVerify' },
+    ],
+  },
+  {
+    id: 'legal',
+    label: 'Legal',
+    icon: Scale,
+    items: [
+      { key: 'legal-cac-search', label: 'CAC Name Search', icon: SearchIcon, permission: 'legalCacSearch' },
+      { key: 'legal-mcc', label: 'MCC Compliance', icon: FileCheck, permission: 'legalMcc' },
+    ],
+  },
+  {
+    id: 'portfolio',
+    label: 'My Portfolio',
+    icon: Briefcase,
+    items: [
+      { key: 'my-portfolio', label: 'Monitored Loans', icon: Wallet, permission: 'loanPortfolio' },
     ],
   },
   {
@@ -170,6 +202,7 @@ const NAV_GROUPS: NavGroup[] = [
       { key: 'superadmin-dashboard', label: 'Platform Dashboard', icon: LayoutDashboard },
       { key: 'superadmin-system-health', label: 'System Health', icon: Server },
       { key: 'superadmin-feature-flags', label: 'Feature Flags', icon: ToggleRight },
+      { key: 'fee-manager', label: 'Fee Manager', icon: DollarSign },
       { key: 'superadmin-maintenance', label: 'Maintenance Mode', icon: Power },
       { key: 'superadmin-sessions', label: 'Active Sessions', icon: Lock },
       { key: 'superadmin-audit-retention', label: 'Audit Retention', icon: Clock },
@@ -194,6 +227,8 @@ export function Sidebar() {
     system: true,
     communication: true,
     superadmin: true,
+    cs: true,
+    legal: true,
   });
 
   useEffect(() => {

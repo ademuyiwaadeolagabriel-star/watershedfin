@@ -325,12 +325,14 @@ export function SmsBroadcastView() {
 
   // Fetch real recipient count from database when filter changes
   useEffect(() => {
-    setLoadingCount(true);
+    let cancelled = false;
+    const id1 = setTimeout(() => !cancelled && setLoadingCount(true), 0);
     authFetch(`/api/customers?count=true&filter=${filter}`)
       .then(res => res.ok ? res.json() : { count: 0 })
-      .then(data => setRecipientCount(data.count || 0))
-      .catch(() => setRecipientCount(0))
-      .finally(() => setLoadingCount(false));
+      .then(data => { if (!cancelled) setRecipientCount(data.count || 0); })
+      .catch(() => { if (!cancelled) setRecipientCount(0); })
+      .finally(() => { if (!cancelled) setLoadingCount(false); });
+    return () => { cancelled = true; clearTimeout(id1); };
   }, [filter]);
 
   const filters = [

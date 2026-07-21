@@ -52,7 +52,6 @@ import { TillManagement } from '@/components/views/accounting/till-management';
 import { AccountsPayable } from '@/components/views/accounting/accounts-payable';
 import { AccountsReceivable } from '@/components/views/accounting/accounts-receivable';
 import { ReportingHub } from '@/components/views/accounting/reporting-hub';
-import { PlaceholderView } from '@/components/views/shared/placeholder';
 import { CamView } from '@/components/views/cam';
 import { CustomerDashboard } from '@/components/views/customer/customer-dashboard';
 import { CustomerLoans } from '@/components/views/customer/customer-loans';
@@ -69,6 +68,8 @@ import { CustomerChat } from '@/components/views/customer/customer-chat';
 import { CustomerLoanProducts, CustomerOffers, CustomerBankAccounts, CustomerSecurity } from '@/components/views/customer/customer-account-views';
 import { CustomerDocuments } from '@/components/views/customer/customer-documents';
 import { CustomerKycView } from '@/components/views/customer/customer-kyc';
+import { CustomerVerifyEmailView } from '@/components/views/customer/customer-verify-email';
+import { CustomerVerifyPhoneView } from '@/components/views/customer/customer-verify-phone';
 import { KycQueueView } from '@/components/views/admin/kyc-queue';
 import { ClientDatabaseView } from '@/components/views/admin/client-database';
 import { StaffDetailView } from '@/components/views/admin/staff-detail';
@@ -85,6 +86,17 @@ import { MaintenanceModeView } from '@/components/views/superadmin/maintenance-m
 import { ActiveSessionsView } from '@/components/views/superadmin/active-sessions';
 import { SystemHealthView } from '@/components/views/superadmin/system-health';
 import { AuditRetentionView } from '@/components/views/superadmin/audit-retention';
+import { StaffPerformanceView } from '@/components/views/admin/staff-performance';
+import { KycFieldManagerView } from '@/components/views/admin/kyc-field-manager';
+import { DynamicKycView } from '@/components/views/customer/customer-kyc-dynamic';
+import { FeeManagerView } from '@/components/views/admin/fee-manager';
+import { StaffCreateView } from '@/components/views/admin/staff-create';
+import { ChangePasswordView } from '@/components/views/admin/change-password';
+import { ForgotPasswordView } from '@/components/views/forgot-password';
+import { CsKycQueueView } from '@/components/views/cs/cs-kyc-queue';
+import { CsPaymentVerificationView } from '@/components/views/cs/cs-payment-verification';
+import { LegalCacSearchView } from '@/components/views/legal/legal-cac-search';
+import { LegalMccView } from '@/components/views/legal/legal-mcc';
 import { useEffect, useState } from 'react';
 
 export default function Home() {
@@ -157,6 +169,8 @@ export default function Home() {
       case 'super-admin-login':
         // Super-admin-only login (separate, dark/premium)
         return <SuperAdminLoginView />;
+      case 'forgot-password':
+        return <ForgotPasswordView />;
       default:
         return <PublicHome />;
     }
@@ -196,6 +210,12 @@ export default function Home() {
         return <CustomerDocuments />;
       case 'customer-kyc':
         return <CustomerKycView />;
+      case 'customer-kyc-dynamic':
+        return <DynamicKycView />;
+      case 'customer-verify-email':
+        return <CustomerVerifyEmailView />;
+      case 'customer-verify-phone':
+        return <CustomerVerifyPhoneView />;
       case 'customer-bank-accounts':
         return <CustomerBankAccounts />;
       case 'customer-security':
@@ -405,6 +425,30 @@ export default function Home() {
         return <SystemHealthView />;
       case 'superadmin-audit-retention':
         return <AuditRetentionView />;
+
+      // v25 — Performance + Dynamic KYC Field Manager
+      case 'staff-performance':
+        return <StaffPerformanceView />;
+      case 'kyc-field-manager':
+        return <KycFieldManagerView />;
+
+      // v26 — Fee Manager, Staff Create, Change Password, CS, Legal
+      case 'fee-manager':
+        return <FeeManagerView />;
+      case 'staff-create':
+        return <StaffCreateView />;
+      case 'change-password':
+        return <ChangePasswordView />;
+      case 'cs-kyc-queue':
+        return <CsKycQueueView />;
+      case 'cs-payment-verification':
+        return <CsPaymentVerificationView />;
+      case 'legal-cac-search':
+        return <LegalCacSearchView />;
+      case 'legal-mcc':
+        return <LegalMccView />;
+      case 'my-portfolio':
+        return <LoanListView fixedStatus="running" title="My Portfolio (Monitored Loans)" />;
 
       // Public marketing site (also reachable from the admin context via direct nav)
       case 'public-home':

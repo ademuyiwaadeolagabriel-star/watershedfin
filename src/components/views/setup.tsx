@@ -27,7 +27,9 @@ export function SetupView() {
     if (/[A-Z]/.test(password)) s++;
     if (/[0-9]/.test(password)) s++;
     if (/[^A-Za-z0-9]/.test(password)) s++;
-    setStrength(s);
+    // Defer to avoid synchronous setState in effect
+    const id = setTimeout(() => setStrength(s), 0);
+    return () => clearTimeout(id);
   }, [password]);
 
   const handleSetup = async (e: React.FormEvent) => {

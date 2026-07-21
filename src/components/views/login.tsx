@@ -191,6 +191,16 @@ export function LoginView() {
             </button>
           </form>
 
+          {/* Forgot password link */}
+          <div className="mt-3 text-right">
+            <button
+              onClick={() => setView('forgot-password')}
+              className="text-xs text-emerald-700 hover:text-emerald-800 font-medium"
+            >
+              Forgot password?
+            </button>
+          </div>
+
           {/* Security notice */}
           <div className="mt-6 rounded-md bg-slate-100 border border-slate-200 px-4 py-3">
             <p className="text-[11px] text-slate-600 flex items-start gap-2">

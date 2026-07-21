@@ -124,50 +124,41 @@ async function main() {
     }
   });
 
-  // ── 4. Admins / Staff ──
-  await tryStep('Staff (13 roles)', async () => {
-    const pw = bcrypt.hashSync('password123', 10);
-    const lagos = await db.branch.findUnique({ where: { code: 'LAG-01' } });
-    const abuja = await db.branch.findUnique({ where: { code: 'ABJ-01' } });
-
-    const staff = [
-      { firstName: 'Super', lastName: 'Admin', username: 'super.admin', email: 'super@watershedcapital.com', role: 'super', roleType: 'super', branchId: null },
-      { firstName: 'Olumuyiwa', lastName: 'Olanrewaju', username: 'md', email: 'md@watershedcapital.com', role: 'md', roleType: 'md', branchId: null, phone: '+234 803 100 0001' },
-      { firstName: 'Chidi', lastName: 'Okoro', username: 'cfo', email: 'cfo@watershedcapital.com', role: 'cfo', roleType: 'cfo', branchId: null, phone: '+234 803 100 0002' },
-      { firstName: 'Aisha', lastName: 'Bello', username: 'hoc', email: 'hoc@watershedcapital.com', role: 'hoc', roleType: 'hoc', branchId: null, phone: '+234 803 100 0003' },
-      { firstName: 'Emeka', lastName: 'Nwosu', username: 'cro', email: 'cro@watershedcapital.com', role: 'cro', roleType: 'cro', branchId: null, phone: '+234 803 100 0004' },
-      { firstName: 'Ebere', lastName: 'Obi-Akinwole', username: 'legal', email: 'legal@watershedcapital.com', role: 'legal', roleType: 'legal', branchId: null, phone: '+234 803 100 0005' },
-      { firstName: 'Tunde', lastName: 'Adeyemi', username: 'bm.lagos', email: 'bm.lagos@watershedcapital.com', role: 'bm', roleType: 'bm', branchId: lagos?.id, phone: '+234 803 100 0006' },
-      { firstName: 'Fatima', lastName: 'Yusuf', username: 'bm.abuja', email: 'bm.abuja@watershedcapital.com', role: 'bm', roleType: 'bm', branchId: abuja?.id, phone: '+234 803 100 0007' },
-      { firstName: 'Grace', lastName: 'Eze', username: 'analyst', email: 'analyst@watershedcapital.com', role: 'analyst', roleType: 'analyst', branchId: null, phone: '+234 803 100 0008' },
-      { firstName: 'Daniel', lastName: 'Okafor', username: 'lo.lagos1', email: 'lo.lagos1@watershedcapital.com', role: 'loan', roleType: 'loan', branchId: lagos?.id, phone: '+234 803 100 0009' },
-      { firstName: 'Sarah', lastName: 'Ibrahim', username: 'lo.lagos2', email: 'lo.lagos2@watershedcapital.com', role: 'loan', roleType: 'loan', branchId: lagos?.id, phone: '+234 803 100 0010' },
-      { firstName: 'Mary', lastName: 'Okon', username: 'frontdesk', email: 'frontdesk@watershedcapital.com', role: 'frontdesk', roleType: 'frontdesk', branchId: lagos?.id, phone: '+234 803 100 0011' },
-      { firstName: 'Kunle', lastName: 'Adeyinka', username: 'treasury', email: 'treasury@watershedcapital.com', role: 'treasury', roleType: 'treasury', branchId: null, phone: '+234 803 100 0012' },
-    ];
-
-    for (const s of staff) {
-      const perms: Record<string, boolean> = {};
-      const rolePerms = ROLE_PERMISSIONS[s.role] || [];
-      for (const p of PERMISSION_FLAGS) {
-        perms[p] = rolePerms.includes('*') || rolePerms.includes(p);
-      }
-      await db.admin.upsert({
-        where: { username: s.username },
-        update: { ...s, password: pw, status: 1, ...perms },
-        create: { ...s, password: pw, status: 1, ...perms },
-      });
+  // ── 4. Super Admin ONLY (no demo staff accounts) ──
+  // v26: Only the super admin is seeded. All other staff accounts must be
+  // created manually by the super admin via the admin panel.
+  // The default password is "Watershed@2026" — change it immediately after first login.
+  await tryStep('Super Admin (sole seeded account)', async () => {
+    const pw = bcrypt.hashSync('Watershed@2026', 10);
+    const superPerms: Record<string, boolean> = {};
+    for (const p of PERMISSION_FLAGS) {
+      superPerms[p] = true; // super gets ALL flags
     }
-
-    // Link branch managers
-    if (lagos) {
-      const bmLagos = await db.admin.findUnique({ where: { username: 'bm.lagos' } });
-      if (bmLagos) await db.branch.update({ where: { id: lagos.id }, data: { managerId: bmLagos.id } });
-    }
-    if (abuja) {
-      const bmAbuja = await db.admin.findUnique({ where: { username: 'bm.abuja' } });
-      if (bmAbuja) await db.branch.update({ where: { id: abuja.id }, data: { managerId: bmAbuja.id } });
-    }
+    await db.admin.upsert({
+      where: { username: 'superadmin' },
+      update: {
+        firstName: 'Super',
+        lastName: 'Admin',
+        email: 'superadmin@watershedcapital.com',
+        password: pw,
+        role: 'super',
+        roleType: 'super',
+        status: 1,
+        ...superPerms,
+      },
+      create: {
+        firstName: 'Super',
+        lastName: 'Admin',
+        username: 'superadmin',
+        email: 'superadmin@watershedcapital.com',
+        password: pw,
+        role: 'super',
+        roleType: 'super',
+        status: 1,
+        mustChangePassword: false,
+        ...superPerms,
+      },
+    });
   });
 
   // ── 5. Loan Plans / Products ──
@@ -182,7 +173,7 @@ async function main() {
       await db.loanPlan.upsert({
         where: { slug: p.slug },
         update: { ...p, status: 1 },
-        create: { ...p, status: 1, repaymentPlan: 'REDUCING' as any },
+        create: { ...p, status: 1 },
       });
     }
   });
@@ -450,8 +441,13 @@ async function main() {
   console.log(`  Customers:         ${userCount} (0 = clean)`);
   console.log(`  Loans:             ${loanCount} (0 = clean)`);
   console.log('');
-  console.log('  Staff Login: username + password123');
-  console.log('  Super Admin: super.admin / password123');
+  console.log('  ─────────────────────────────────────────────');
+  console.log('  SUPER ADMIN LOGIN (sole seeded account):');
+  console.log('    Username: superadmin');
+  console.log('    Password: Watershed@2026');
+  console.log('  ─────────────────────────────────────────────');
+  console.log('  ⚠️  Change this password immediately after first login.');
+  console.log('  ⚠️  All other staff accounts must be created via admin panel.');
   console.log('═══════════════════════════════════════════════\n');
 }
 

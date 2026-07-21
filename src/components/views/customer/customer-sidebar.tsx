@@ -5,7 +5,7 @@ import { useBranding } from '@/lib/branding';
 import { useEffect, useState } from 'react';
 import {
   LogOut, Home, FileText, ArrowRight, Receipt, User, LifeBuoy,
-  Calculator, CreditCard, FileCheck, Wallet, TrendingDown, Gift, Shield,
+  Calculator, CreditCard, FileCheck, Wallet, TrendingDown, Gift, Shield, ShieldCheck,
   Building2, Bell, ChevronRight, Sparkles, BookOpen, AlertTriangle,
   CheckCircle2, Clock, HelpCircle, Settings as SettingsIcon, Download,
   MessageCircle, MessagesSquare,
@@ -111,7 +111,8 @@ export function CustomerSidebar() {
       id: 'account',
       label: 'My Account',
       items: [
-        { key: 'customer-profile', label: 'Profile & KYC', icon: User, badge: stats?.kycStatus !== 'APPROVED' ? '!' : undefined, badgeColor: 'amber' },
+        { key: 'customer-kyc-dynamic', label: 'KYC Verification', icon: ShieldCheck, badge: stats?.kycStatus !== 'APPROVED' ? '!' : undefined, badgeColor: 'amber' },
+        { key: 'customer-profile', label: 'Profile', icon: User },
         { key: 'customer-documents', label: 'Documents', icon: Download },
         { key: 'customer-bank-accounts', label: 'Bank Accounts', icon: Building2 },
         { key: 'customer-security', label: 'Security', icon: Shield },

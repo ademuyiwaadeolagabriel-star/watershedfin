@@ -119,7 +119,21 @@ export type ViewKey =
   | 'superadmin-maintenance'
   | 'superadmin-sessions'
   | 'superadmin-system-health'
-  | 'superadmin-audit-retention';
+  | 'superadmin-audit-retention'
+  // v25 — Performance, Dynamic KYC
+  | 'staff-performance'
+  | 'kyc-field-manager'
+  | 'customer-kyc-dynamic'
+  // v26 — Fee Manager, Staff Create, Change Password, Forgot Password, Legal, CS
+  | 'fee-manager'
+  | 'staff-create'
+  | 'change-password'
+  | 'forgot-password'
+  | 'legal-cac-search'
+  | 'legal-mcc'
+  | 'cs-kyc-queue'
+  | 'cs-payment-verification'
+  | 'my-portfolio';
 
 export type Portal = 'public' | 'customer' | 'admin';
 
