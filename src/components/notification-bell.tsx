@@ -78,7 +78,7 @@ export function NotificationBell({ userId, adminId }: NotificationBellProps) {
 
   const fetchList = useCallback(async () => {
     if (!recipient.userId && !recipient.adminId) return;
-    setLoading(true);
+    // Don't set loading=true on poll — only on initial load
     try {
       const params = new URLSearchParams();
       if (recipient.userId) params.set('userId', recipient.userId);
@@ -91,26 +91,34 @@ export function NotificationBell({ userId, adminId }: NotificationBellProps) {
       setUnreadCount(data.unreadCount || 0);
     } catch {
       /* ignore — bell is non-critical */
-    } finally {
-      setLoading(false);
     }
   }, [recipient.userId, recipient.adminId]);
 
-  // Initial fetch + when recipient changes
-  useEffect(() => {
-    void fetchList();
+  // Initial fetch (shows loading spinner)
+  const fetchListWithLoading = useCallback(async () => {
+    setLoading(true);
+    await fetchList();
+    setLoading(false);
   }, [fetchList]);
 
+  // Initial fetch + when recipient changes
+  useEffect(() => {
+    let cancelled = false;
+    const id = setTimeout(() => {
+      if (!cancelled) void fetchListWithLoading();
+    }, 0);
+    return () => { cancelled = true; clearTimeout(id); };
+  }, [fetchListWithLoading]);
+
   // Live updates via HTTP polling (Vercel-compatible — no socket.io server needed)
-  // Polls every 30 seconds for new notifications. This replaces the previous
-  // socket.io implementation which caused infinite reconnection loops on Vercel
-  // (Vercel doesn't support persistent WebSocket connections without a separate service).
+  // Polls every 60 seconds for new notifications. Uses fetchList (no loading spinner)
+  // to avoid re-rendering the bell every poll.
   useEffect(() => {
     if (!recipient.userId && !recipient.adminId) return;
 
     const pollInterval = setInterval(() => {
       void fetchList();
-    }, 30000); // 30 seconds
+    }, 60000); // 60 seconds (was 30s — reduced to minimize re-renders)
 
     return () => clearInterval(pollInterval);
   }, [recipient.userId, recipient.adminId, fetchList]);

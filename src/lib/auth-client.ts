@@ -49,17 +49,16 @@ export function withAuth(options: RequestInit = {}): RequestInit {
 export async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const response = await fetch(url, withAuth(options));
 
-  // G3: If 401, clear token and redirect to login
+  // G3: If 401, clear token but DO NOT auto-redirect (causes refresh loops)
+  // Let the calling component decide how to handle auth errors.
   if (response.status === 401) {
-    clearAuthToken();
-    clearCustomerAuthToken();
-    if (typeof window !== 'undefined') {
-      const currentPath = window.location.pathname;
-      if (!currentPath.includes('login') && !currentPath.includes('setup')) {
-        setTimeout(() => {
-          window.location.href = '/';
-        }, 100);
-      }
+    // Only clear tokens if this is a login/session endpoint, not a regular API call
+    // Regular API 401s (e.g. permission denied for superadmin endpoints) should NOT
+    // log the user out — they just mean the user doesn't have access to that resource.
+    const isAuthEndpoint = url.includes('/api/auth/') || url.includes('/api/customer/login') || url.includes('/api/admin/me');
+    if (isAuthEndpoint) {
+      clearAuthToken();
+      clearCustomerAuthToken();
     }
   }
 

@@ -215,7 +215,12 @@ const NAV_GROUPS: NavGroup[] = [
 import { UserCheck } from 'lucide-react';
 
 export function Sidebar() {
-  const { currentAdmin, currentView, setView, sidebarOpen, setSidebar } = useAppStore();
+  // Use selectors to prevent unnecessary re-renders
+  const currentAdmin = useAppStore((s) => s.currentAdmin);
+  const currentView = useAppStore((s) => s.currentView);
+  const setView = useAppStore((s) => s.setView);
+  const sidebarOpen = useAppStore((s) => s.sidebarOpen);
+  const setSidebar = useAppStore((s) => s.setSidebar);
   const { config, load: loadBranding } = useBranding();
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     core: true,

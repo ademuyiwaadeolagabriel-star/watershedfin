@@ -54,7 +54,8 @@ export async function POST(req: NextRequest) {
       ? String(branchId)
       : null;
 
-    // Build create data (use type assertion to allow v26 fields that may not be in Prisma client yet)
+    // Build create data — use type any to allow v26 fields that may not be in Prisma client yet
+    // (if prisma generate hasn't been run after the v26 schema update)
     const createData: any = {
       firstName: String(firstName).trim(),
       lastName: String(lastName).trim(),
@@ -66,23 +67,44 @@ export async function POST(req: NextRequest) {
       roleType: String(role),
       branchId: cleanBranchId,
       status: 1,
-      passwordChangedAt: new Date(),
       ...perms,
     };
 
-    // Add mustChangePassword if the field exists in the schema (v26+)
+    // Add v26 fields with try/catch — if prisma generate hasn't been run,
+    // these fields don't exist in the Prisma client and the create will fail.
+    // We add them optimistically; if the create fails, the catch block retries without them.
     try {
       createData.mustChangePassword = false;
+      createData.passwordChangedAt = new Date();
     } catch {
-      // Field doesn't exist — skip
+      // ignore
     }
 
-    const admin = await db.admin.create({
-      data: createData,
-      select: {
-        id: true, firstName: true, lastName: true, username: true, email: true, role: true, branchId: true,
-      },
-    });
+    let admin;
+    try {
+      admin = await db.admin.create({
+        data: createData,
+        select: {
+          id: true, firstName: true, lastName: true, username: true, email: true, role: true, branchId: true,
+        },
+      });
+    } catch (createErr: any) {
+      // If the error is about unknown fields (mustChangePassword, passwordChangedAt),
+      // retry without those fields
+      if (createErr.message && (createErr.message.includes('mustChangePassword') || createErr.message.includes('passwordChangedAt'))) {
+        console.warn('[STAFF CREATE] Retrying without v26 fields (run prisma generate + db push)');
+        delete createData.mustChangePassword;
+        delete createData.passwordChangedAt;
+        admin = await db.admin.create({
+          data: createData,
+          select: {
+            id: true, firstName: true, lastName: true, username: true, email: true, role: true, branchId: true,
+          },
+        });
+      } else {
+        throw createErr;
+      }
+    }
 
     // Audit log (non-blocking)
     try {

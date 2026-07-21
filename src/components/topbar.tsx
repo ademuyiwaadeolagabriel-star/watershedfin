@@ -80,8 +80,13 @@ const VIEW_TITLES: Record<string, string> = {
 };
 
 export function Topbar() {
-  const { currentView, toggleSidebar, theme, toggleTheme, currentAdmin, setView } =
-    useAppStore();
+  // Use selectors to prevent unnecessary re-renders
+  const currentView = useAppStore((s) => s.currentView);
+  const toggleSidebar = useAppStore((s) => s.toggleSidebar);
+  const theme = useAppStore((s) => s.theme);
+  const toggleTheme = useAppStore((s) => s.toggleTheme);
+  const currentAdmin = useAppStore((s) => s.currentAdmin);
+  const setView = useAppStore((s) => s.setView);
   const title = VIEW_TITLES[currentView] || 'Dashboard';
   const [search, setSearch] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
