@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '@/lib/store';
 import { useBranding } from '@/lib/branding';
+import { setAuthToken } from '@/lib/auth-client';
 import {
   ShieldCheck, Lock, ArrowRight, ArrowLeft, Eye, EyeOff, KeyRound,
   Fingerprint, AlertTriangle, ShieldAlert, User as UserIcon,
@@ -55,6 +56,11 @@ export function SuperAdminLoginView() {
         );
         setLoading(false);
         return;
+      }
+
+      // CRITICAL: Save the JWT token to localStorage so authFetch can use it
+      if (data.token) {
+        setAuthToken(data.token);
       }
 
       loginAs(data.admin.id, data.admin);

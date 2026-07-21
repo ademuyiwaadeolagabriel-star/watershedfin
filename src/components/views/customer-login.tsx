@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/lib/store';
+import { setCustomerAuthToken } from '@/lib/auth-client';
 import {
   Landmark,
   ArrowRight,
@@ -54,6 +55,10 @@ export function CustomerLoginView() {
         setError(data.error || 'Login failed');
         setLoading(false);
         return;
+      }
+      // CRITICAL: Save the JWT token to localStorage so authFetch can use it
+      if (data.token) {
+        setCustomerAuthToken(data.token);
       }
       loginAsCustomer(data.user.id, data.user);
       setView('customer-dashboard');
