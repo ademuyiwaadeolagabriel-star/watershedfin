@@ -66,7 +66,14 @@ export function StaffDetailView() {
   const [targetForm, setTargetForm] = useState({ disbursementTarget: 0, loanCountTarget: 0, month: '' });
   const [savingTarget, setSavingTarget] = useState(false);
 
-  const canManageTargets = ['super', 'md', 'hoc'].includes(currentAdmin?.role || '');
+  const canManageTargets =
+    currentAdmin?.role === 'super' ||
+    currentAdmin?.role === 'md' ||
+    currentAdmin?.role === 'hoc' ||
+    (currentAdmin?.role === 'bm' && (
+      staffId === currentAdmin?.id || // BM setting own target
+      admin?.branchId === currentAdmin?.branchId // BM setting target for staff in their branch
+    ));
 
   const loadTarget = async () => {
     if (!staffId) return;

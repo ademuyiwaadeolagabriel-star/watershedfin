@@ -91,13 +91,40 @@ export async function POST(
     const authPayload = getAuthFromRequest(req);
     if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
 
-    // Only HOC, MD, or Super can set targets
-    const allowedRoles = ['super', 'md', 'hoc'];
-    if (!allowedRoles.includes(authPayload.role)) {
-      return NextResponse.json({ error: 'Only HOC, MD, or Super Admin can set targets' }, { status: 403 });
-    }
-
     const { id: staffId } = await params;
+
+    // v29 — BM can set target for themselves AND for LOs in their branch
+    // Super, MD, HOC can set for anyone
+    if (authPayload.role === 'bm') {
+      // BM setting their own target → OK
+      if (staffId !== authPayload.id) {
+        // BM setting target for someone else — must be an LO in their branch
+        const targetStaff = await db.admin.findUnique({
+          where: { id: staffId },
+          select: { id: true, role: true, branchId: true },
+        });
+        if (!targetStaff) {
+          return NextResponse.json({ error: 'Staff not found' }, { status: 404 });
+        }
+        if (targetStaff.role !== 'loan') {
+          return NextResponse.json({ error: 'BM can only set targets for Loan Officers in their branch' }, { status: 403 });
+        }
+        // Check the LO is in the BM's branch (or the BM has no branch — super edge case)
+        const bm = await db.admin.findUnique({
+          where: { id: authPayload.id },
+          select: { branchId: true },
+        });
+        if (bm?.branchId && targetStaff.branchId !== bm.branchId) {
+          return NextResponse.json({ error: 'BM can only set targets for LOs in their own branch' }, { status: 403 });
+        }
+      }
+    } else {
+      // Super, MD, HOC can set for anyone
+      const allowedRoles = ['super', 'md', 'hoc'];
+      if (!allowedRoles.includes(authPayload.role)) {
+        return NextResponse.json({ error: 'Only HOC, MD, Super Admin, or BM (for own branch LOs) can set targets' }, { status: 403 });
+      }
+    }
     const body = await req.json();
     const { disbursementTarget, loanCountTarget, month } = body;
 

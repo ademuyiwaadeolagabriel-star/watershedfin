@@ -97,6 +97,7 @@ import { CsKycQueueView } from '@/components/views/cs/cs-kyc-queue';
 import { CsPaymentVerificationView } from '@/components/views/cs/cs-payment-verification';
 import { LegalCacSearchView } from '@/components/views/legal/legal-cac-search';
 import { LegalMccView } from '@/components/views/legal/legal-mcc';
+import { BranchTargetView } from '@/components/views/system/branch-targets';
 import { useEffect, useState } from 'react';
 
 export default function Home() {
@@ -449,6 +450,8 @@ export default function Home() {
         return <LegalMccView />;
       case 'my-portfolio':
         return <LoanListView fixedStatus="running" title="My Portfolio (Monitored Loans)" />;
+      case 'branch-targets':
+        return <BranchTargetView />;
 
       // Public marketing site (also reachable from the admin context via direct nav)
       case 'public-home':

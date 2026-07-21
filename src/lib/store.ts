@@ -133,7 +133,9 @@ export type ViewKey =
   | 'legal-mcc'
   | 'cs-kyc-queue'
   | 'cs-payment-verification'
-  | 'my-portfolio';
+  | 'my-portfolio'
+  // v29 — Branch targets
+  | 'branch-targets';
 
 export type Portal = 'public' | 'customer' | 'admin';
 

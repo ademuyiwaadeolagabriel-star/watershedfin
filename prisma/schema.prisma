@@ -418,6 +418,13 @@ model Branch {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  // v29 — Branch-level monthly targets (set by Super/MD, BM then distributes to LOs)
+  monthlyDisbursementTarget Float?
+  monthlyLoanCountTarget   Int?
+  targetMonth             String?
+  targetSetAt             DateTime?
+  targetSetBy             String?
+
   staff           Admin[]           @relation("BranchStaff")
   customers       User[]            @relation("BranchCustomers")
   loans           LoanApplicants[]

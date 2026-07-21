@@ -12,7 +12,7 @@ import {
   GitBranch, Lock, Activity, ScrollText, Coins, ArrowRightLeft, Palette,
   Newspaper, CheckCircle2,
   Server, ToggleRight, Power, Clock, FormInput, PieChart, DollarSign,
-  Headphones, Briefcase, Search as SearchIcon,
+  Headphones, Briefcase, Search as SearchIcon, Target,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -142,6 +142,7 @@ const NAV_GROUPS: NavGroup[] = [
     icon: Settings,
     items: [
       { key: 'staff-performance', label: 'Performance Dashboard', icon: PieChart, permission: 'generalSettings' },
+      { key: 'branch-targets', label: 'Branch Targets', icon: Target },
       { key: 'staff-create', label: 'Create Staff', icon: UserPlus, permission: 'generalSettings' },
       { key: 'branches', label: 'Branch Network', icon: Building2, permission: 'branchManage' },
       { key: 'staff', label: 'Staff & Access Control', icon: Users, permission: 'generalSettings' },

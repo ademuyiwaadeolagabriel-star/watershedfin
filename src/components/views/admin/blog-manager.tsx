@@ -672,7 +672,7 @@ export function BlogManagerView() {
                     <SelectValue placeholder="Uncategorised" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Uncategorised</SelectItem>
+                    <SelectItem value="uncategorised">Uncategorised</SelectItem>
                     {categories.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
                         {c.name}

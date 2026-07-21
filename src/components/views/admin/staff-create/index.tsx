@@ -191,10 +191,13 @@ export function StaffCreateView() {
           </div>
           <div>
             <Label className="text-xs">Branch</Label>
-            <Select value={form.branchId} onValueChange={(v) => setForm({ ...form, branchId: v })}>
+            <Select
+              value={form.branchId || 'none'}
+              onValueChange={(v) => setForm({ ...form, branchId: v === 'none' ? '' : v })}
+            >
               <SelectTrigger className="mt-1"><SelectValue placeholder="HQ / Unassigned" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">HQ / Unassigned</SelectItem>
+                <SelectItem value="none">HQ / Unassigned</SelectItem>
                 {branches.map((b) => (
                   <SelectItem key={b.id} value={b.id}>{b.name} ({b.code})</SelectItem>
                 ))}
