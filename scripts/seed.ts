@@ -128,25 +128,33 @@ async function main() {
   // v26: Only the super admin is seeded. All other staff accounts must be
   // created manually by the super admin via the admin panel.
   // The default password is "Watershed@2026" — change it immediately after first login.
+  await tryStep('Clean up old demo staff accounts', async () => {
+    // Delete ALL old demo accounts from v23/v24 (anything that's not 'superadmin')
+    const oldDemoUsernames = [
+      'super.admin', 'md', 'cfo', 'hoc', 'cro', 'legal',
+      'bm.lagos', 'bm.abuja', 'analyst', 'lo.lagos1', 'lo.lagos2',
+      'frontdesk', 'treasury', 'admin',
+    ];
+    for (const u of oldDemoUsernames) {
+      await db.admin.deleteMany({ where: { username: u } }).catch(() => {});
+    }
+    // Also delete ANY admin that's not 'superadmin' (cleanup of manually-created demo accounts)
+    // BUT keep 'superadmin' and any real staff the user may have created via UI
+    // We only delete the known demo usernames above to be safe
+    console.log('    (Removed old demo staff accounts)');
+  });
+
   await tryStep('Super Admin (sole seeded account)', async () => {
     const pw = bcrypt.hashSync('Watershed@2026', 10);
     const superPerms: Record<string, boolean> = {};
     for (const p of PERMISSION_FLAGS) {
       superPerms[p] = true; // super gets ALL flags
     }
-    await db.admin.upsert({
-      where: { username: 'superadmin' },
-      update: {
-        firstName: 'Super',
-        lastName: 'Admin',
-        email: 'superadmin@watershedcapital.com',
-        password: pw,
-        role: 'super',
-        roleType: 'super',
-        status: 1,
-        ...superPerms,
-      },
-      create: {
+    // Use delete + create to guarantee the password is set correctly
+    // (upsert can silently fail to update password if the record exists)
+    await db.admin.deleteMany({ where: { username: 'superadmin' } }).catch(() => {});
+    await db.admin.create({
+      data: {
         firstName: 'Super',
         lastName: 'Admin',
         username: 'superadmin',
@@ -156,6 +164,7 @@ async function main() {
         roleType: 'super',
         status: 1,
         mustChangePassword: false,
+        passwordChangedAt: new Date(),
         ...superPerms,
       },
     });
@@ -440,8 +449,24 @@ async function main() {
   console.log(`  FAQ Articles:      ${faqCount}`);
   console.log(`  Customers:         ${userCount} (0 = clean)`);
   console.log(`  Loans:             ${loanCount} (0 = clean)`);
-  console.log('');
-  console.log('  ─────────────────────────────────────────────');
+
+  // ── VERIFY super admin login works ──
+  console.log('\n  ─────────────────────────────────────────────');
+  console.log('  VERIFYING super admin login...');
+  const superAdmin = await db.admin.findUnique({ where: { username: 'superadmin' } });
+  if (!superAdmin) {
+    console.log('  ❌ FAILED: superadmin account not found!');
+  } else {
+    const pwdOk = bcrypt.compareSync('Watershed@2026', superAdmin.password);
+    if (pwdOk) {
+      console.log('  ✅ VERIFIED: superadmin / Watershed@2026 works');
+    } else {
+      console.log('  ❌ FAILED: password does not match Watershed@2026');
+      console.log('  Run: npx tsx scripts/fix-super-admin.ts to fix');
+    }
+  }
+
+  console.log('\n  ─────────────────────────────────────────────');
   console.log('  SUPER ADMIN LOGIN (sole seeded account):');
   console.log('    Username: superadmin');
   console.log('    Password: Watershed@2026');

@@ -438,6 +438,37 @@ export function CamView() {
     }
   }, [data]);
 
+  // ── L7: Stage-based edit restrictions (MUST be declared before useEffects that use canEdit) ──
+  const isLocked = appraisal?.isSnapshotLocked;
+  const currentStep = loan?.currentStep || '';
+
+  // Edit permission checks BOTH role AND current workflow step.
+  // Each role can only edit the CAM when the loan is at their designated step.
+  const canEdit = (() => {
+    if (!currentAdmin) return false;
+    if (currentAdmin.role === 'super') return !isLocked; // super can edit anytime (if not locked)
+
+    // G2: LO GUARD — LO can only edit if the client is assigned to them
+    if (currentAdmin.role === 'loan' || currentAdmin.loanOrigination) {
+      const isAssignedToMe = loan?.staffId === currentAdmin.id || loan?.user?.staffId === currentAdmin.id;
+      if (!isAssignedToMe) return false; // Not assigned to this LO — read-only
+      return !isLocked && ['LO_ENTRY', 'LO_ASSESSMENT', 'DRAFT', 'QUERY_RESPONSE'].includes(currentStep);
+    }
+
+    // HOC can edit during HOC_STRUCTURING and HOC_APPROVAL
+    if (currentAdmin.role === 'hoc' || currentAdmin.loanStructuring) {
+      return ['HOC_STRUCTURING', 'HOC_APPROVAL', 'HOC_AGGREGATION', 'HOC_FINALIZATION'].includes(currentStep);
+    }
+
+    // Analyst can edit during ANALYST_STRUCTURING
+    if (currentAdmin.role === 'analyst' || currentAdmin.loanAnalyst) {
+      return currentStep === 'ANALYST_STRUCTURING';
+    }
+
+    // BM, CRO, CFO, Legal, MD — can NEVER edit the LO data (read-only + create own snapshot)
+    return false;
+  })();
+
   // ── REAL-TIME AUTO-RECALCULATION (debounced 800ms) ──
   // Engine recalculates automatically as the LO types — no need to click "Recalculate"
   useEffect(() => {
@@ -806,37 +837,6 @@ export function CamView() {
   if (!loan) {
     return <div className="p-6 text-center text-red-500">Loan not found.</div>;
   }
-
-  const isLocked = appraisal?.isSnapshotLocked;
-  const currentStep = loan?.currentStep || '';
-
-  // ── L7: Stage-based edit restrictions ──
-  // Edit permission checks BOTH role AND current workflow step.
-  // Each role can only edit the CAM when the loan is at their designated step.
-  const canEdit = (() => {
-    if (!currentAdmin) return false;
-    if (currentAdmin.role === 'super') return !isLocked; // super can edit anytime (if not locked)
-
-    // G2: LO GUARD — LO can only edit if the client is assigned to them
-    if (currentAdmin.role === 'loan' || currentAdmin.loanOrigination) {
-      const isAssignedToMe = loan?.staffId === currentAdmin.id || loan?.user?.staffId === currentAdmin.id;
-      if (!isAssignedToMe) return false; // Not assigned to this LO — read-only
-      return !isLocked && ['LO_ENTRY', 'LO_ASSESSMENT', 'DRAFT', 'QUERY_RESPONSE'].includes(currentStep);
-    }
-
-    // HOC can edit during HOC_STRUCTURING and HOC_APPROVAL
-    if (currentAdmin.role === 'hoc' || currentAdmin.loanStructuring) {
-      return ['HOC_STRUCTURING', 'HOC_APPROVAL', 'HOC_AGGREGATION', 'HOC_FINALIZATION'].includes(currentStep);
-    }
-
-    // Analyst can edit during ANALYST_STRUCTURING
-    if (currentAdmin.role === 'analyst' || currentAdmin.loanAnalyst) {
-      return currentStep === 'ANALYST_STRUCTURING';
-    }
-
-    // BM, CRO, CFO, Legal, MD — can NEVER edit the LO data (read-only + create own snapshot)
-    return false;
-  })();
 
   // G2: Show warning if LO is not assigned to this client
   const isLONotAssigned = currentAdmin?.role === 'loan' && loan && loan.staffId !== currentAdmin.id && loan.user?.staffId !== currentAdmin.id;
