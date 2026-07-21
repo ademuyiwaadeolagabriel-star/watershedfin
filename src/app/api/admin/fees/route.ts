@@ -10,23 +10,31 @@ export async function GET(req: NextRequest) {
   const auth = await requireRole(req, ['super', 'md', 'cfo', 'admin']);
   if (auth instanceof NextResponse) return auth;
 
-  const fees = await db.systemSetting.findMany({
-    where: { category: 'fees' },
-    orderBy: { key: 'asc' },
-  });
+  try {
+    const fees = await db.systemSetting.findMany({
+      where: { category: 'fees' },
+      orderBy: { key: 'asc' },
+    });
 
-  return NextResponse.json({
-    fees: fees.map(f => ({
-      id: f.id,
-      key: f.key,
-      value: f.value,
-      type: f.type,
-      label: f.label || f.key,
-      active: f.active !== false,
-      updatedAt: f.updatedAt,
-      updatedBy: f.updatedBy,
-    })),
-  });
+    return NextResponse.json({
+      fees: fees.map(f => ({
+        id: f.id,
+        key: f.key,
+        value: f.value,
+        type: f.type,
+        label: (f as any).label || f.key,
+        active: (f as any).active !== false,
+        updatedAt: f.updatedAt,
+        updatedBy: f.updatedBy,
+      })),
+    });
+  } catch (e: any) {
+    console.error('[FEES] GET error:', e);
+    return NextResponse.json(
+      { error: 'Failed to load fees. Run: npx prisma db push', details: e.message },
+      { status: 500 }
+    );
+  }
 }
 
 /**

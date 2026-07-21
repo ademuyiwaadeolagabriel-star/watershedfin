@@ -15,17 +15,24 @@ export function MaintenanceModeView() {
   const [message, setMessage] = useState('We are performing scheduled maintenance. Please check back shortly.');
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await authFetch('/api/superadmin/maintenance');
       const d = await res.json();
-      setEnabled(d.enabled);
-      if (d.message) setMessage(d.message);
-      setUpdatedAt(d.updatedAt);
-    } catch (e) {
+      if (res.ok) {
+        setEnabled(d.enabled);
+        if (d.message) setMessage(d.message);
+        setUpdatedAt(d.updatedAt);
+      } else {
+        setError(d.error || `Failed to load (HTTP ${res.status})`);
+      }
+    } catch (e: any) {
+      setError(e.message || 'Network error');
       console.error(e);
     } finally {
       setLoading(false);

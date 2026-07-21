@@ -17,16 +17,23 @@ import { ToggleRight, Plus, RefreshCw, AlertCircle } from 'lucide-react';
 export function FeatureFlagsView() {
   const [flags, setFlags] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newFlag, setNewFlag] = useState({ key: '', label: '', description: '', environment: 'all' });
 
   const load = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await authFetch('/api/superadmin/feature-flags');
       const d = await res.json();
-      setFlags(d.flags || []);
-    } catch (e) {
+      if (res.ok) {
+        setFlags(d.flags || []);
+      } else {
+        setError(d.error || `Failed to load (HTTP ${res.status})`);
+      }
+    } catch (e: any) {
+      setError(e.message || 'Network error');
       console.error(e);
     } finally {
       setLoading(false);

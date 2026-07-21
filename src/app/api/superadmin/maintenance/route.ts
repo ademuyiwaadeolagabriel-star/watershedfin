@@ -6,18 +6,26 @@ export async function GET(req: NextRequest) {
   const auth = await requireRole(req, ['super']);
   if (auth instanceof NextResponse) return auth;
 
-  const setting = await db.systemSetting.findUnique({
-    where: { key: 'maintenance_mode' },
-  });
-  const messageSetting = await db.systemSetting.findUnique({
-    where: { key: 'maintenance_message' },
-  });
+  try {
+    const setting = await db.systemSetting.findUnique({
+      where: { key: 'maintenance_mode' },
+    });
+    const messageSetting = await db.systemSetting.findUnique({
+      where: { key: 'maintenance_message' },
+    });
 
-  return NextResponse.json({
-    enabled: setting?.value === 'true',
-    message: messageSetting?.value || 'We are performing scheduled maintenance. Please check back shortly.',
-    updatedAt: setting?.updatedAt || null,
-  });
+    return NextResponse.json({
+      enabled: setting?.value === 'true',
+      message: messageSetting?.value || 'We are performing scheduled maintenance. Please check back shortly.',
+      updatedAt: setting?.updatedAt || null,
+    });
+  } catch (e: any) {
+    console.error('[MAINTENANCE] GET error:', e);
+    return NextResponse.json(
+      { error: 'Failed to load maintenance status. Run: npx prisma db push', details: e.message },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(req: NextRequest) {

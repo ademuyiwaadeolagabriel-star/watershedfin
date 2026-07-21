@@ -11,14 +11,21 @@ export function ActiveSessionsView() {
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await authFetch('/api/superadmin/sessions');
       const d = await res.json();
-      setSessions(d.sessions || []);
-    } catch (e) {
+      if (res.ok) {
+        setSessions(d.sessions || []);
+      } else {
+        setError(d.error || `Failed to load (HTTP ${res.status})`);
+      }
+    } catch (e: any) {
+      setError(e.message || 'Network error');
       console.error(e);
     } finally {
       setLoading(false);

@@ -6,29 +6,37 @@ export async function GET(req: NextRequest) {
   const auth = await requireRole(req, ['super']);
   if (auth instanceof NextResponse) return auth;
 
-  const sessions = await db.activeSession.findMany({
-    where: { revokedAt: null, expiresAt: { gt: new Date() } },
-    include: {
-      admin: {
-        select: { id: true, firstName: true, lastName: true, username: true, email: true, role: true, branchId: true },
+  try {
+    const sessions = await db.activeSession.findMany({
+      where: { revokedAt: null, expiresAt: { gt: new Date() } },
+      include: {
+        admin: {
+          select: { id: true, firstName: true, lastName: true, username: true, email: true, role: true, branchId: true },
+        },
       },
-    },
-    orderBy: { lastSeen: 'desc' },
-  });
+      orderBy: { lastSeen: 'desc' },
+    });
 
-  return NextResponse.json({
-    sessions: sessions.map((s) => ({
-      id: s.id,
-      adminId: s.adminId,
-      admin: s.admin,
-      ip: s.ip,
-      userAgent: s.userAgent,
+    return NextResponse.json({
+      sessions: sessions.map((s) => ({
+        id: s.id,
+        adminId: s.adminId,
+        admin: s.admin,
+        ip: s.ip,
+        userAgent: s.userAgent,
       lastSeen: s.lastSeen,
       expiresAt: s.expiresAt,
       createdAt: s.createdAt,
     })),
     count: sessions.length,
   });
+  } catch (e: any) {
+    console.error('[SUPERADMIN SESSIONS] GET error:', e);
+    return NextResponse.json(
+      { error: 'Failed to load sessions. Run: npx prisma db push', details: e.message },
+      { status: 500 }
+    );
+  }
 }
 
 // Force logout — revoke one session (or all sessions for an admin)

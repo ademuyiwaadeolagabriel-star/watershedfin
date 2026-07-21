@@ -23,20 +23,24 @@ export function CsPaymentVerificationView() {
   const { toast } = useToast();
   const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [viewing, setViewing] = useState<any | null>(null);
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
 
   const load = async () => {
     setLoading(true);
+    setError(null);
     try {
-      // Query onboarding payments via a dedicated endpoint (or fallback to SystemSetting query)
       const res = await authFetch('/api/admin/cs/payments');
+      const d = await res.json();
       if (res.ok) {
-        const d = await res.json();
         setPayments(d.payments || []);
+      } else {
+        setError(d.error || `Failed to load (HTTP ${res.status})`);
       }
-    } catch (e) {
+    } catch (e: any) {
+      setError(e.message || 'Network error');
       console.error(e);
     } finally {
       setLoading(false);
@@ -112,6 +116,18 @@ export function CsPaymentVerificationView() {
             <div className="text-center py-8">
               <Loader2 className="h-5 w-5 animate-spin text-slate-400 mx-auto mb-2" />
               <p className="text-sm text-slate-500">Loading payments…</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-8">
+              <AlertTriangle className="h-8 w-8 text-red-400 mx-auto mb-2" />
+              <p className="text-sm font-medium text-red-700">Failed to load payments</p>
+              <p className="text-xs text-red-500 mt-1">{error}</p>
+              <p className="text-xs text-slate-500 mt-2">
+                If this is a schema error, run: <code className="font-mono bg-slate-100 px-1 rounded">npx prisma db push</code>
+              </p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={load}>
+                <RefreshCw className="h-3.5 w-3.5 mr-1" /> Retry
+              </Button>
             </div>
           ) : payments.length === 0 ? (
             <div className="text-center py-8">

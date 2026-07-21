@@ -35,6 +35,7 @@ export function FeeManagerView() {
   const { toast } = useToast();
   const [fees, setFees] = useState<Fee[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingFee, setEditingFee] = useState<Fee | null>(null);
   const [saving, setSaving] = useState(false);
@@ -42,13 +43,18 @@ export function FeeManagerView() {
 
   const load = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await authFetch('/api/admin/fees');
+      const d = await res.json();
       if (res.ok) {
-        const d = await res.json();
         setFees(d.fees || []);
+      } else {
+        setError(d.error || `Failed to load fees (HTTP ${res.status})`);
+        if (d.details) console.error('Fee load error:', d.details);
       }
-    } catch (e) {
+    } catch (e: any) {
+      setError(e.message || 'Network error');
       console.error(e);
     } finally {
       setLoading(false);
@@ -179,6 +185,18 @@ export function FeeManagerView() {
             <div className="text-center py-8">
               <Loader2 className="h-5 w-5 animate-spin text-slate-400 mx-auto mb-2" />
               <p className="text-sm text-slate-500">Loading fees…</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-8">
+              <AlertTriangle className="h-8 w-8 text-red-400 mx-auto mb-2" />
+              <p className="text-sm font-medium text-red-700">Failed to load fees</p>
+              <p className="text-xs text-red-500 mt-1">{error}</p>
+              <p className="text-xs text-slate-500 mt-2">
+                If this is a schema error, run: <code className="font-mono bg-slate-100 px-1 rounded">npx prisma db push</code>
+              </p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={load}>
+                <RefreshCw className="h-3.5 w-3.5 mr-1" /> Retry
+              </Button>
             </div>
           ) : fees.length === 0 ? (
             <div className="text-center py-8">

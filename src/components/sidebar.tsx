@@ -143,9 +143,9 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { key: 'staff-performance', label: 'Performance Dashboard', icon: PieChart, permission: 'generalSettings' },
       { key: 'branch-targets', label: 'Branch Targets', icon: Target },
-      { key: 'staff-create', label: 'Create Staff', icon: UserPlus, permission: 'generalSettings' },
+      { key: 'staff', label: 'Staff List & Edit', icon: Users, permission: 'generalSettings' },
+      { key: 'staff-create', label: 'Create New Staff', icon: UserPlus, permission: 'generalSettings' },
       { key: 'branches', label: 'Branch Network', icon: Building2, permission: 'branchManage' },
-      { key: 'staff', label: 'Staff & Access Control', icon: Users, permission: 'generalSettings' },
       { key: 'loan-products', label: 'Loan Products', icon: FileText, permission: 'generalSettings' },
       { key: 'sectors', label: 'Business Sectors', icon: TrendingUp, permission: 'generalSettings' },
       { key: 'branding-settings', label: 'Branding & Identity', icon: Palette },

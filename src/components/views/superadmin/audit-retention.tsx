@@ -16,16 +16,23 @@ export function AuditRetentionView() {
   const [saving, setSaving] = useState(false);
   const [purging, setPurging] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
+    setError(null);
     setMessage(null);
     try {
       const res = await authFetch('/api/superadmin/audit-retention');
       const d = await res.json();
-      setDays(d.retentionDays);
-      setStats(d);
-    } catch (e) {
+      if (res.ok) {
+        setDays(d.retentionDays);
+        setStats(d);
+      } else {
+        setError(d.error || `Failed to load (HTTP ${res.status})`);
+      }
+    } catch (e: any) {
+      setError(e.message || 'Network error');
       console.error(e);
     } finally {
       setLoading(false);

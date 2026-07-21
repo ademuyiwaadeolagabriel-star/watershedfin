@@ -6,10 +6,18 @@ export async function GET(req: NextRequest) {
   const auth = await requireRole(req, ['super']);
   if (auth instanceof NextResponse) return auth;
 
-  const flags = await db.featureFlag.findMany({
-    orderBy: [{ enabled: 'desc' }, { key: 'asc' }],
-  });
-  return NextResponse.json({ flags });
+  try {
+    const flags = await db.featureFlag.findMany({
+      orderBy: [{ enabled: 'desc' }, { key: 'asc' }],
+    });
+    return NextResponse.json({ flags });
+  } catch (e: any) {
+    console.error('[FEATURE FLAGS] GET error:', e);
+    return NextResponse.json(
+      { error: 'Failed to load feature flags. Run: npx prisma db push', details: e.message },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(req: NextRequest) {

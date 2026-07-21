@@ -6,24 +6,32 @@ export async function GET(req: NextRequest) {
   const auth = await requireRole(req, ['super']);
   if (auth instanceof NextResponse) return auth;
 
-  const setting = await db.systemSetting.findUnique({
-    where: { key: 'audit_retention_days' },
-  });
+  try {
+    const setting = await db.systemSetting.findUnique({
+      where: { key: 'audit_retention_days' },
+    });
 
-  const days = setting ? parseInt(setting.value, '10') : 365;
+    const days = setting ? parseInt(setting.value, '10') : 365;
 
-  // Compute what would be purged
-  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-  const auditLogsToPurge = await db.auditLog.count({ where: { createdAt: { lt: cutoff } } });
-  const loginHistoryToPurge = await db.loginHistory.count({ where: { createdAt: { lt: cutoff } } });
+    // Compute what would be purged
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const auditLogsToPurge = await db.auditLog.count({ where: { createdAt: { lt: cutoff } } });
+    const loginHistoryToPurge = await db.loginHistory.count({ where: { createdAt: { lt: cutoff } } });
 
-  return NextResponse.json({
-    retentionDays: days,
-    cutoffDate: cutoff.toISOString(),
-    auditLogsToPurge,
-    loginHistoryToPurge,
-    updatedAt: setting?.updatedAt || null,
-  });
+    return NextResponse.json({
+      retentionDays: days,
+      cutoffDate: cutoff.toISOString(),
+      auditLogsToPurge,
+      loginHistoryToPurge,
+      updatedAt: setting?.updatedAt || null,
+    });
+  } catch (e: any) {
+    console.error('[AUDIT RETENTION] GET error:', e);
+    return NextResponse.json(
+      { error: 'Failed to load retention settings. Run: npx prisma db push', details: e.message },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(req: NextRequest) {

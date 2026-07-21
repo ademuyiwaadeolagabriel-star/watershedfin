@@ -111,26 +111,42 @@ export function StaffCreateView() {
     }
     setSaving(true);
     try {
+      // Normalize branchId: convert "none" or "" to empty (API will set to null)
+      const payload = {
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        username: form.username.trim().toLowerCase(),
+        email: form.email.trim().toLowerCase(),
+        phone: form.phone?.trim() || undefined,
+        password: form.password,
+        role: form.role,
+        branchId: (form.branchId && form.branchId !== 'none') ? form.branchId : '',
+        permissions: perms,
+      };
+      console.log('[STAFF CREATE] Sending payload:', { ...payload, password: '[REDACTED]' });
       const res = await authFetch('/api/admin/staff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...form,
-          permissions: perms,
-        }),
+        body: JSON.stringify(payload),
       });
+      const d = await res.json().catch(() => ({}));
       if (res.ok) {
         toast({
-          title: 'Staff created',
-          description: `${form.firstName} ${form.lastName} can now login with username "${form.username}"`,
+          title: 'Staff created successfully',
+          description: `${form.firstName} ${form.lastName} can now login with username "${form.username}" and the password you set.`,
         });
         setView('staff');
       } else {
-        const err = await res.json().catch(() => ({}));
-        toast({ title: 'Failed', description: err.error || `HTTP ${res.status}`, variant: 'destructive' });
+        console.error('[STAFF CREATE] Failed:', res.status, d);
+        toast({
+          title: `Failed to create staff (HTTP ${res.status})`,
+          description: d.error || 'Unknown error',
+          variant: 'destructive',
+        });
       }
     } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+      console.error('[STAFF CREATE] Network error:', e);
+      toast({ title: 'Network error', description: e.message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }

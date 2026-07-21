@@ -154,11 +154,8 @@ export function StaffView() {
             <p className="text-xs text-slate-500">Manage admin users, roles, branches, and granular permission flags.</p>
           </div>
           <div className="flex gap-2">
-            <Button onClick={() => setCreateOpen(true)} variant="outline">
-              <Plus className="h-4 w-4" /> Quick Add
-            </Button>
             <Button onClick={() => useAppStore.getState().setView('staff-create')} className="bg-emerald-600 hover:bg-emerald-700">
-              <UserPlus className="h-4 w-4" /> Create Staff with Toggle Matrix
+              <UserPlus className="h-4 w-4" /> Create New Staff
             </Button>
           </div>
         </div>

@@ -79,6 +79,8 @@ export async function POST(req: NextRequest) {
       'treasuryOnboard', 'treasuryBook', 'treasuryAssets', 'branchManage',
       'auditAccess', 'internalControl', 'compliance', 'reportsGlobal',
       'generalSettings', 'message', 'support',
+      // v26 — Customer Service + Legal dual role toggles
+      'csKycVerify', 'csPaymentVerify', 'legalCacSearch', 'legalMcc',
     ];
     for (const f of flags) {
       permData[f] = perms.includes('*') || perms.includes(f) || body[f] === true;

@@ -10,15 +10,23 @@ export async function GET(req: NextRequest) {
   const auth = await requireRole(req, ['super', 'cs', 'admin']);
   if (auth instanceof NextResponse) return auth;
 
-  const payments = await db.onboardingPayment.findMany({
-    where: { method: 'transfer', status: 'pending' },
-    include: {
-      user: {
-        select: { id: true, firstName: true, lastName: true, email: true, phone: true },
+  try {
+    const payments = await db.onboardingPayment.findMany({
+      where: { method: 'transfer', status: 'pending' },
+      include: {
+        user: {
+          select: { id: true, firstName: true, lastName: true, email: true, phone: true },
+        },
       },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
+      orderBy: { createdAt: 'desc' },
+    });
 
-  return NextResponse.json({ payments });
+    return NextResponse.json({ payments });
+  } catch (e: any) {
+    console.error('[CS PAYMENTS] GET error:', e);
+    return NextResponse.json(
+      { error: 'Failed to load payments. Run: npx prisma db push', details: e.message },
+      { status: 500 }
+    );
+  }
 }
