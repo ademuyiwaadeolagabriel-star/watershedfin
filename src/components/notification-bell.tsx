@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Bell, Check, CheckCheck, Inbox } from 'lucide-react';
 import {
   DropdownMenu,
@@ -68,7 +67,6 @@ export function NotificationBell({ userId, adminId }: NotificationBellProps) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const socketRef = useRef<Socket | null>(null);
   const { toast } = useToast();
   const setView = useAppStore((s) => s.setView);
 
@@ -103,52 +101,19 @@ export function NotificationBell({ userId, adminId }: NotificationBellProps) {
     void fetchList();
   }, [fetchList]);
 
-  // WebSocket live updates
+  // Live updates via HTTP polling (Vercel-compatible — no socket.io server needed)
+  // Polls every 30 seconds for new notifications. This replaces the previous
+  // socket.io implementation which caused infinite reconnection loops on Vercel
+  // (Vercel doesn't support persistent WebSocket connections without a separate service).
   useEffect(() => {
     if (!recipient.userId && !recipient.adminId) return;
 
-    const socket = io('/?XTransformPort=3003', {
-      auth: { userId: recipient.userId, adminId: recipient.adminId },
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1500,
-      timeout: 10000,
-    });
-    socketRef.current = socket;
+    const pollInterval = setInterval(() => {
+      void fetchList();
+    }, 30000); // 30 seconds
 
-    socket.on('connect', () => {
-      // Re-join rooms defensively (also handles reconnects)
-      socket.emit('join', { userId: recipient.userId, adminId: recipient.adminId });
-    });
-
-    socket.on('notification', (data: NotificationItem) => {
-      if (!data) return;
-      // Make sure it's actually addressed to us
-      const targetsMe =
-        (recipient.userId && data.userId === recipient.userId) ||
-        (recipient.adminId && data.adminId === recipient.adminId);
-      if (!targetsMe) return;
-
-      setItems((prev) => [data, ...prev].slice(0, 10));
-      setUnreadCount((c) => c + 1);
-
-      toast({
-        title: data.title,
-        description: data.message,
-      });
-    });
-
-    socket.on('disconnect', () => {
-      /* will auto-reconnect */
-    });
-
-    return () => {
-      socket.removeAllListeners();
-      socket.disconnect();
-      socketRef.current = null;
-    };
-  }, [recipient.userId, recipient.adminId, toast]);
+    return () => clearInterval(pollInterval);
+  }, [recipient.userId, recipient.adminId, fetchList]);
 
   const markAllAsRead = useCallback(async () => {
     if (!recipient.userId && !recipient.adminId) return;
