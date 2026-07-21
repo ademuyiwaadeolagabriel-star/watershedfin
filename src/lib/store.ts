@@ -112,7 +112,14 @@ export type ViewKey =
   | 'comm-email-templates'
   | 'comm-sms-broadcast'
   | 'comm-email-campaigns'
-  | 'comm-customer-service';
+  | 'comm-customer-service'
+  // v24 — SuperAdmin System Control
+  | 'superadmin-dashboard'
+  | 'superadmin-feature-flags'
+  | 'superadmin-maintenance'
+  | 'superadmin-sessions'
+  | 'superadmin-system-health'
+  | 'superadmin-audit-retention';
 
 export type Portal = 'public' | 'customer' | 'admin';
 

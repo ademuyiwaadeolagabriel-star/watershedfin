@@ -79,6 +79,12 @@ import {
   AnnouncementsView, MessageCenterView, NotificationCenterView,
   EmailTemplatesView, SmsBroadcastView, EmailCampaignsView, CustomerServiceView,
 } from '@/components/views/communications';
+import { SuperAdminDashboard } from '@/components/views/superadmin/superadmin-dashboard';
+import { FeatureFlagsView } from '@/components/views/superadmin/feature-flags';
+import { MaintenanceModeView } from '@/components/views/superadmin/maintenance-mode';
+import { ActiveSessionsView } from '@/components/views/superadmin/active-sessions';
+import { SystemHealthView } from '@/components/views/superadmin/system-health';
+import { AuditRetentionView } from '@/components/views/superadmin/audit-retention';
 import { useEffect, useState } from 'react';
 
 export default function Home() {
@@ -88,18 +94,18 @@ export default function Home() {
   // Check if system needs first-run setup (only when no admin is logged in)
   useEffect(() => {
     if (!currentAdmin && !currentUser) {
+      let cancelled = false;
       fetch('/api/setup')
         .then(r => r.json())
         .then(data => {
-          if (data.needsSetup) {
-            setNeedsSetup(true);
-          } else {
-            setNeedsSetup(false);
-          }
+          if (!cancelled) setNeedsSetup(!!data.needsSetup);
         })
-        .catch(() => setNeedsSetup(false));
+        .catch(() => { if (!cancelled) setNeedsSetup(false); });
+      return () => { cancelled = true; };
     } else {
-      setNeedsSetup(false);
+      // Use microtask defer to avoid synchronous setState in effect body
+      const id = setTimeout(() => setNeedsSetup(false), 0);
+      return () => clearTimeout(id);
     }
   }, [currentAdmin, currentUser]);
 
@@ -385,6 +391,20 @@ export default function Home() {
       // Global search results
       case 'search-results':
         return <SearchResultsView />;
+
+      // v24 — SuperAdmin System Control
+      case 'superadmin-dashboard':
+        return <SuperAdminDashboard />;
+      case 'superadmin-feature-flags':
+        return <FeatureFlagsView />;
+      case 'superadmin-maintenance':
+        return <MaintenanceModeView />;
+      case 'superadmin-sessions':
+        return <ActiveSessionsView />;
+      case 'superadmin-system-health':
+        return <SystemHealthView />;
+      case 'superadmin-audit-retention':
+        return <AuditRetentionView />;
 
       // Public marketing site (also reachable from the admin context via direct nav)
       case 'public-home':

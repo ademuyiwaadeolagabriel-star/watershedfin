@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/auto-npl",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/payment-reminders",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/drip-campaigns",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/audit-cleanup",
+      "schedule": "0 2 * * *"
+    }
+  ]
+}

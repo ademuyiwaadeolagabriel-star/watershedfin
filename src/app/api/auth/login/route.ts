@@ -36,6 +36,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Account suspended' }, { status: 403 });
     }
 
+    // v24 — Maintenance mode: block non-superadmin logins
+    if (admin.role !== 'super') {
+      const maintenanceSetting = await db.systemSetting.findUnique({
+        where: { key: 'maintenance_mode' },
+      }).catch(() => null);
+      if (maintenanceSetting?.value === 'true') {
+        const msgSetting = await db.systemSetting.findUnique({
+          where: { key: 'maintenance_message' },
+        }).catch(() => null);
+        return NextResponse.json(
+          { error: msgSetting?.value || 'System is under maintenance. Please try again later.' },
+          { status: 503 }
+        );
+      }
+    }
+
     // Update last login
     await db.admin.update({
       where: { id: admin.id },

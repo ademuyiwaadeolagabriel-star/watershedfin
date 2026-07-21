@@ -11,6 +11,7 @@ import {
   BarChart3, Bell, Search, Menu, X, Banknote, Receipt, FileCheck,
   GitBranch, Lock, Activity, ScrollText, Coins, ArrowRightLeft, Palette,
   Newspaper, CheckCircle2,
+  Server, ToggleRight, Power, Clock,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -161,6 +162,19 @@ const NAV_GROUPS: NavGroup[] = [
       { key: 'comm-customer-service', label: 'Customer Service', icon: Users, permission: 'message' },
     ],
   },
+  {
+    id: 'superadmin',
+    label: 'SuperAdmin Control',
+    icon: Server,
+    items: [
+      { key: 'superadmin-dashboard', label: 'Platform Dashboard', icon: LayoutDashboard },
+      { key: 'superadmin-system-health', label: 'System Health', icon: Server },
+      { key: 'superadmin-feature-flags', label: 'Feature Flags', icon: ToggleRight },
+      { key: 'superadmin-maintenance', label: 'Maintenance Mode', icon: Power },
+      { key: 'superadmin-sessions', label: 'Active Sessions', icon: Lock },
+      { key: 'superadmin-audit-retention', label: 'Audit Retention', icon: Clock },
+    ],
+  },
 ];
 
 // Add missing import alias
@@ -179,6 +193,7 @@ export function Sidebar() {
     governance: true,
     system: true,
     communication: true,
+    superadmin: true,
   });
 
   useEffect(() => {
@@ -191,12 +206,19 @@ export function Sidebar() {
   const isVisible = (item: NavItem) => {
     // Branding is super-admin only
     if (item.key === 'branding-settings') return currentAdmin?.role === 'super';
+    // All v24 SuperAdmin Control items are super-admin only
+    if (item.key.startsWith('superadmin-')) return currentAdmin?.role === 'super';
     if (!item.permission) return true;
     if (currentAdmin?.role === 'super') return true;
     if (Array.isArray(item.permission)) {
       return hasAnyPermission(currentAdmin, item.permission);
     }
     return hasPermission(currentAdmin, item.permission);
+  };
+
+  const isGroupVisible = (group: NavGroup) => {
+    if (group.id === 'superadmin') return currentAdmin?.role === 'super';
+    return true;
   };
 
   return (
@@ -243,6 +265,7 @@ export function Sidebar() {
         {/* Nav */}
         <nav className="h-[calc(100vh-4rem-4rem)] overflow-y-auto py-4 px-3">
           {NAV_GROUPS.map((group) => {
+            if (!isGroupVisible(group)) return null;
             const visibleItems = group.items.filter(isVisible);
             if (visibleItems.length === 0) return null;
 

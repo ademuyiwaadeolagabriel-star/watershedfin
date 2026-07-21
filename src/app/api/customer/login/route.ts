@@ -67,6 +67,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // v24 — Maintenance mode: block customer logins
+    const maintenanceSetting = await db.systemSetting.findUnique({
+      where: { key: 'maintenance_mode' },
+    }).catch(() => null);
+    if (maintenanceSetting?.value === 'true') {
+      const msgSetting = await db.systemSetting.findUnique({
+        where: { key: 'maintenance_message' },
+      }).catch(() => null);
+      return NextResponse.json(
+        { error: msgSetting?.value || 'System is under maintenance. Please try again later.' },
+        { status: 503 }
+      );
+    }
+
     // Update lastLogin timestamp
     await db.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } }).catch(() => {});
 
