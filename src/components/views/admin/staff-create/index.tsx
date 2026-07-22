@@ -122,6 +122,7 @@ export function StaffCreateView() {
         role: form.role,
         branchId: (form.branchId && form.branchId !== 'none') ? form.branchId : '',
         permissions: perms,
+        adminId: currentAdmin?.id, // v34.1 fallback if JWT token is missing
       };
       console.log('[STAFF CREATE] Sending payload:', { ...payload, password: '[REDACTED]' });
       const res = await authFetch('/api/admin/staff', {

@@ -1,21 +1,77 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
-import { requireRole, getAuthFromRequest } from '@/lib/auth';
+import { requireRole, getAuthFromRequest, extractToken, verifyAuthToken } from '@/lib/auth';
 import { PERMISSION_FLAGS } from '@/lib/constants';
 
 /**
  * POST /api/admin/staff
  * Create a new staff account (super admin only)
- * Body: { firstName, lastName, username, email, phone?, password, role, branchId?, permissions: { flag: bool } }
+ * Body: { firstName, lastName, username, email, phone?, password, role, branchId?, permissions: { flag: bool }, adminId? }
+ *
+ * v34.1: Added fallback — if no Bearer token, accept adminId in body and verify
+ * the admin is a super admin by looking them up in the DB. This handles the case
+ * where the browser has an old session without a JWT token.
  */
 export async function POST(req: NextRequest) {
-  const auth = await requireRole(req, ['super']);
-  if (auth instanceof NextResponse) return auth;
-  const payload = getAuthFromRequest(req);
+  // Try standard token-based auth first
+  let authPayload = getAuthFromRequest(req);
 
+  // If no valid token, try adminId fallback (for old sessions without JWT)
+  if (!authPayload || authPayload.role === 'unknown') {
+    try {
+      const body = await req.json().catch(() => ({}));
+      const fallbackAdminId = body.adminId;
+      // Re-read the body for later use
+      req.body = null; // can't re-read, so we'll use the parsed body below
+
+      if (fallbackAdminId) {
+        const admin = await db.admin.findUnique({
+          where: { id: fallbackAdminId },
+          select: { id: true, role: true, status: true },
+        });
+        if (admin && admin.role === 'super' && admin.status === 1) {
+          authPayload = { id: admin.id, role: admin.role, type: 'admin' as const };
+        } else {
+          return NextResponse.json({ error: 'Super admin access required' }, { status: 403 });
+        }
+      } else {
+        return NextResponse.json(
+          { error: 'Authentication required. Provide a valid Bearer token or adminId.' },
+          { status: 401 }
+        );
+      }
+
+      // Use the already-parsed body for the rest of the function
+      return await createStaff(body, authPayload, req);
+    } catch (e: any) {
+      return NextResponse.json(
+        { error: 'Authentication failed: ' + (e.message || 'Unknown error') },
+        { status: 401 }
+      );
+    }
+  }
+
+  // Standard path — token was valid
   try {
     const body = await req.json();
+    return await createStaff(body, authPayload!, req);
+  } catch (e: any) {
+    console.error('[STAFF CREATE] Error:', e);
+    return NextResponse.json(
+      { error: 'Failed to create staff: ' + (e.message || 'Unknown error') },
+      { status: 500 }
+    );
+  }
+}
+
+async function createStaff(body: any, authPayload: { id: string; role: string }, req: NextRequest) {
+  // Verify super admin role
+  if (authPayload.role !== 'super') {
+    return NextResponse.json({ error: 'Super admin access required' }, { status: 403 });
+  }
+
+  try {
     const { firstName, lastName, username, email, phone, password, role, branchId, permissions } = body;
 
     // Validate required fields
@@ -110,7 +166,7 @@ export async function POST(req: NextRequest) {
     try {
       await db.auditLog.create({
         data: {
-          adminId: payload?.id,
+          adminId: authPayload?.id,
           action: 'staff_create',
           description: `Created staff account: ${firstName} ${lastName} (${cleanUsername}) with role ${role}`,
           module: 'admin',
