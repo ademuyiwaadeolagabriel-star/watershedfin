@@ -56,7 +56,7 @@ const PERMISSION_LABELS: Record<string, string> = {
 };
 
 export function StaffCreateView() {
-  const { setView } = useAppStore();
+  const { setView, currentAdmin } = useAppStore();
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const [branches, setBranches] = useState<any[]>([]);
