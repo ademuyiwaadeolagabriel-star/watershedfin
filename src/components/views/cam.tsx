@@ -52,11 +52,11 @@ interface CamData {
 }
 
 const INITIAL_DATA: CamData = {
-  // Sales — ZERO defaults (must be captured by LO)
-  salesClientEstimate: 0,
-  salesSpotCheck: 0,
-  salesBankStatement: 0,
-  salesBookRecords: 0,
+  // v45: Sales — null defaults (shows empty in UI, user types real values)
+  salesClientEstimate: null as any,
+  salesSpotCheck: null as any,
+  salesBankStatement: null as any,
+  salesBookRecords: null as any,
   // Inventory — empty array (LO adds items)
   inventory: [],
   // Expenses (monthly) — ZERO defaults
@@ -99,15 +99,15 @@ const INITIAL_DATA: CamData = {
     { category: 'Contribution', amount: 0 },
     { category: 'Others', amount: 0 },
   ],
-  // Balance sheet — ZERO defaults
-  cashAtHand: 0,
-  cashInBanks: 0,
-  receivables: 0,
-  fixedBusinessAssets: 0,
-  fixedFamilyAssets: 0,
-  shortTermLiabilities: 0,
-  longTermLiabilities: 0,
-  payables: 0,
+  // v45: Balance sheet — null defaults (shows empty in UI)
+  cashAtHand: null as any,
+  cashInBanks: null as any,
+  receivables: null as any,
+  fixedBusinessAssets: null as any,
+  fixedFamilyAssets: null as any,
+  shortTermLiabilities: null as any,
+  longTermLiabilities: null as any,
+  payables: null as any,
   // Structured business assets — empty arrays
   businessAssets: {
     equipment: [],
@@ -167,21 +167,21 @@ const INITIAL_DATA: CamData = {
     { day: 'Saturday', type: 'Good', amount: 0 },
     { day: 'Sunday', type: 'Closed', amount: 0 },
   ],
-  // Loan — ZERO defaults (must be set by LO)
-  loanPrincipal: 0,
-  loanInterestRate: 0,
-  loanTenorMonths: 0,
+  // v45: Loan — null defaults (user enters real values, not pre-filled zeros)
+  loanPrincipal: null as any,
+  loanInterestRate: null as any,
+  loanTenorMonths: null as any,
   repaymentMethod: 'REDUCING',
-  ccdPercent: 0,
-  upfrontFeePercent: 0,
+  ccdPercent: null as any,
+  upfrontFeePercent: null as any,
   // Collateral — empty array (LO adds)
   collaterals: [],
   loanBaseAmount: 0,
-  // Guarantor — ZERO defaults
-  guarantorIncome: 0,
-  guarantorCogs: 0,
-  guarantorOperationExpenses: 0,
-  guarantorExistingInstallment: 0,
+  // v45: Guarantor — null defaults
+  guarantorIncome: null as any,
+  guarantorCogs: null as any,
+  guarantorOperationExpenses: null as any,
+  guarantorExistingInstallment: null as any,
   // Risk
   sectorRiskScore: 0.5,
   sectorBenchmarkMargin: 0,
@@ -190,13 +190,13 @@ const INITIAL_DATA: CamData = {
   previousDefault: false,
   successionPlanVerified: false,
   bankAccountVerified: false,
-  // Stress — ZERO defaults
-  stressSalesHaircut: 0,
-  stressMarginCompression: 0,
-  stressOpexIncrease: 0,
-  openingCash: 0,
-  familyIncome: 0,
-  familyLoanInstallment: 0,
+  // v45: Stress — null defaults
+  stressSalesHaircut: null as any,
+  stressMarginCompression: null as any,
+  stressOpexIncrease: null as any,
+  openingCash: null as any,
+  familyIncome: null as any,
+  familyLoanInstallment: null as any,
   physicalStockMatches: false,
   // Guarantors array (G9)
   guarantors: [],
@@ -374,23 +374,67 @@ export function CamView() {
 
           setData((prev: CamData) => ({
             ...prev,
-            // Auto-populate from loan record
+            // ═══ v45: Auto-populate from loan record ════════════════════════
             loanPrincipal: ln.amount || prev.loanPrincipal,
             loanInterestRate: ln.percent || prev.loanInterestRate,
             loanTenorMonths: ln.duration || prev.loanTenorMonths,
             repaymentMethod: ln.repaymentPlan || prev.repaymentMethod,
             loanPurpose: ln.reason || prev.loanPurpose,
             loanBaseAmount: ln.amount || prev.loanBaseAmount,
-            // Auto-populate from user/business record
-            yearsAtAddress: ln.user?.yearsAtResidence || prev.yearsAtAddress,
-            yearsInOperation: yearsInOp || prev.yearsInOperation,
-            selectedSectorName: sectorObj?.name || prev.selectedSectorName,
-            sectorRiskScore: sectorObj?.riskScore ?? prev.sectorRiskScore,
-            sectorBenchmarkMargin: sectorObj?.benchmarkedMargin ?? prev.sectorBenchmarkMargin,
-            businessLocation: biz?.state || biz?.shopAddress || prev.businessLocation,
             // CCD and Upfront from loan plan if available
             ccdPercent: ln.plan?.ccdPercent || ln.finalCcdFeePercent || prev.ccdPercent,
             upfrontFeePercent: ln.plan?.upfrontFeePercent || ln.finalUpfrontFeePercent || prev.upfrontFeePercent,
+
+            // ═══ v45: Auto-populate from user record (onboarding data) ══════
+            applicantAge: ln.user?.dob
+              ? Math.floor((Date.now() - new Date(ln.user.dob).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+              : prev.applicantAge,
+            yearsAtAddress: ln.user?.yearsAtResidence || prev.yearsAtAddress,
+            businessLocation: biz?.state || biz?.shopAddress || prev.businessLocation,
+            selectedSectorName: sectorObj?.name || prev.selectedSectorName,
+            sectorRiskScore: sectorObj?.riskScore ?? prev.sectorRiskScore,
+            sectorBenchmarkMargin: sectorObj?.benchmarkedMargin ?? prev.sectorBenchmarkMargin,
+            yearsInOperation: yearsInOp || prev.yearsInOperation,
+
+            // ═══ v45: Auto-populate business financials from onboarding ═════
+            // These come from the Business record captured during onboarding
+            businessWorth: biz?.businessWorth || prev.businessWorth,
+            stockValue: biz?.stockValue || prev.stockValue,
+            monthlySales: biz?.monthlySales || prev.monthlySales,
+
+            // ═══ v45: Auto-populate family/business expense defaults from user ═══
+            // (only if not already set — don't override saved CAM data)
+            familyIncome: ln.user?.monthlyIncome || prev.familyIncome,
+
+            // ═══ v45: Auto-populate risk flags from user record ═════════════
+            previousDefault: ln.user?.previousDefault ?? prev.previousDefault,
+            successionPlanVerified: ln.user?.successionPlanVerified ?? prev.successionPlanVerified,
+            bankAccountVerified: ln.user?.bankAccountVerified ?? prev.bankAccountVerified,
+
+            // ═══ v45: Auto-populate running WFL loan from user's active loan ═══
+            runningWflLoan: ln.user?.loans?.some((l: any) => l.status === 'running')
+              ? (() => {
+                  const runningLoan = ln.user.loans.find((l: any) => l.status === 'running');
+                  return {
+                    isActive: true,
+                    disbursementDate: runningLoan?.disbursedAt || runningLoan?.disbursementDate || '',
+                    maturityDate: runningLoan?.maturityDate || '',
+                    amount: runningLoan?.finalAmount || runningLoan?.approvedAmount || runningLoan?.amount || 0,
+                    duration: runningLoan?.finalTenure || runningLoan?.duration || 0,
+                    installment: runningLoan?.monthlyInstallment || 0,
+                    installmentsPaid: 0,
+                    balance: runningLoan?.outstandingBalance || 0,
+                  };
+                })()
+              : prev.runningWflLoan,
+
+            // ═══ v45: Auto-populate other lender loans from CRC bureau data ═══
+            // (if the user has other lender loans captured during onboarding)
+            otherLenderLoans: ln.user?.otherLenderLoans
+              ? (typeof ln.user.otherLenderLoans === 'string'
+                  ? (() => { try { return JSON.parse(ln.user.otherLenderLoans); } catch { return prev.otherLenderLoans; } })()
+                  : ln.user.otherLenderLoans)
+              : prev.otherLenderLoans,
           }));
         }
 
@@ -1784,11 +1828,13 @@ function PreviousBalanceSheetSection({ data, update }: any) {
 function ProfileTab({ data, update, loan }: any) {
   const u = loan?.user;
   const b = u?.business;
+  const fmtDate = (d: any) => d ? new Date(d).toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+
   return (
     <div className="space-y-6">
-      {/* Client Identity — from onboarding (read-only) */}
+      {/* v45: Client Identity — from onboarding (read-only) */}
       <div>
-        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Client Identity</h3>
+        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Client Identity (from Onboarding)</h3>
         <p className="text-xs text-slate-400 mb-3">Auto-populated from onboarding — read only</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Field label="First Name" value={u?.firstName} readOnly />
@@ -1799,6 +1845,36 @@ function ProfileTab({ data, update, loan }: any) {
           <Field label="Email" value={u?.email} readOnly />
           <Field label="Account No." value={u?.accountNumber} readOnly />
           <Field label="KYC Status" value={u?.kycStatus} readOnly />
+          <Field label="Date of Birth" value={fmtDate(u?.dob)} readOnly />
+          <Field label="Gender" value={u?.gender} readOnly />
+          <Field label="Marital Status" value={u?.maritalStatus} readOnly />
+          <Field label="Religion" value={u?.religion} readOnly />
+          <Field label="Nationality" value={u?.nationality} readOnly />
+          <Field label="State" value={u?.state} readOnly />
+          <Field label="LGA" value={u?.lga} readOnly />
+          <Field label="Town" value={u?.town} readOnly />
+        </div>
+      </div>
+
+      {/* v45: Residential Address — from onboarding (read-only) */}
+      <div>
+        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">Residential Address</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Field label="Address" value={u?.address} readOnly />
+          <Field label="Nearest Landmark" value={u?.nearestLandmark} readOnly />
+          <Field label="House Ownership" value={u?.houseOwnership} readOnly />
+          <Field label="Years at Residence" value={u?.yearsAtResidence} readOnly />
+        </div>
+      </div>
+
+      {/* v45: Loan Cycle Info — from onboarding (read-only) */}
+      <div>
+        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">Loan Cycle & History</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Field label="Loan Cycle No." value={u?.loanCycle} readOnly />
+          <Field label="Previous Default" value={u?.previousDefault ? 'Yes' : 'No'} readOnly />
+          <Field label="Has External Loans" value={u?.hasExternalLoans ? 'Yes' : 'No'} readOnly />
+          <Field label="Guarantor Elsewhere" value={u?.isGuarantorElsewhere ? 'Yes' : 'No'} readOnly />
         </div>
       </div>
 
@@ -2164,27 +2240,49 @@ function ReferencesSection({ data, update }: any) {
 
 function BusinessTab({ data, update, loan }: any) {
   const b = loan?.user?.business;
+  const fmtDate = (d: any) => d ? new Date(d).toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
   return (
     <div className="space-y-6">
+      {/* v45: Business Profile — from onboarding (read-only) */}
       <div>
-        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Business Profile (From Onboarding)</h3>
+        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Business Profile (from Onboarding)</h3>
         <p className="text-xs text-slate-400 mb-3">Auto-populated from customer onboarding — verify during field visitation</p>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Field label="Business Name" value={b?.name} readOnly />
           <Field label="Sector" value={b?.sectorRef?.name || b?.sector} readOnly />
           <Field label="Legal Structure" value={b?.legalStructure} readOnly />
           <Field label="RC/BN Number" value={b?.rcBnNumber} readOnly />
-          <Field label="Date Established" value={b?.dateEstablished ? new Date(b.dateEstablished).toLocaleDateString() : ''} readOnly />
+          <Field label="Date Established" value={fmtDate(b?.dateEstablished)} readOnly />
           <Field label="Years in Operation" value={data.yearsInOperation} readOnly />
+          <Field label="Business Type" value={b?.businessType} readOnly />
+          <Field label="Years at Location" value={b?.yearsAtLocation} readOnly />
         </div>
       </div>
+
+      {/* v45: Business Location — from onboarding (read-only) */}
       <div>
-        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-3">Business Location</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">Business Location</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Field label="Shop Address" value={b?.shopAddress} readOnly />
           <Field label="Landmark" value={b?.landmark} readOnly />
           <Field label="State" value={b?.state} readOnly />
           <Field label="Ownership Status" value={b?.ownershipStatus} readOnly />
+          <Field label="City" value={b?.city} readOnly />
+          <Field label="GPS Lat" value={b?.gpsLatitude} readOnly />
+          <Field label="GPS Lng" value={b?.gpsLongitude} readOnly />
+          <Field label="Line 1" value={b?.line1} readOnly />
+        </div>
+      </div>
+
+      {/* v45: Business Financials — from onboarding (read-only, for reference) */}
+      <div>
+        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">Business Financials (from Onboarding — for reference)</h3>
+        <p className="text-xs text-slate-400 mb-2">These are from onboarding. Capture verified figures in the Sales, Expenses, and Assets tabs.</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Field label="Declared Business Worth" type="number" value={b?.businessWorth} readOnly />
+          <Field label="Declared Stock Value" type="number" value={b?.stockValue} readOnly />
+          <Field label="Declared Monthly Sales" type="number" value={b?.monthlySales} readOnly />
+          <Field label="Declared Daily Avg Sales" type="number" value={b?.dailyAvgSales} readOnly />
         </div>
       </div>
       {/* Business Verification Checkboxes */}
@@ -5061,15 +5159,29 @@ function CommitteeSignatureSection() {
 // SHARED FORM COMPONENTS
 // ============================================================================
 
+// v45: Field component — shows empty string for 0/null number values so users
+// can start typing immediately without having to delete the "0" first.
+// For text fields, empty/null shows as empty.
 function Field({ label, value, onChange, type = 'text', readOnly }: any) {
+  // v45: If it's a number field and the value is 0, null, or undefined,
+  // show empty string so the user can type without clearing first.
+  // When the user clears the field, it sends '' which the caller should
+  // handle (most callers use Number(v) which converts '' to 0).
+  const displayValue = (() => {
+    if (value === null || value === undefined) return '';
+    if (type === 'number' && value === 0) return '';  // Show empty for 0
+    return value;
+  })();
+
   return (
     <div>
       <Label className="text-xs text-slate-600">{label}</Label>
       <Input
         type={type}
-        value={value ?? ''}
+        value={displayValue}
         onChange={onChange ? (e) => onChange(e.target.value) : undefined}
         readOnly={readOnly}
+        placeholder={type === 'number' ? '0' : ''}
         className={cn('mt-1', readOnly && 'bg-slate-50 dark:bg-slate-900 text-slate-600')}
       />
     </div>
