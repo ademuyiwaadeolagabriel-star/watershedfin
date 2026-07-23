@@ -120,14 +120,12 @@ interface FormState {
   bmId: string;
   staffId: string;
 
-  // uploads (v41: real file paths persisted to Business via /api/customer/kyc-upload)
+  // uploads (v43: real file paths persisted via /api/customer/kyc-upload)
   passportPhoto: string;
   idCardPhoto: string;
-  idCardBackPhoto: string;
-  meansOfIdPhoto: string;       // v41: Acceptable Means of ID (NIN/Passport/Driver's/Voter's)
-  proofOfAddressPhoto: string;  // v41: NEPA/Utility Bill
-  shopPhoto: string;            // v41: Picture/Certificate of Business
-  cacCertificatePhoto: string;  // v41: CAC Certificate
+  meansOfIdPhoto: string;       // Acceptable Means of ID (NIN/Passport/Driver's/Voter's)
+  proofOfAddressPhoto: string;  // NEPA/Utility Bill
+  cacCertificatePhoto: string;  // CAC Certificate
   additionalDocs: string;
 
   // agreement
@@ -173,10 +171,8 @@ const emptyForm: FormState = {
   staffId: '',
   passportPhoto: '',
   idCardPhoto: '',
-  idCardBackPhoto: '',
   meansOfIdPhoto: '',
   proofOfAddressPhoto: '',
-  shopPhoto: '',
   cacCertificatePhoto: '',
   additionalDocs: '',
   agreed: false,
@@ -335,7 +331,7 @@ export function OnboardingView() {
   // in the form state. The path is also persisted to the Business record by
   // the API so CS staff can view it in the KYC queue.
   const uploadDoc = async (
-    docType: 'passport' | 'id_front' | 'id_back' | 'proof_of_address' | 'shop_photo' | 'cac_certificate' | 'means_of_id',
+    docType: 'passport' | 'id_front' | 'proof_of_address' | 'cac_certificate' | 'means_of_id',
     fieldKey: keyof FormState,
     file: File
   ) => {
@@ -455,12 +451,11 @@ export function OnboardingView() {
         if (!form.staffId) errs.push('staffId');
       }
       if (!form.agreed) errs.push('agreed');
-      // v41: Mandatory KYC documents (spec point #1)
+      // v43: Mandatory KYC documents (spec point #1) — removed id_back and shop_photo
       if (!form.passportPhoto) errs.push('passportPhoto');
       if (!form.idCardPhoto) errs.push('idCardPhoto');
       if (!form.meansOfIdPhoto) errs.push('meansOfIdPhoto');
       if (!form.proofOfAddressPhoto) errs.push('proofOfAddressPhoto');
-      if (!form.shopPhoto) errs.push('shopPhoto');
       if (!form.cacCertificatePhoto) errs.push('cacCertificatePhoto');
     }
     return errs;
@@ -585,14 +580,12 @@ export function OnboardingView() {
             branchId: form.branchId || undefined,
             staffId: form.staffId || (channel === 'field_onboard' ? adminId : undefined),
           },
-          // v41: Send uploaded document paths so the API can persist them on Business
+          // v43: Send uploaded document paths so the API can persist them on Business
           documents: {
             passportPhoto: form.passportPhoto || undefined,
             idCardFront: form.idCardPhoto || undefined,
-            idCardBack: form.idCardBackPhoto || undefined,
             meansOfId: form.meansOfIdPhoto || undefined,
             proofOfAddress: form.proofOfAddressPhoto || undefined,
-            shopPhoto: form.shopPhoto || undefined,
             cacCertificate: form.cacCertificatePhoto || undefined,
             additionalDocs: form.additionalDocs || undefined,
           },
@@ -1714,7 +1707,7 @@ function StepAssignment({
   branchManagers: any[];
   loanOfficers: any[];
   // v41: document upload handlers (passed from OnboardingView)
-  uploadDoc: (docType: 'passport' | 'id_front' | 'id_back' | 'proof_of_address' | 'shop_photo' | 'cac_certificate' | 'means_of_id', fieldKey: keyof FormState, file: File) => void;
+  uploadDoc: (docType: 'passport' | 'id_front' | 'proof_of_address' | 'cac_certificate' | 'means_of_id', fieldKey: keyof FormState, file: File) => void;
   uploadingDoc: string | null;
 }) {
   return (
@@ -1920,16 +1913,6 @@ function StepAssignment({
               onChange={(file) => uploadDoc('id_front', 'idCardPhoto', file)}
               onClear={() => setField('idCardPhoto', '')}
             />
-            {/* ID Card Back */}
-            <DocUploadField
-              label="ID Card — Back"
-              hint="Back of ID (if applicable)"
-              accept="image/*,application/pdf"
-              value={form.idCardBackPhoto}
-              uploading={uploadingDoc === 'id_back'}
-              onChange={(file) => uploadDoc('id_back', 'idCardBackPhoto', file)}
-              onClear={() => setField('idCardBackPhoto', '')}
-            />
             {/* Means of ID — separate from ID card photos */}
             <DocUploadField
               label="Acceptable Means of Identification *"
@@ -1949,16 +1932,6 @@ function StepAssignment({
               uploading={uploadingDoc === 'proof_of_address'}
               onChange={(file) => uploadDoc('proof_of_address', 'proofOfAddressPhoto', file)}
               onClear={() => setField('proofOfAddressPhoto', '')}
-            />
-            {/* Picture / Certificate of Business */}
-            <DocUploadField
-              label="Picture / Certificate of Business *"
-              hint="Shop photo or business certificate (where applicable)"
-              accept="image/*"
-              value={form.shopPhoto}
-              uploading={uploadingDoc === 'shop_photo'}
-              onChange={(file) => uploadDoc('shop_photo', 'shopPhoto', file)}
-              onClear={() => setField('shopPhoto', '')}
             />
             {/* CAC Certificate */}
             <DocUploadField
@@ -1987,10 +1960,8 @@ function StepAssignment({
             const uploaded = [
               form.passportPhoto && 'Passport Photo',
               form.idCardPhoto && 'ID Front',
-              form.idCardBackPhoto && 'ID Back',
               form.meansOfIdPhoto && 'Means of ID',
               form.proofOfAddressPhoto && 'Utility Bill',
-              form.shopPhoto && 'Business Photo',
               form.cacCertificatePhoto && 'CAC Certificate',
             ].filter(Boolean);
             return uploaded.length > 0 ? (

@@ -3,20 +3,20 @@ import { db } from '@/lib/db';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
+import { put } from '@vercel/blob';
 
 // ============================================================================
 // POST /api/customer/kyc-upload
 // Multipart form-data upload for KYC documents during onboarding.
 //
-// v41: Replaces the previous "demo-only" file inputs in the onboarding form.
-// Files are saved to /public/uploads/kyc/{uuid}-{originalname} and the path
-// is stored on the Business record (docFront, docBack, proofOfAddress,
-// docShopPhoto, docCac, selfie) so CS staff can view them in the KYC queue.
+// v43: Now uses Vercel Blob for production (persistent, CDN-backed URLs).
+// Falls back to /tmp for local development (ephemeral but functional).
+// Previously wrote to /public/uploads/kyc/ which is READ-ONLY on Vercel.
 //
 // Body (multipart):
 //   userId: string
-//   docType: 'passport' | 'id_front' | 'id_back' | 'proof_of_address' |
-//            'shop_photo' | 'cac_certificate' | 'means_of_id'
+//   docType: 'passport' | 'id_front' | 'proof_of_address' |
+//            'cac_certificate' | 'means_of_id'
 //   file: File (image/* or application/pdf, max 10MB)
 //
 // Returns: { path, docType, originalName, size }
@@ -25,9 +25,7 @@ import { randomUUID } from 'crypto';
 const ALLOWED_TYPES: Record<string, string[]> = {
   passport: ['image/jpeg', 'image/png', 'image/webp'],
   id_front: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
-  id_back: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
   proof_of_address: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
-  shop_photo: ['image/jpeg', 'image/png', 'image/webp'],
   cac_certificate: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
   means_of_id: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
 };
@@ -38,9 +36,7 @@ const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 const DOC_COLUMN_MAP: Record<string, string> = {
   passport: 'selfie',
   id_front: 'docFront',
-  id_back: 'docBack',
   proof_of_address: 'proofOfAddress',
-  shop_photo: 'docShopPhoto',
   cac_certificate: 'docCac',
   means_of_id: 'docFront',
 };
@@ -65,12 +61,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'file is required' }, { status: 400 });
     }
 
+    // v43: Also accept empty MIME type (some browsers send empty type for PNG)
     const allowedMimes = ALLOWED_TYPES[docType];
-    if (!allowedMimes.includes(file.type)) {
-      return NextResponse.json(
-        { error: `File type ${file.type} not allowed for ${docType}. Allowed: ${allowedMimes.join(', ')}` },
-        { status: 400 }
-      );
+    const fileType = file.type || detectMimeType(file.name);
+    if (!allowedMimes.includes(fileType)) {
+      // If MIME type is empty or unrecognized, try to detect from filename
+      if (!file.type && allowedMimes.includes(detectMimeType(file.name))) {
+        // OK — proceed with detected type
+      } else {
+        return NextResponse.json(
+          { error: `File type "${file.type || 'unknown'}" not allowed for ${docType}. Allowed: ${allowedMimes.join(', ')}` },
+          { status: 400 }
+        );
+      }
     }
 
     if (file.size > MAX_SIZE) {
@@ -82,19 +85,30 @@ export async function POST(req: NextRequest) {
 
     const ext = file.name.split('.').pop()?.toLowerCase() || 'bin';
     const safeName = `${randomUUID()}-${docType}.${ext}`;
-    const relativePath = `/uploads/kyc/${safeName}`;
-    const absolutePath = join(process.cwd(), 'public', 'uploads', 'kyc', safeName);
 
-    await mkdir(join(process.cwd(), 'public', 'uploads', 'kyc'), { recursive: true });
+    // ── v43: Upload to Vercel Blob (production) or /tmp (local dev) ────────
+    let relativePath: string;
 
-    const bytes = await file.arrayBuffer();
-    await writeFile(absolutePath, Buffer.from(bytes));
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+      // Production: use Vercel Blob
+      const blob = await put(`kyc/${safeName}`, file, {
+        access: 'public',
+        addRandomSuffix: false,
+      });
+      relativePath = blob.url;
+    } else {
+      // Local dev fallback: write to /tmp (writable on all platforms)
+      const tmpDir = join('/tmp', 'uploads', 'kyc');
+      await mkdir(tmpDir, { recursive: true });
+      const tmpPath = join(tmpDir, safeName);
+      const bytes = await file.arrayBuffer();
+      await writeFile(tmpPath, Buffer.from(bytes));
+      // Return a relative path that the dev server can serve via a rewrite
+      relativePath = `/uploads/kyc/${safeName}`;
+    }
 
+    // Persist the path on the Business record (only if user has a business)
     const column = DOC_COLUMN_MAP[docType];
-
-    // v41: Support 'pending' userId for pre-submit uploads during onboarding.
-    // The file is saved; the Business record is updated after user creation
-    // by the onboarding API.
     if (userId !== 'pending') {
       const user = await db.user.findUnique({
         where: { id: userId },
@@ -135,6 +149,20 @@ export async function POST(req: NextRequest) {
     });
   } catch (e: any) {
     console.error('[KYC UPLOAD] error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ error: e.message || 'Upload failed' }, { status: 500 });
+  }
+}
+
+// Helper: detect MIME type from file extension (fallback for empty file.type)
+function detectMimeType(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'png': return 'image/png';
+    case 'jpg':
+    case 'jpeg': return 'image/jpeg';
+    case 'webp': return 'image/webp';
+    case 'pdf': return 'application/pdf';
+    case 'gif': return 'image/gif';
+    default: return '';
   }
 }

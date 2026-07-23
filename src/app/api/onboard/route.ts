@@ -165,14 +165,12 @@ export async function POST(req: NextRequest) {
         branchId?: string;
         staffId?: string;
       };
-      // v41: KYC document paths (uploaded before submit via /api/customer/kyc-upload)
+      // v43: KYC document paths (uploaded before submit via /api/customer/kyc-upload)
       documents?: {
         passportPhoto?: string;
         idCardFront?: string;
-        idCardBack?: string;
         meansOfId?: string;
         proofOfAddress?: string;
-        shopPhoto?: string;
         cacCertificate?: string;
         additionalDocs?: string;
       };
@@ -345,12 +343,10 @@ export async function POST(req: NextRequest) {
           : null,
         yearsInOperation,
         kycStatus: 'DRAFT',
-        // v41: Persist KYC document paths uploaded during onboarding
+        // v43: Persist KYC document paths uploaded during onboarding (removed id_back + shop_photo)
         selfie: documents?.passportPhoto || null,
         docFront: documents?.idCardFront || documents?.meansOfId || null,
-        docBack: documents?.idCardBack || null,
         proofOfAddress: documents?.proofOfAddress || null,
-        docShopPhoto: documents?.shopPhoto || null,
         docCac: documents?.cacCertificate || null,
       },
     });

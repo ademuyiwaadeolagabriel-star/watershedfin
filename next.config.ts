@@ -6,9 +6,20 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
-  // Fix: jsonwebtoken is a Node.js-only module — exclude from client bundle
-  // In Next.js 16, this moved from experimental.serverComponentsExternalPackages to serverExternalPackages
   serverExternalPackages: ["jsonwebtoken"],
+  // v43: Rewrite /uploads/kyc/* to serve from /tmp in local dev
+  // (Vercel Blob handles this in production — no rewrite needed)
+  async rewrites() {
+    if (process.env.NODE_ENV === 'development') {
+      return [
+        {
+          source: '/uploads/kyc/:path*',
+          destination: '/api/dev-serve-upload?path=:path*',
+        },
+      ];
+    }
+    return [];
+  },
 };
 
 export default nextConfig;
