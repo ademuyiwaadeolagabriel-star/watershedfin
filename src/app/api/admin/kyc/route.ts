@@ -4,15 +4,18 @@ import { KYC_STATUSES } from '@/lib/constants';
 
 /**
  * GET /api/admin/kyc
- * Returns users whose KYC is in PROCESSING or RESUBMIT (i.e. needs compliance
- * review), together with their business + KYC documents.
- *
- * Also returns aggregate stats across all KYC statuses.
+ * v38: Now queries BOTH kycStatus AND onboardingStage.
+ * Shows users who are:
+ *   - kycStatus IN ('PROCESSING', 'RESUBMIT') — legacy KYC flow
+ *   - onboardingStage = 'cs_kyc_review' — v26+ onboarding flow
  */
 export async function GET(_req: NextRequest) {
   try {
     const where = {
-      kycStatus: { in: [KYC_STATUSES.PROCESSING, KYC_STATUSES.RESUBMIT] },
+      OR: [
+        { kycStatus: { in: [KYC_STATUSES.PROCESSING, KYC_STATUSES.RESUBMIT] } },
+        { onboardingStage: 'cs_kyc_review' },
+      ],
     };
 
     const [users, pending, approved, declined, resubmit, total] = await Promise.all([
@@ -27,6 +30,8 @@ export async function GET(_req: NextRequest) {
           bvn: true,
           nin: true,
           kycStatus: true,
+          onboardingStage: true,
+          accountNumberStatus: true,
           createdAt: true,
           updatedAt: true,
           business: {
@@ -58,7 +63,7 @@ export async function GET(_req: NextRequest) {
         },
         orderBy: { updatedAt: 'desc' },
       }),
-      db.user.count({ where: { kycStatus: KYC_STATUSES.PROCESSING } }),
+      db.user.count({ where: { OR: [{ kycStatus: KYC_STATUSES.PROCESSING }, { onboardingStage: 'cs_kyc_review' }] } }),
       db.user.count({ where: { kycStatus: KYC_STATUSES.APPROVED } }),
       db.user.count({ where: { kycStatus: KYC_STATUSES.DECLINED } }),
       db.user.count({ where: { kycStatus: KYC_STATUSES.RESUBMIT } }),

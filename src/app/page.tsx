@@ -98,6 +98,11 @@ import { CsPaymentVerificationView } from '@/components/views/cs/cs-payment-veri
 import { LegalCacSearchView } from '@/components/views/legal/legal-cac-search';
 import { LegalMccView } from '@/components/views/legal/legal-mcc';
 import { BranchTargetView } from '@/components/views/system/branch-targets';
+import { HocConfirmationView } from '@/components/views/loan/loan-step-hoc-confirmation';
+import { ComplianceReviewView } from '@/components/views/loan/loan-step-compliance-review';
+import { InternalControlView } from '@/components/views/loan/loan-step-internal-control';
+import { PostDisbursementHandoffView } from '@/components/views/loan/loan-step-post-disbursement';
+import { RespondToLegalView } from '@/components/views/customer/respond-to-legal';
 import { useEffect, useState } from 'react';
 
 export default function Home() {
@@ -217,6 +222,8 @@ export default function Home() {
         return <CustomerVerifyEmailView />;
       case 'customer-verify-phone':
         return <CustomerVerifyPhoneView />;
+      case 'respond-to-legal':
+        return <RespondToLegalView />;
       case 'customer-bank-accounts':
         return <CustomerBankAccounts />;
       case 'customer-security':
@@ -452,6 +459,16 @@ export default function Home() {
         return <LoanListView fixedStatus="running" title="My Portfolio (Monitored Loans)" />;
       case 'branch-targets':
         return <BranchTargetView />;
+
+      // v37 — New workflow step views
+      case 'loan-hoc-confirmation':
+        return <HocConfirmationView />;
+      case 'loan-compliance-review':
+        return <ComplianceReviewView />;
+      case 'loan-internal-control':
+        return <InternalControlView />;
+      case 'loan-post-disbursement':
+        return <PostDisbursementHandoffView />;
 
       // Public marketing site (also reachable from the admin context via direct nav)
       case 'public-home':

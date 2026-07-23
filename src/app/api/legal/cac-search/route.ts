@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireRole, getAuthFromRequest } from '@/lib/auth';
+import { createNotification } from '@/lib/notifications';
+import { sendSms } from '@/lib/sms';
 
 /**
  * GET /api/legal/cac-search
@@ -80,6 +82,56 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      // v38: Notify customer that account number has been assigned
+      void createNotification({
+        userId: legalCase.userId,
+        type: 'account_number_assigned',
+        title: 'Your Account Number Has Been Assigned!',
+        message: `Great news! Your CAC Name Search has been approved. Your account number is ${accountNumber}. You can now apply for loans and access all banking features.`,
+        category: 'kyc',
+        actionLabel: 'View Dashboard',
+        actionView: 'customer-dashboard',
+        metadata: { accountNumber, legalCaseId: caseId },
+      });
+
+      // v38: Send SMS to customer
+      try {
+        const customer = await db.user.findUnique({
+          where: { id: legalCase.userId },
+          select: { phone: true, firstName: true, email: true },
+        });
+        if (customer?.phone) {
+          void sendSms({
+            to: customer.phone,
+            message: `Watershed Capital: Your account number ${accountNumber} has been assigned. You can now access all banking features. Thank you for banking with us.`,
+          });
+        }
+        // Also send email (Resend) if configured
+        if (customer?.email) {
+          try {
+            const { Resend } = await import('resend');
+            const resend = new Resend(process.env.RESEND_API_KEY);
+            await resend.emails.send({
+              from: 'Watershed Capital <no-reply@watershedcapital.com>',
+              to: customer.email,
+              subject: 'Your Account Number Has Been Assigned',
+              html: `
+                <h2>Account Number Assigned</h2>
+                <p>Hello ${customer.firstName},</p>
+                <p>Great news! Your CAC Name Search has been approved by our Legal department.</p>
+                <p>Your account number is: <strong style="font-size: 20px; color: #1F7A4A;">${accountNumber}</strong></p>
+                <p>You can now apply for loans and access all banking features.</p>
+                <p>Thank you for banking with Watershed Capital.</p>
+              `,
+            });
+          } catch (emailErr) {
+            console.error('[LEGAL CAC] Email send failed (non-blocking):', emailErr);
+          }
+        }
+      } catch (e) {
+        // non-blocking
+      }
+
       return NextResponse.json({ ok: true, accountNumber });
     } else if (action === 'reject') {
       await db.legalNameSearch.update({
@@ -104,6 +156,18 @@ export async function POST(req: NextRequest) {
           severity: 'warning',
           ipAddress: req.headers.get('x-forwarded-for') || undefined,
         },
+      });
+
+      // v38: Notify customer about the rejection and ask them to respond
+      void createNotification({
+        userId: legalCase.userId,
+        type: 'legal_cac_rejected',
+        title: 'Legal CAC Search — Response Needed',
+        message: `Legal has reviewed your CAC Name Search and needs additional information. Reason: ${reason || 'Please review and respond to Legal observations.'} Please log in to your account and respond to Legal's observations.`,
+        category: 'kyc',
+        actionLabel: 'Respond to Legal',
+        actionView: 'respond-to-legal',
+        metadata: { legalCaseId: caseId, reason },
       });
 
       return NextResponse.json({ ok: true });

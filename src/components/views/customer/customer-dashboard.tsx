@@ -3,6 +3,8 @@
 import { useAppStore } from '@/lib/store';
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
+import { OnboardingProgressStepper } from '@/components/views/customer/onboarding-progress-stepper';
+import { OnboardingPaymentView } from '@/components/views/customer/onboarding-payment';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -32,6 +34,7 @@ export function CustomerDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [gamification, setGamification] = useState<any>(null);
+  const [onboardingStage, setOnboardingStage] = useState<string>('onboarding_complete');
 
   useEffect(() => {
     (async () => {
@@ -40,6 +43,8 @@ export function CustomerDashboard() {
         const res = await authFetch(`/api/customer/dashboard?userId=${currentUser.id}`);
         const d = await res.json();
         setData(d);
+        // v37: Track onboarding stage for the progress stepper
+        if (d.user?.onboardingStage) setOnboardingStage(d.user.onboardingStage);
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
     })();
@@ -115,6 +120,19 @@ export function CustomerDashboard() {
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-6">
+          {/* v37: Onboarding Progress Stepper — shown when onboarding is not complete */}
+          {onboardingStage !== 'onboarding_complete' && (
+            <OnboardingProgressStepper
+              currentStage={onboardingStage}
+              accountNumber={data?.user?.accountNumber}
+            />
+          )}
+
+          {/* v38: Onboarding Payment — shown when payment is needed */}
+          {onboardingStage === 'payment_pending' && (
+            <OnboardingPaymentView />
+          )}
+
           {/* ════════════════════════════════════════════════════════════════
               1. HERO BANNER — Account + Outstanding + Next Payment + Credit Standing
           ════════════════════════════════════════════════════════════════ */}

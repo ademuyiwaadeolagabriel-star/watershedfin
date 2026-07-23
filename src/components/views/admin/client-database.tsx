@@ -304,6 +304,7 @@ export function ClientDatabaseView() {
                 <TableHead className="text-[11px] uppercase tracking-wider text-slate-500">Branch</TableHead>
                 <TableHead className="text-[11px] uppercase tracking-wider text-slate-500">Loans</TableHead>
                 <TableHead className="text-[11px] uppercase tracking-wider text-slate-500">KYC</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wider text-slate-500">Onboarding</TableHead>
                 <TableHead className="text-[11px] uppercase tracking-wider text-slate-500">Joined</TableHead>
                 <TableHead className="text-[11px] uppercase tracking-wider text-slate-500 text-right">Action</TableHead>
               </TableRow>
@@ -372,6 +373,23 @@ export function ClientDatabaseView() {
                         </Badge>
                       ) : (
                         <span className="text-[10px] text-slate-400">None</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={cn(
+                        'text-[9px] capitalize',
+                        (c as any).onboardingStage === 'onboarding_complete' && 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                        (c as any).onboardingStage === 'payment_pending' && 'bg-amber-50 text-amber-700 border-amber-200',
+                        (c as any).onboardingStage === 'legal_cac_search' && 'bg-blue-50 text-blue-700 border-blue-200',
+                        (c as any).onboardingStage === 'legal_rejected' && 'bg-red-50 text-red-700 border-red-200',
+                        (c as any).onboardingStage === 'cs_kyc_review' && 'bg-purple-50 text-purple-700 border-purple-200',
+                      )}>
+                        {((c as any).onboardingStage || '—').replace(/_/g, ' ')}
+                      </Badge>
+                      {(c as any).accountNumber && (
+                        <span className="block text-[9px] font-mono text-slate-400 mt-0.5">
+                          {(c as any).accountNumber}
+                        </span>
                       )}
                     </TableCell>
                     <TableCell className="text-xs text-slate-600">{fmtDate(c.createdAt)}</TableCell>

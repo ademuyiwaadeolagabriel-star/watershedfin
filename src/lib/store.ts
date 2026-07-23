@@ -135,7 +135,13 @@ export type ViewKey =
   | 'cs-payment-verification'
   | 'my-portfolio'
   // v29 — Branch targets
-  | 'branch-targets';
+  | 'branch-targets'
+  // v37 — New workflow step views
+  | 'loan-hoc-confirmation'
+  | 'loan-compliance-review'
+  | 'loan-internal-control'
+  | 'loan-post-disbursement'
+  | 'respond-to-legal';
 
 export type Portal = 'public' | 'customer' | 'admin';
 

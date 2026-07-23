@@ -51,6 +51,21 @@ export async function POST(
       );
     }
 
+    // v38: CAM Submission Lock — cannot submit/forward from LO_ENTRY or BM_VETTING/BM_QC
+    // until the customer's account number has been assigned (Legal CAC approved)
+    if (action === 'forward' && ['LO_ENTRY', 'LO_ASSESSMENT', 'BM_QC', 'BM_VETTING'].includes(currentStep)) {
+      const user = loan.user;
+      if (user && user.accountNumberStatus !== 'assigned') {
+        return NextResponse.json(
+          {
+            error: 'Cannot submit CAM for appraisal until Legal CAC Name Search is approved and the customer account number has been assigned.',
+            accountNumberStatus: user.accountNumberStatus || 'pending',
+          },
+          { status: 403 }
+        );
+      }
+    }
+
     // S1 FIX: Branch scoping — branch-scoped roles can only act on loans in their branch
     const branchScopedRoles = ['bm', 'loan', 'frontdesk', 'treasury'];
     if (branchScopedRoles.includes(admin.role) && admin.branchId && loan.branchId && admin.branchId !== loan.branchId) {
@@ -69,6 +84,28 @@ export async function POST(
       case 'forward': {
         const allowed = WORKFLOW_TRANSITIONS[currentStep] || [];
         newStep = nextStep && allowed.includes(nextStep) ? nextStep : (allowed[0] || currentStep);
+
+        // v38: BM Self-Vet — if a BM is forwarding from LO_ENTRY and they are the loan's creator,
+        // skip BM_QC and go directly to HOC_ASSIGNMENT
+        if (currentStep === 'LO_ENTRY' && admin.role === 'bm' && loan.staffId === admin.id) {
+          newStep = 'HOC_ASSIGNMENT'; // Skip BM_QC — BM self-vets
+          // Log the self-vet in audit trail
+          try {
+            await db.workflowRework.create({
+              data: {
+                loanId: loan.id,
+                fromStep: 'LO_ENTRY',
+                toStep: 'HOC_ASSIGNMENT',
+                reworkedById: admin.id,
+                reason: 'BM self-vet — skipped BM_QC (BM is the loan creator)',
+                comments: 'BM created and vetted this loan themselves',
+              },
+            });
+          } catch (e) {
+            // non-blocking
+          }
+        }
+
         if (newStep === currentStep && allowed.length === 0) {
           // Terminal step — move to disbursement
           newStatus = 'running';

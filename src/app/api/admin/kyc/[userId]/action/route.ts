@@ -52,10 +52,17 @@ export async function POST(
           : KYC_STATUSES.RESUBMIT;
 
     // Update User.kycStatus + mirror to Business.kycStatus + declineReason
+    // v38: On KYC approval, advance to payment_pending (customer needs to pay CAC fee)
+    const onboardingStageUpdate =
+      action === 'approve' ? 'payment_pending' :
+      action === 'decline' ? 'cs_kyc_review' : // stay in CS review if declined
+      'cs_kyc_review'; // stay in CS review if resubmit requested
+
     const updated = await db.user.update({
       where: { id: userId },
       data: {
         kycStatus: newStatus,
+        onboardingStage: onboardingStageUpdate,
         ...(user.businessId
           ? {
               business: {
@@ -100,7 +107,7 @@ export async function POST(
 
     if (action === 'approve') {
       notifTitle = 'Your KYC has been approved';
-      notifMessage = `Great news, ${user.firstName}! Your KYC verification has been approved. You can now apply for loans and access all account features.`;
+      notifMessage = `Great news, ${user.firstName}! Your KYC verification has been approved. Please pay the CAC search fee to continue with your account setup.`;
       notifType = 'kyc_approved';
     } else if (action === 'decline') {
       notifTitle = 'Your KYC has been declined';

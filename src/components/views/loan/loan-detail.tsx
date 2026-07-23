@@ -28,6 +28,17 @@ export function LoanDetailView() {
   const [loan, setLoan] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  const reloadLoan = async () => {
+    if (!loanId) return;
+    try {
+      const res = await authFetch(`/api/loans/${loanId}`);
+      const data = await res.json();
+      if (data.loan) setLoan(data.loan);
+    } catch (e) {
+      console.error('Loan reload error:', e);
+    }
+  };
+
   useEffect(() => {
     (async () => {
       if (!loanId) return;
@@ -115,7 +126,7 @@ export function LoanDetailView() {
             </Button>
           )}
           {canActOnCurrentStep && loan.status !== 'declined' && loan.status !== 'paid' && (
-            <WorkflowActions loan={loan} adminId={currentAdmin?.id} onDone={() => window.location.reload()} />
+            <WorkflowActions loan={loan} adminId={currentAdmin?.id} onDone={reloadLoan} />
           )}
         </div>
       </div>
@@ -123,14 +134,14 @@ export function LoanDetailView() {
       {/* BVN Verification Panel (Loan Officer) */}
       {loan.currentStep && ['LO_ENTRY', 'LO_ASSESSMENT'].includes(loan.currentStep) && currentAdmin && (
         (currentAdmin.role === 'loan' || currentAdmin.role === 'super' || currentAdmin.loanOrigination) && (
-          <BvnVerificationPanel loan={loan} adminId={currentAdmin.id} onDone={() => window.location.reload()} />
+          <BvnVerificationPanel loan={loan} adminId={currentAdmin.id} onDone={reloadLoan} />
         )
       )}
 
       {/* CAC Verification Panel (Legal) */}
       {loan.currentStep === 'LEGAL_CAC_CHECK' && currentAdmin && (
         (currentAdmin.role === 'legal' || currentAdmin.role === 'super' || currentAdmin.loanLegal) && (
-          <CacVerificationPanel loan={loan} adminId={currentAdmin.id} onDone={() => window.location.reload()} />
+          <CacVerificationPanel loan={loan} adminId={currentAdmin.id} onDone={reloadLoan} />
         )
       )}
 

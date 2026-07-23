@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import { notifyWelcome } from '@/lib/notification-service';
+import { createNotification } from '@/lib/notifications';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -127,6 +128,7 @@ export async function POST(req: NextRequest) {
         lastName: string;
         email?: string;
         phone: string;
+        password?: string; // v37: customer sets their own password during self-onboarding
         altPhone?: string;
         bvn: string;
         nin: string;
@@ -173,14 +175,27 @@ export async function POST(req: NextRequest) {
     }
 
     // ----- generate identifiers -----
-    const accountNumber = await generateUniqueAccountNumber();
+    // v37: Account number is NOT assigned at onboarding — only after Legal CAC approval.
+    // merchantId is still generated here (used for internal tracking).
     const merchantId = await generateUniqueMerchantId();
 
     // ----- password handling -----
-    // For self_onboard the customer gets a random temp password (hashed).
-    // For staff-created accounts the staff gets to see the temp password.
-    const tempPasswordPlain = Math.random().toString(36).slice(-8);
-    const passwordHash = bcrypt.hashSync(tempPasswordPlain, 10);
+    // v37: For self_onboard, the customer sets their OWN password.
+    // For staff-created accounts, a random temp password is generated.
+    let passwordHash: string;
+    let tempPasswordPlain: string | null = null;
+
+    if (channel === 'self_onboard' && personal.password) {
+      // Customer chose their own password during self-onboarding
+      if (personal.password.length < 8) {
+        return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 });
+      }
+      passwordHash = bcrypt.hashSync(personal.password, 10);
+    } else {
+      // Staff onboarding — generate random temp password
+      tempPasswordPlain = Math.random().toString(36).slice(-8);
+      passwordHash = bcrypt.hashSync(tempPasswordPlain, 10);
+    }
 
     // ----- determine branch & staff assignment -----
     let assignedBranchId: string | undefined = assignment?.branchId;
@@ -224,6 +239,22 @@ export async function POST(req: NextRequest) {
     const assignmentStatus =
       assignedStaffId || assignedBranchId ? 'assigned' : 'unassigned';
 
+    // v40: If a branch was selected (self_onboard or desk_onboard), find and assign the BM
+    let assignedBmId: string | undefined = undefined;
+    if (assignedBranchId) {
+      try {
+        const branch = await db.branch.findUnique({
+          where: { id: assignedBranchId },
+          select: { managerId: true },
+        });
+        if (branch?.managerId) {
+          assignedBmId = branch.managerId;
+        }
+      } catch (e) {
+        // non-blocking
+      }
+    }
+
     // ----- create user -----
     const user = await db.user.create({
       data: {
@@ -237,11 +268,13 @@ export async function POST(req: NextRequest) {
         phone: personal.phone || null,
         password: passwordHash,
         accountType: 'customer',
-        accountNumber,
+        // v37: accountNumber NOT set here — only after Legal CAC approval
+        // accountNumberStatus defaults to 'pending' per schema
         merchantId,
         branch: assignedBranchId ? { connect: { id: assignedBranchId } } : undefined,
         loanOfficer: assignedStaffId ? { connect: { id: assignedStaffId } } : undefined,
         assignedBranchId: assignedBranchId || null,
+        assignedBmId: assignedBmId || null, // v40: assign BM of selected branch
         assignedBy: adminId || null,
         assignedAt: new Date(),
         assignmentStatus,
@@ -263,6 +296,9 @@ export async function POST(req: NextRequest) {
         yearsAtResidence:
           personal.yearsAtResidence != null ? Number(personal.yearsAtResidence) : null,
         kycStatus: 'DRAFT',
+        // v37: Set onboarding stage to CS KYC review
+        onboardingStage: 'cs_kyc_review',
+        accountNumberStatus: 'pending',
         otpRequired: 'on',
         loanPurpose: loan?.loanPurpose || null,
         hasExternalLoans: !!loan?.hasExternalLoans,
@@ -362,6 +398,30 @@ export async function POST(req: NextRequest) {
     // ----- send welcome notification (email + dashboard) -----
     const customerName = `${user.firstName} ${user.lastName}`.trim();
     void notifyWelcome(user.id, customerName, user.email || '');
+
+    // v38: Notify all Customer Service staff that a new application needs KYC review
+    try {
+      const csStaff = await db.admin.findMany({
+        where: { role: 'cs', status: 1, csKycVerify: true },
+        select: { id: true },
+      });
+      if (csStaff.length > 0) {
+        await Promise.all(csStaff.map(cs =>
+          createNotification({
+            adminId: cs.id,
+            type: 'kyc_review_request',
+            title: 'New Customer Application — KYC Review Needed',
+            message: `A new application from ${customerName} requires KYC verification. Please review the submitted documents.`,
+            category: 'kyc',
+            actionLabel: 'Review KYC',
+            actionView: 'kyc',
+            metadata: { userId: user.id, onboardingStage: 'cs_kyc_review' },
+          })
+        ));
+      }
+    } catch (notifErr) {
+      console.error('[ONBOARD] CS notification failed (non-blocking):', notifErr);
+    }
 
     // ----- send loan submitted notification if loan was created -----
     if (loanRow) {

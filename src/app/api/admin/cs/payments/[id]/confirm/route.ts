@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireRole, getAuthFromRequest } from '@/lib/auth';
+import { createNotification } from '@/lib/notifications';
 
 /**
  * POST /api/admin/cs/payments/[id]/confirm
@@ -56,6 +57,38 @@ export async function POST(
         },
       });
 
+      // v38: Notify customer that payment was confirmed + application forwarded to Legal
+      void createNotification({
+        userId: payment.userId,
+        type: 'payment_confirmed',
+        title: 'Payment Confirmed — Legal Review Starting',
+        message: `Your payment of ₦${payment.amount.toLocaleString()} has been confirmed. Your application has been forwarded to the Legal department for CAC Name Search.`,
+        category: 'payment',
+        actionLabel: 'View Status',
+        actionView: 'customer-dashboard',
+      });
+
+      // v38: Notify all Legal staff with legalCacSearch permission
+      try {
+        const legalStaff = await db.admin.findMany({
+          where: { role: 'legal', status: 1, legalCacSearch: true },
+          select: { id: true },
+        });
+        await Promise.all(legalStaff.map(ls =>
+          createNotification({
+            adminId: ls.id,
+            type: 'legal_cac_search_request',
+            title: 'New CAC Name Search Request',
+            message: `A new CAC name search request has been received. Please review and process.`,
+            category: 'kyc',
+            actionLabel: 'Review CAC Search',
+            actionView: 'legal-cac-search',
+          })
+        ));
+      } catch (e) {
+        // non-blocking
+      }
+
       return NextResponse.json({ ok: true });
     } else if (action === 'reject') {
       await db.onboardingPayment.update({
@@ -81,6 +114,17 @@ export async function POST(
           severity: 'warning',
           ipAddress: req.headers.get('x-forwarded-for') || undefined,
         },
+      });
+
+      // v38: Notify customer that payment was rejected
+      void createNotification({
+        userId: payment.userId,
+        type: 'payment_rejected',
+        title: 'Payment Rejected',
+        message: `Your payment proof could not be verified. ${reason || 'Please re-upload a clear proof of payment.'}`,
+        category: 'payment',
+        actionLabel: 'View Payment',
+        actionView: 'customer-dashboard',
       });
 
       return NextResponse.json({ ok: true });

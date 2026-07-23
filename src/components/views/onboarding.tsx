@@ -82,6 +82,7 @@ interface FormState {
   lastName: string;
   email: string;
   phone: string;
+  password: string; // v38: customer sets their own password during self-onboarding
   altPhone: string;
   bvn: string;
   nin: string;
@@ -134,6 +135,7 @@ const emptyForm: FormState = {
   lastName: '',
   email: '',
   phone: '',
+  password: '',
   altPhone: '',
   bvn: '',
   nin: '',
@@ -233,6 +235,10 @@ export function OnboardingView() {
   const [submitError, setSubmitError] = useState<string>('');
   const [result, setResult] = useState<any>(null);
   const [copied, setCopied] = useState(false);
+  // v39: CAC consent dialog state
+  const [showConsent, setShowConsent] = useState(false);
+  const [cacFee, setCacFee] = useState<number>(5000);
+  const [consentAccepted, setConsentAccepted] = useState(false);
 
   // ----- load supporting data on mount -----
   useEffect(() => {
@@ -249,6 +255,14 @@ export function OnboardingView() {
         if (secData.sectors) setSectors(secData.sectors);
         if (planData.plans) setPlans(planData.plans);
         if (brData.branches) setBranches(brData.branches);
+
+        // v39: Fetch CAC search fee for consent dialog
+        try {
+          const feeRes = await fetch('/api/public/fees');
+          const feeData = await feeRes.json();
+          const cacFeeEntry = feeData.fees?.find((f: any) => f.key === 'fee_cac_search');
+          if (cacFeeEntry) setCacFee(cacFeeEntry.amount);
+        } catch {}
       } catch (e) {
         console.error('Failed to load supporting data', e);
       }
@@ -353,9 +367,13 @@ export function OnboardingView() {
         'residentialAddress', 'nearestLandmark',
         'houseOwnershipStatus',
       ];
-      if (channel === 'self_onboard') req.push('email');
+      if (channel === 'self_onboard') req.push('email', 'password');
       for (const k of req) {
         if (!(form as any)[k] || String((form as any)[k]).trim() === '') errs.push(k);
+      }
+      // v38: Password validation for self-onboard
+      if (channel === 'self_onboard' && form.password && form.password.length < 8) {
+        errs.push('password');
       }
       // BVN format
       if (form.bvn && !/^\d{11}$/.test(form.bvn)) errs.push('bvn');
@@ -372,7 +390,7 @@ export function OnboardingView() {
       }
     }
     if (s === 2) {
-      if (channel === 'desk_onboard') {
+      if (channel === 'desk_onboard' || channel === 'self_onboard') {
         if (!form.branchId) errs.push('branchId');
       }
       if (channel === 'bm_onboard') {
@@ -399,7 +417,7 @@ export function OnboardingView() {
     if (step === 0) {
       ['firstName', 'lastName', 'phone', 'bvn', 'nin', 'dob', 'state', 'town',
        'residentialAddress', 'nearestLandmark', 'houseOwnershipStatus',
-       ...(channel === 'self_onboard' ? ['email'] : []),
+       ...(channel === 'self_onboard' ? ['email', 'password'] : []),
       ].forEach((k) => (newTouched[k] = true));
     }
     if (step === 1) {
@@ -408,7 +426,7 @@ export function OnboardingView() {
       );
     }
     if (step === 2) {
-      [...(channel === 'desk_onboard' ? ['branchId'] : []),
+      [...(channel === 'desk_onboard' || channel === 'self_onboard' ? ['branchId'] : []),
        ...(channel === 'bm_onboard' ? ['staffId'] : []),
        'agreed',
       ].forEach((k) => (newTouched[k] = true));
@@ -433,6 +451,17 @@ export function OnboardingView() {
       return;
     }
 
+    // v39: Show CAC consent dialog before proceeding
+    if (!consentAccepted) {
+      setShowConsent(true);
+      return;
+    }
+
+    await doSubmit();
+  };
+
+  const doSubmit = async () => {
+
     setSubmitting(true);
     setSubmitError('');
     try {
@@ -448,6 +477,7 @@ export function OnboardingView() {
             lastName: form.lastName,
             email: form.email || undefined,
             phone: form.phone,
+            password: form.password || undefined, // v38: customer-chosen password
             altPhone: form.altPhone || undefined,
             bvn: form.bvn,
             nin: form.nin,
@@ -1015,6 +1045,24 @@ function StepPersonal({
           </Field>
         </div>
 
+        {/* v38: Password field — only for self_onboard */}
+        {channel === 'self_onboard' && (
+          <Field
+            label="Create Password"
+            required
+            invalid={isFieldInvalid('password')}
+            hint="Min 8 characters. You will use this to login to your account."
+          >
+            <Input
+              type="password"
+              value={form.password}
+              onChange={(e) => setField('password', e.target.value)}
+              placeholder="Min 8 characters"
+              minLength={8}
+            />
+          </Field>
+        )}
+
         {/* Duplicate alert */}
         {dupMatches.length > 0 && (
           <div className="rounded-lg border border-red-200 bg-red-50 p-4">
@@ -1540,20 +1588,40 @@ function StepAssignment({
         </CardHeader>
         <CardContent className="space-y-4">
           {channel === 'self_onboard' && (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-sm text-slate-700">
-                Based on your location, you will be assigned to the nearest branch. A Branch
-                Manager will assign a Loan Officer.
-              </p>
-              <div className="flex items-center gap-2 mt-3 text-xs text-slate-600">
-                <span className="rounded-full bg-white px-2 py-1 border border-emerald-200">Customer</span>
-                <ArrowRight className="h-3 w-3" />
-                <span className="rounded-full bg-white px-2 py-1 border border-emerald-200">Nearest Branch</span>
-                <ArrowRight className="h-3 w-3" />
-                <span className="rounded-full bg-white px-2 py-1 border border-emerald-200">BM</span>
-                <ArrowRight className="h-3 w-3" />
-                <span className="rounded-full bg-white px-2 py-1 border border-emerald-200">Loan Officer</span>
+            <div className="space-y-4">
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                <p className="text-sm text-slate-700 mb-2">
+                  Please select the branch nearest to you. This branch will be your servicing branch.
+                </p>
               </div>
+              <Field label="Select Your Branch" required invalid={isFieldInvalid('branchId')}>
+                <Select value={form.branchId || 'none'} onValueChange={(v) => setField('branchId', v === 'none' ? '' : v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose nearest branch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— Select Branch —</SelectItem>
+                    {branches.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.name} ({b.code}){b.state ? ` — ${b.state}` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              {form.branchId && (
+                <div className="flex items-center gap-2 text-xs text-slate-600">
+                  <span className="rounded-full bg-white px-2 py-1 border border-emerald-200">You</span>
+                  <ArrowRight className="h-3 w-3" />
+                  <span className="rounded-full bg-white px-2 py-1 border border-emerald-200">
+                    {branches.find(b => b.id === form.branchId)?.name}
+                  </span>
+                  <ArrowRight className="h-3 w-3" />
+                  <span className="rounded-full bg-white px-2 py-1 border border-emerald-200">BM</span>
+                  <ArrowRight className="h-3 w-3" />
+                  <span className="rounded-full bg-white px-2 py-1 border border-emerald-200">Loan Officer</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -1782,6 +1850,54 @@ function StepAssignment({
           </div>
         </CardContent>
       </Card>
+
+      {/* v39: CAC Search Consent Dialog */}
+      {showConsent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-600" />
+              <h3 className="text-base font-bold text-slate-900">CAC Name Search Fee</h3>
+            </div>
+            <p className="text-sm text-slate-600">
+              Your application will be reviewed by Customer Service for KYC verification. After
+              KYC approval, a <strong>CAC Name Search</strong> will be conducted which attracts
+              a fee of <strong>₦{cacFee.toLocaleString()}</strong>.
+            </p>
+            <p className="text-sm text-slate-600">
+              By clicking <strong>Accept</strong>, you agree to pay this fee after your KYC is
+              approved. You can pay via Paystack (card) or manual bank transfer.
+            </p>
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+              <p className="text-xs text-amber-800">
+                <AlertCircle className="h-3.5 w-3.5 inline mr-1" />
+                If you click <strong>Reject</strong>, your application will be cancelled.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowConsent(false);
+                  setConsentAccepted(false);
+                }}
+              >
+                Reject / Cancel
+              </Button>
+              <Button
+                className="bg-emerald-600 hover:bg-emerald-700"
+                onClick={() => {
+                  setConsentAccepted(true);
+                  setShowConsent(false);
+                  void doSubmit();
+                }}
+              >
+                <CheckCircle2 className="h-4 w-4 mr-1" /> Accept & Submit
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 {
   "name": "watershed-capital",
-  "version": "0.35.1",
+  "version": "0.40.0",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",
