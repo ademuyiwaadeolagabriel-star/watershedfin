@@ -1852,7 +1852,7 @@ function StepAssignment({
       </Card>
 
       {/* v39: CAC Search Consent Dialog */}
-      {showConsent && (
+      {typeof showConsent !== 'undefined' && showConsent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 space-y-4">
             <div className="flex items-center gap-2">

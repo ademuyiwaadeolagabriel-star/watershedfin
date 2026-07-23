@@ -96,12 +96,6 @@ async function createStaff(body: any, authPayload: { id: string; role: string },
       return NextResponse.json({ error: `Email "${cleanEmail}" already exists` }, { status: 409 });
     }
 
-    // Build permission flags
-    const perms: Record<string, boolean> = {};
-    for (const p of PERMISSION_FLAGS) {
-      perms[p] = permissions?.[p] === true;
-    }
-
     // Hash password
     const hashedPassword = bcrypt.hashSync(String(password), 10);
 
@@ -110,9 +104,8 @@ async function createStaff(body: any, authPayload: { id: string; role: string },
       ? String(branchId)
       : null;
 
-    // Build create data — use type any to allow v26 fields that may not be in Prisma client yet
-    // (if prisma generate hasn't been run after the v26 schema update)
-    const createData: any = {
+    // Build create data with ONLY safe fields
+    const baseData: any = {
       firstName: String(firstName).trim(),
       lastName: String(lastName).trim(),
       username: cleanUsername,
@@ -123,43 +116,50 @@ async function createStaff(body: any, authPayload: { id: string; role: string },
       roleType: String(role),
       branchId: cleanBranchId,
       status: 1,
-      ...perms,
     };
 
-    // Add v26 fields with try/catch — if prisma generate hasn't been run,
-    // these fields don't exist in the Prisma client and the create will fail.
-    // We add them optimistically; if the create fails, the catch block retries without them.
-    try {
-      createData.mustChangePassword = false;
-      createData.passwordChangedAt = new Date();
-    } catch {
-      // ignore
+    // Add permission flags one by one — only the ones the Prisma Client knows about
+    const legacyFlags = [
+      'loanOrigination', 'loanVetting', 'loanStructuring', 'loanAnalyst',
+      'loanRisk', 'loanLegal', 'loanCfoReview', 'loanFinalization',
+      'loanDisbursement', 'loanPortfolio', 'loanSupervisor', 'loanMcc',
+      'onboarding', 'kycVerify', 'accountingView', 'accountingPost',
+      'treasuryOnboard', 'treasuryBook', 'treasuryAssets', 'branchManage',
+      'auditAccess', 'internalControl', 'compliance', 'reportsGlobal',
+      'generalSettings', 'message', 'support',
+    ];
+    for (const f of legacyFlags) {
+      baseData[f] = permissions?.[f] === true;
     }
 
+    // v26 fields — add separately so we can retry without them if they fail
+    const v26Fields: any = {
+      csKycVerify: permissions?.csKycVerify === true,
+      csPaymentVerify: permissions?.csPaymentVerify === true,
+      legalCacSearch: permissions?.legalCacSearch === true,
+      legalMcc: permissions?.legalMcc === true,
+      mustChangePassword: false,
+      passwordChangedAt: new Date(),
+    };
+
     let admin;
+    // Try with v26 fields first
     try {
       admin = await db.admin.create({
-        data: createData,
+        data: { ...baseData, ...v26Fields },
         select: {
           id: true, firstName: true, lastName: true, username: true, email: true, role: true, branchId: true,
         },
       });
     } catch (createErr: any) {
-      // If the error is about unknown fields (mustChangePassword, passwordChangedAt),
-      // retry without those fields
-      if (createErr.message && (createErr.message.includes('mustChangePassword') || createErr.message.includes('passwordChangedAt'))) {
-        console.warn('[STAFF CREATE] Retrying without v26 fields (run prisma generate + db push)');
-        delete createData.mustChangePassword;
-        delete createData.passwordChangedAt;
-        admin = await db.admin.create({
-          data: createData,
-          select: {
-            id: true, firstName: true, lastName: true, username: true, email: true, role: true, branchId: true,
-          },
-        });
-      } else {
-        throw createErr;
-      }
+      // If the error is about unknown fields, retry with ONLY legacy fields
+      console.warn('[STAFF CREATE] First attempt failed, retrying without v26 fields:', createErr.message?.slice(0, 200));
+      admin = await db.admin.create({
+        data: baseData,
+        select: {
+          id: true, firstName: true, lastName: true, username: true, email: true, role: true, branchId: true,
+        },
+      });
     }
 
     // Audit log (non-blocking)
