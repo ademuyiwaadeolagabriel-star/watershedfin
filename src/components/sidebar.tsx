@@ -427,6 +427,9 @@ export function Sidebar() {
           })}
         </nav>
 
+        {/* v43: Sidebar Notifications Panel */}
+        {currentAdmin && <SidebarNotifications adminId={currentAdmin.id} />}
+
         {/* User card */}
         <div className="absolute bottom-0 left-0 right-0 border-t border-slate-800 p-3">
           <div className="flex items-center gap-3">
@@ -453,5 +456,127 @@ export function Sidebar() {
         </div>
       </aside>
     </>
+  );
+}
+
+// ============================================================================
+// v43: SidebarNotifications — shows recent unread notifications at sidebar bottom
+// ============================================================================
+
+function SidebarNotifications({ adminId }: { adminId: string }) {
+  const [items, setItems] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [expanded, setExpanded] = useState(false);
+  const setView = useAppStore((s) => s.setView);
+
+  useEffect(() => {
+    if (!adminId) return;
+    let cancelled = false;
+
+    const fetchNotifs = async () => {
+      try {
+        const r = await authFetch(`/api/notifications?adminId=${adminId}&limit=5`).catch(() => null as any);
+        if (r && r.ok) {
+          const d = await r.json();
+          if (!cancelled) {
+            setItems(d.items || []);
+            setUnreadCount(d.unreadCount || 0);
+          }
+        }
+      } catch {}
+    };
+
+    fetchNotifs();
+    const interval = setInterval(fetchNotifs, 30000); // 30s
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [adminId]);
+
+  if (items.length === 0 && unreadCount === 0) return null;
+
+  return (
+    <div className="border-t border-slate-800 max-h-[280px] overflow-y-auto">
+      {/* Header */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-slate-800/50"
+      >
+        <div className="flex items-center gap-2">
+          <Bell className="h-3.5 w-3.5 text-emerald-400" />
+          <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+            Notifications
+          </span>
+        </div>
+        {unreadCount > 0 && (
+          <span className="flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {/* Notification items */}
+      {expanded && (
+        <div className="px-2 pb-2 space-y-1">
+          {items.length === 0 ? (
+            <p className="text-[10px] text-slate-500 py-2 text-center">No notifications</p>
+          ) : (
+            items.slice(0, 5).map((item: any) => (
+              <button
+                key={item.id}
+                onClick={() => {
+                  // Mark as read (fire-and-forget)
+                  authFetch(`/api/notifications/${item.id}/read`, { method: 'POST' }).catch(() => {});
+                  // Navigate to action view if set
+                  if (item.actionView) {
+                    let params: Record<string, any> = {};
+                    if (item.actionParams) {
+                      try { params = JSON.parse(item.actionParams); } catch {}
+                    }
+                    setView(item.actionView as any, params);
+                  }
+                }}
+                className={cn(
+                  'flex w-full items-start gap-2 rounded-md p-2 text-left transition-colors hover:bg-slate-800',
+                  !item.isRead && 'bg-emerald-950/30'
+                )}
+              >
+                {!item.isRead && (
+                  <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                )}
+                {item.isRead && <span className="mt-1 w-1.5 shrink-0" />}
+                <div className="flex-1 min-w-0">
+                  <p className={cn(
+                    'text-[11px] truncate',
+                    item.isRead ? 'text-slate-400 font-normal' : 'text-slate-200 font-semibold'
+                  )}>
+                    {item.title}
+                  </p>
+                  <p className="text-[10px] text-slate-500 line-clamp-1">{item.message}</p>
+                  <p className="text-[9px] text-slate-600 mt-0.5">
+                    {new Date(item.createdAt).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              </button>
+            ))
+          )}
+          {/* Mark all as read */}
+          {unreadCount > 0 && (
+            <button
+              onClick={async () => {
+                await authFetch('/api/notifications/read-all', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ adminId }),
+                }).catch(() => {});
+                setItems(prev => prev.map(i => ({ ...i, isRead: true })));
+                setUnreadCount(0);
+              }}
+              className="w-full text-center text-[10px] text-emerald-400 hover:text-emerald-300 py-1"
+            >
+              Mark all as read
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

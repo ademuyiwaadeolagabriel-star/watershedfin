@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getAuthFromRequest } from '@/lib/auth';
 
 function calcRating(score: number): string {
   if (score >= 20) return 'critical';
@@ -25,6 +26,11 @@ async function genRiskCode(): Promise<string> {
 }
 
 export async function GET(req: NextRequest) {
+  // v44: Added auth check
+  const authPayload = getAuthFromRequest(req);
+  if (!authPayload) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  }
   try {
     const url = new URL(req.url);
     const category = url.searchParams.get('category');
@@ -53,6 +59,18 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // v44: Added auth + role check — only CRO, HOC, internal control, or super can create risks
+  const authPayload = getAuthFromRequest(req);
+  if (!authPayload) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  }
+  const allowedRoles = ['super', 'cro', 'hoc', 'admin'];
+  if (!allowedRoles.includes(authPayload.role) && !(authPayload as any).internalControl) {
+    return NextResponse.json(
+      { error: 'Only CRO, HOC, Internal Control, or Super Admin can create risk assessments' },
+      { status: 403 }
+    );
+  }
   try {
     const body = await req.json();
     const likelihood = Number(body.inherentLikelihood) || 0;
@@ -83,7 +101,7 @@ export async function POST(req: NextRequest) {
           : null,
         riskResponse: body.riskResponse || null,
         treatmentPlan: body.treatmentPlan || null,
-        riskOwnerId: body.riskOwnerId || null,
+        riskOwnerId: body.riskOwnerId || authPayload.id,
         controlEffectiveness: body.controlEffectiveness || null,
         status: body.status || 'identified',
         nextReviewDate: nextReview,
@@ -94,10 +112,22 @@ export async function POST(req: NextRequest) {
     await db.riskAssessmentHistory.create({
       data: {
         riskAssessmentId: risk.id,
-        assessorId: body.riskOwnerId || null,
+        assessorId: authPayload.id,
         action: 'created',
         notes: `Risk identified with score ${score} (${rating})`,
         changes: JSON.stringify({ likelihood, impact, score, rating }),
+      },
+    });
+
+    // v44: Audit log
+    await db.auditLog.create({
+      data: {
+        adminId: authPayload.id,
+        action: 'risk_assessment_created',
+        module: 'ic',
+        description: `Risk assessment ${riskCode} created: ${body.title} (score: ${score}, rating: ${rating})`,
+        severity: rating === 'critical' ? 'critical' : 'info',
+        metadata: JSON.stringify({ riskId: risk.id, riskCode, score, rating }),
       },
     });
 

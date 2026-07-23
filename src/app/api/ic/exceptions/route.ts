@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getAuthFromRequest } from '@/lib/auth';
 
 async function genExceptionCode(): Promise<string> {
   const year = new Date().getFullYear();
@@ -18,6 +19,11 @@ async function genExceptionCode(): Promise<string> {
 }
 
 export async function GET(req: NextRequest) {
+  // v44: Added auth check
+  const authPayload = getAuthFromRequest(req);
+  if (!authPayload) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  }
   try {
     const url = new URL(req.url);
     const status = url.searchParams.get('status');
@@ -49,9 +55,26 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // v44: Added auth + role check
+  const authPayload = getAuthFromRequest(req);
+  if (!authPayload) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  }
+  // Any authenticated staff can report an exception, but only IC/CRO/HOC/super can assign
   try {
     const body = await req.json();
     const exceptionCode = await genExceptionCode();
+
+    // v44: If assigning to someone, verify the user has IC/CRO/HOC/super role
+    if (body.assignedToId) {
+      const allowedAssigners = ['super', 'cro', 'hoc', 'admin'];
+      if (!allowedAssigners.includes(authPayload.role) && !(authPayload as any).internalControl) {
+        return NextResponse.json(
+          { error: 'Only CRO, HOC, Internal Control, or Super Admin can assign exceptions' },
+          { status: 403 }
+        );
+      }
+    }
 
     const exception = await db.exceptionReport.create({
       data: {
@@ -64,10 +87,22 @@ export async function POST(req: NextRequest) {
         priority: body.priority || 'normal',
         status: body.status || 'open',
         isEscalated: body.isEscalated === true,
-        reporterId: body.reporterId || null,
+        reporterId: authPayload.id,  // v44: Use authenticated user, not body
         assignedToId: body.assignedToId || null,
         assignedAt: body.assignedToId ? new Date() : null,
         metadata: body.metadata ? JSON.stringify(body.metadata) : null,
+      },
+    });
+
+    // v44: Audit log
+    await db.auditLog.create({
+      data: {
+        adminId: authPayload.id,
+        action: 'exception_reported',
+        module: 'ic',
+        description: `Exception ${exceptionCode} reported: ${body.title} (${body.severity || 'medium'})`,
+        severity: body.severity === 'critical' ? 'critical' : 'warning',
+        metadata: JSON.stringify({ exceptionId: exception.id, exceptionCode }),
       },
     });
 

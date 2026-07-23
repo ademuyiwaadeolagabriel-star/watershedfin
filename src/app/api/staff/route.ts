@@ -11,7 +11,13 @@ export async function GET(req: NextRequest) {
     const status = url.searchParams.get('status');
 
     const where: any = {};
-    if (role && role !== 'all') where.role = role;
+    if (role && role !== 'all') {
+      // v43: Match either role OR roleType (some staff have roleType set differently)
+      where.OR = [
+        { role },
+        { roleType: role },
+      ];
+    }
     if (branchId && branchId !== 'all') where.branchId = branchId;
     if (status === 'active') where.status = 1;
     if (status === 'suspended') where.status = 0;

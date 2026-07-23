@@ -372,9 +372,23 @@ export async function POST(
       }
 
       case 'disburse': {
-        if (currentStep !== 'TREASURY_PAYOUT' && currentStep !== 'CFO_DISBURSEMENT') {
-          return NextResponse.json({ error: 'Can only disburse from TREASURY_PAYOUT step' }, { status: 400 });
+        // v44: Accept both legacy TREASURY_PAYOUT and current CFO_DISBURSEMENT
+        if (currentStep !== 'TREASURY_PAYOUT' && currentStep !== 'CFO_DISBURSEMENT' && currentStep !== 'INTERNAL_CONTROL_CHECK') {
+          return NextResponse.json({
+            error: `Can only disburse from CFO_DISBURSEMENT step (current: ${currentStep})`
+          }, { status: 400 });
         }
+
+        // v44: Pre-disbursement validation — verify all critical compliance conditions
+        const pendingConditions = await db.complianceCondition.findMany({
+          where: { loanApplicantId: id, status: { not: 'verified' }, priority: 'critical' },
+        });
+        if (pendingConditions.length > 0) {
+          return NextResponse.json({
+            error: `Cannot disburse — ${pendingConditions.length} critical condition(s) not verified: ${pendingConditions.map(c => c.title || c.conditionType).join(', ')}`,
+          }, { status: 400 });
+        }
+
         await db.loanApplicants.update({
           where: { id },
           data: {
@@ -383,9 +397,11 @@ export async function POST(
             disbursedBy: admin.id,
             startDate: new Date(),
             status: 'running',
+            currentStep: 'ACTIVE_MONITORING',  // v44: Advance to post-disbursement monitoring
           },
         });
         newStatus = 'running';
+        newStep = 'ACTIVE_MONITORING';
         approvalAction = 'DISBURSED';
         break;
       }
@@ -534,19 +550,46 @@ export async function POST(
 }
 
 function getReturnSteps(currentStep: string): string[] {
+  // v44: Updated to match the v41 13-step workflow (LEGAL_MCC, HOC_REVIEW, etc.)
   const map: Record<string, string[]> = {
-    BM_QC: ['LO_ASSESSMENT'],
+    // Phase 1: Pre-Qualification
+    LEGAL_KYC_CHECK: ['LO_ENTRY'],           // Legal can return to LO
+    BM_QC: ['LO_ENTRY', 'LEGAL_KYC_CHECK'],  // BM can return to LO or Legal
+    QUERY_RESPONSE: ['LO_ENTRY', 'LEGAL_KYC_CHECK'],
+
+    // Phase 2: Engine Room
+    HOC_ASSIGNMENT: ['BM_QC'],               // HOC can return to BM
+    ANALYST_STRUCTURING: ['HOC_ASSIGNMENT'], // Analyst can return to HOC
+    HOC_REVIEW: ['ANALYST_STRUCTURING'],     // HOC can return to Analyst
+
+    // Phase 3: Governance
+    CRO_RISK: ['HOC_REVIEW'],                // CRO can return to HOC
+    CFO_REVIEW: ['CRO_RISK'],                // CFO can return to CRO
+    LEGAL_MCC: ['CFO_REVIEW'],               // Legal MCC can return to CFO
+    LEGAL_AGGREGATION: ['CFO_REVIEW'],       // Legacy — Legal aggregation can return to CFO
+    MD_APPROVAL: ['LEGAL_MCC', 'LEGAL_AGGREGATION'],  // MD can return to Legal MCC or Legal Aggregation
+
+    // Phase 4: Closing
+    CUSTOMER_ACCEPTANCE: ['MD_APPROVAL'],    // Customer negotiation can return to MD
+    CUSTOMER_NEGOTIATION: ['MD_APPROVAL'],
+    HOC_SCHEDULING: ['CUSTOMER_ACCEPTANCE'], // HOC can return to customer acceptance
+    CFO_DISBURSEMENT: ['HOC_SCHEDULING'],    // CFO can return to HOC scheduling
+
+    // Phase 5: Post-Disbursement
+    REPAYMENT_TRACKING: ['ACTIVE_MONITORING'],
+    EARLY_WARNING: ['REPAYMENT_TRACKING'],
+    COLLECTIONS: ['REPAYMENT_TRACKING'],
+
+    // Legacy steps (kept for backward compatibility with existing loans)
+    LO_ASSESSMENT: ['LO_ENTRY'],
     HOC_STRUCTURING: ['BM_QC'],
-    ANALYST_STRUCTURING: ['HOC_STRUCTURING'],
     HOC_APPROVAL: ['ANALYST_STRUCTURING', 'HOC_STRUCTURING'],
     CRO_VERIFICATION: ['HOC_APPROVAL'],
-    CRO_RISK: ['HOC_APPROVAL'],
-    CFO_REVIEW: ['CRO_RISK'],
     LEGAL_REVIEW: ['CFO_REVIEW'],
     LEGAL_FINAL_REVIEW: ['LEGAL_REVIEW'],
-    MD_APPROVAL: ['LEGAL_FINAL_REVIEW', 'HOC_AGGREGATION'],
     INTERNAL_CONTROL_CHECK: ['MD_APPROVAL'],
     HOC_FINALIZATION: ['MD_APPROVAL'],
+    TREASURY_PAYOUT: ['CFO_DISBURSEMENT', 'INTERNAL_CONTROL_CHECK'],
   };
   return map[currentStep] || [];
 }

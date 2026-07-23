@@ -46,22 +46,19 @@ export async function POST(
 
     // Verify loan is at the disbursement step
     if (!['CFO_DISBURSEMENT', 'TREASURY_PAYOUT', 'INTERNAL_CONTROL_CHECK'].includes(loan.currentStep)) {
-      return NextResponse.json({ 
-        error: `Loan must be at the disbursement stage. Current step: ${loan.currentStep}` 
+      return NextResponse.json({
+        error: `Loan must be at the disbursement stage. Current step: ${loan.currentStep}`
       }, { status: 400 });
     }
 
-    // Verify Internal Control has passed (if that step exists in workflow)
-    if (loan.currentStep === 'INTERNAL_CONTROL_CHECK') {
-      // Check if all conditions precedent are met
-      const conditions = await db.complianceCondition.findMany({
-        where: { loanApplicantId: id, status: { not: 'verified' } },
-      });
-      if (conditions.length > 0) {
-        return NextResponse.json({ 
-          error: `Cannot disburse — ${conditions.length} condition(s) precedent not yet verified by Internal Control` 
-        }, { status: 400 });
-      }
+    // v44: Pre-disbursement validation — verify ALL critical compliance conditions (not just INTERNAL_CONTROL_CHECK)
+    const pendingConditions = await db.complianceCondition.findMany({
+      where: { loanApplicantId: id, status: { not: 'verified' }, priority: 'critical' },
+    });
+    if (pendingConditions.length > 0) {
+      return NextResponse.json({
+        error: `Cannot disburse — ${pendingConditions.length} critical condition(s) not verified: ${pendingConditions.map(c => c.title || c.conditionType).join(', ')}`,
+      }, { status: 400 });
     }
 
     // Calculate final terms
@@ -85,7 +82,7 @@ export async function POST(
       where: { id },
       data: {
         status: 'running',
-        currentStep: 'TREASURY_PAYOUT', // terminal — loan is now active
+        currentStep: 'ACTIVE_MONITORING', // v44: Post-disbursement monitoring (was TREASURY_PAYOUT)
         disbursedAt: disbursementDate,
         disbursementDate,
         disbursedBy: adminId,

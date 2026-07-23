@@ -11,6 +11,7 @@ import {
   KYC_STATUS_LABELS,
 } from '@/lib/constants';
 import { cn } from '@/lib/utils';
+import { authFetch } from '@/lib/auth-client';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -303,11 +304,16 @@ export function OnboardingView() {
     }
     (async () => {
       try {
-        const res = await fetch(
-          `/api/staff?role=loan&branchId=${currentAdmin.branchId}`
+        // v43: Use authFetch + match both role and roleType (some LOs have roleType='loan')
+        const res = await authFetch(
+          `/api/staff?role=loan&branchId=${currentAdmin.branchId}&status=active`
         );
         const data = await res.json();
-        setLoanOfficers(data.staff || []);
+        // Also include staff whose roleType is 'loan' even if role field differs
+        const loanOfficers = (data.staff || []).filter((s: any) =>
+          s.role === 'loan' || s.roleType === 'loan' || s.loanOrigination === true
+        );
+        setLoanOfficers(loanOfficers);
       } catch (e) {
         console.error('Failed to load loan officers', e);
         setLoanOfficers([]);
