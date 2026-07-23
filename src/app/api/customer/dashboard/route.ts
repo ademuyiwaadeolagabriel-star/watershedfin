@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
 
     // Outstanding balance across all active loans
     let totalOutstanding = 0;
-    const activeLoansWithBreakdown = [];
+    const activeLoansWithBreakdown: any[] = [];
 
     for (const loan of activeLoans) {
       const principal = loan.finalAmount || loan.vettedAmount || loan.approvedAmount || loan.amount;

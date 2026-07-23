@@ -71,8 +71,8 @@ export async function GET(req: NextRequest) {
             .catch(() => [])
         : Promise.resolve([]),
     ]);
-    const loanMap = new Map(loans.map((l: any) => [l.id, l]));
-    const userMap = new Map(users.map((u: any) => [u.id, u]));
+    const loanMap = new Map<string, any>(loans.map((l: any) => [l.id, l] as [string, any]));
+    const userMap = new Map<string, any>(users.map((u: any) => [u.id, u] as [string, any]));
 
     const enriched = requests.map((r) => ({
       ...r,

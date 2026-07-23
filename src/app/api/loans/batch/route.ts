@@ -31,8 +31,9 @@ export async function POST(req: NextRequest) {
     switch (action) {
       case 'assign_analyst': {
         if (!analystId) return NextResponse.json({ error: 'analystId required for assign_analyst' }, { status: 400 });
-        const result = await db.loanApplicants.updateMany({
-          where: { id: { in: loanIds } },
+        // assignedAnalystId lives on CreditAppraisal, not LoanApplicants
+        const result = await db.creditAppraisal.updateMany({
+          where: { loanApplicantId: { in: loanIds } },
           data: { assignedAnalystId: analystId },
         });
         updated = result.count;

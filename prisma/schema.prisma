@@ -123,6 +123,15 @@ model Admin {
   targetSetAt             DateTime?
   targetSetBy             String? // Admin ID who set the target
 
+  // v41 — Multi-period targets (monthly, quarterly, annual)
+  quarterlyDisbursementTarget Float?
+  quarterlyLoanCountTarget   Int?
+  targetQuarter              String?
+  annualDisbursementTarget   Float?
+  annualLoanCountTarget      Int?
+  targetYear                 String?
+  targetPeriodType           String?  @default("monthly")
+
   @@index([branchId])
   @@index([role])
 }
@@ -424,6 +433,18 @@ model Branch {
   targetMonth             String?
   targetSetAt             DateTime?
   targetSetBy             String?
+
+  // v41 — Multi-period targets (monthly, quarterly, annual)
+  // Allows setting targets at different granularities simultaneously.
+  // periodType: "monthly" | "quarterly" | "annual"
+  // periodKey: "2024-01" (monthly) | "2024-Q1" (quarterly) | "2024" (annual)
+  quarterlyDisbursementTarget Float?
+  quarterlyLoanCountTarget   Int?
+  targetQuarter              String?  // e.g. "2024-Q1"
+  annualDisbursementTarget   Float?
+  annualLoanCountTarget      Int?
+  targetYear                 String?  // e.g. "2024"
+  targetPeriodType           String?  @default("monthly") // current active period type
 
   staff           Admin[]           @relation("BranchStaff")
   customers       User[]            @relation("BranchCustomers")
@@ -904,6 +925,12 @@ model MccDecision {
   decisionType      String   @default("approved") // approved, rejected, deferred, conditional
   decisionDate      DateTime @default(now())
   metadata          String?  // JSON
+
+  // v42-P9: Committee signature fields (Excel COMMITTEE'S DECISION sheet)
+  signatureData     String?  // typed name or base64 image
+  signatureType     String?  @default("typed") // typed, uploaded
+  signedAt          DateTime?
+  ipAddress         String?
 
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

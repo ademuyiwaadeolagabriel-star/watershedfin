@@ -7,7 +7,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const { id } = await params;
     const invoice = await db.invoice.findUnique({
       where: { id },
-      include: { user: true, payments: true, revenueAccount: true },
+      include: { payments: true, revenueAccount: true },
     });
     if (!invoice) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
     return NextResponse.json({ invoice });

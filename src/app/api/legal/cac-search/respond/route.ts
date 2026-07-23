@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getAuthFromRequest } from '@/lib/auth';
+import { createNotification } from '@/lib/notifications';
 
 /**
  * POST /api/legal/cac-search/respond
  * Customer submits a response to Legal's rejection
  * Body: { caseId, customerResponse }
+ *
+ * v41: Now fans out a notification to all Legal staff so they know the customer
+ * has responded and the case is ready for re-review.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -40,6 +44,34 @@ export async function POST(req: NextRequest) {
       where: { id: legalCase.userId },
       data: { onboardingStage: 'legal_cac_search' },
     }).catch(() => {});
+
+    // v41: Notify all Legal staff that the customer has responded
+    try {
+      const legalStaff = await db.admin.findMany({
+        where: { role: 'legal', status: 1, legalCacSearch: true },
+        select: { id: true, firstName: true, lastName: true },
+      });
+      const customer = await db.user.findUnique({
+        where: { id: legalCase.userId },
+        select: { firstName: true, lastName: true },
+      });
+      const customerName = customer ? `${customer.firstName} ${customer.lastName}` : 'A customer';
+      await Promise.all(legalStaff.map(ls =>
+        createNotification({
+          adminId: ls.id,
+          type: 'legal_cac_customer_responded',
+          title: 'Customer Responded to CAC Search Rejection',
+          message: `${customerName} has responded to your CAC name search rejection. Please review their response and re-evaluate.`,
+          category: 'kyc',
+          actionLabel: 'Review Response',
+          actionView: 'legal-cac-search',
+          metadata: { caseId, userId: legalCase.userId },
+        })
+      ));
+    } catch (e) {
+      // non-blocking
+      console.error('[LEGAL CAC RESPOND] Legal staff notification failed:', e);
+    }
 
     return NextResponse.json({ ok: true, case: updated });
   } catch (e: any) {

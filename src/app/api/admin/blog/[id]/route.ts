@@ -204,7 +204,9 @@ export async function DELETE(
     await db.blog.delete({ where: { id } });
 
     // Audit log
-    const actor = await getActor(authPayload.id);
+    const authPayload = getAuthFromRequest(req);
+    const adminId = authPayload?.id || body.adminId;
+    const actor = await getActor(adminId);
     if (actor) {
       await db.auditLog.create({
         data: {

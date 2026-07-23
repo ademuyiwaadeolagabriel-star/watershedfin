@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     // G6: Input validation
-    const { personal, business, loan } = body;
+    const { personal, business, loan, documents, consent } = body;
     if (!personal?.firstName || !personal?.lastName) {
       return NextResponse.json({ error: 'First name and last name are required' }, { status: 400 });
     }
@@ -164,6 +164,23 @@ export async function POST(req: NextRequest) {
       assignment: {
         branchId?: string;
         staffId?: string;
+      };
+      // v41: KYC document paths (uploaded before submit via /api/customer/kyc-upload)
+      documents?: {
+        passportPhoto?: string;
+        idCardFront?: string;
+        idCardBack?: string;
+        meansOfId?: string;
+        proofOfAddress?: string;
+        shopPhoto?: string;
+        cacCertificate?: string;
+        additionalDocs?: string;
+      };
+      // v41: CAC consent metadata (persisted to OnboardingConsent table)
+      consent?: {
+        feeKey: string;
+        feeAmount: number;
+        acceptedAt?: string;
       };
     };
 
@@ -328,6 +345,13 @@ export async function POST(req: NextRequest) {
           : null,
         yearsInOperation,
         kycStatus: 'DRAFT',
+        // v41: Persist KYC document paths uploaded during onboarding
+        selfie: documents?.passportPhoto || null,
+        docFront: documents?.idCardFront || documents?.meansOfId || null,
+        docBack: documents?.idCardBack || null,
+        proofOfAddress: documents?.proofOfAddress || null,
+        docShopPhoto: documents?.shopPhoto || null,
+        docCac: documents?.cacCertificate || null,
       },
     });
 
@@ -398,6 +422,24 @@ export async function POST(req: NextRequest) {
     // ----- send welcome notification (email + dashboard) -----
     const customerName = `${user.firstName} ${user.lastName}`.trim();
     void notifyWelcome(user.id, customerName, user.email || '');
+
+    // v41: Persist CAC search consent (audit trail — who accepted, when, fee amount)
+    if (consent && consent.feeKey) {
+      try {
+        await db.onboardingConsent.create({
+          data: {
+            userId: user.id,
+            feeKey: consent.feeKey,
+            feeAmount: Number(consent.feeAmount) || 0,
+            acceptedAt: consent.acceptedAt ? new Date(consent.acceptedAt) : new Date(),
+            ipAddress: req.headers.get('x-forwarded-for') || null,
+            userAgent: req.headers.get('user-agent') || null,
+          },
+        });
+      } catch (e) {
+        console.error('[ONBOARD] Failed to persist OnboardingConsent (non-blocking):', e);
+      }
+    }
 
     // v38: Notify all Customer Service staff that a new application needs KYC review
     try {

@@ -305,7 +305,7 @@ export async function GET(_req: NextRequest) {
 
     // ── 6. Loan completed — 0 / 168 hours (7 days) after paid ───────────
     const completedLoans = await db.loanApplicants.findMany({
-      where: { status: 'paid', updatedAt: { not: null } },
+      where: { status: 'paid' },
       include: {
         user: {
           select: { id: true, email: true, firstName: true, lastName: true },

@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
       where: { key: 'audit_retention_days' },
     });
 
-    const days = setting ? parseInt(setting.value, '10') : 365;
+    const days = setting ? parseInt(setting.value, 10) : 365;
 
     // Compute what would be purged
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);

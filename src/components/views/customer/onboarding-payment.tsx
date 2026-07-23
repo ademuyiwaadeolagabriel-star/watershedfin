@@ -23,14 +23,31 @@ export function OnboardingPaymentView() {
   const [uploading, setUploading] = useState(false);
   const [reference, setReference] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  // v41: Bank details pulled from Settings (not hardcoded)
+  const [bankDetails, setBankDetails] = useState({
+    bankName: 'Watershed Capital Bank',
+    accountNumber: '0123456789',
+    accountName: 'Watershed Capital Ltd',
+  });
 
   const load = async () => {
     if (!currentUser?.id) return;
     setLoading(true);
     try {
-      const res = await authFetch(`/api/customer/onboarding-payment/status?userId=${currentUser.id}`);
-      const d = await res.json();
-      if (res.ok) setData(d);
+      const [statusRes, settingsRes] = await Promise.all([
+        authFetch(`/api/customer/onboarding-payment/status?userId=${currentUser.id}`),
+        fetch('/api/public').then(r => r.json()).catch(() => ({})),
+      ]);
+      const d = await statusRes.json();
+      if (statusRes.ok) setData(d);
+      // v41: Pull bank details from public settings (falls back to defaults)
+      if (settingsRes?.settings) {
+        setBankDetails({
+          bankName: settingsRes.settings.bankName || bankDetails.bankName,
+          accountNumber: settingsRes.settings.bankAccountNumber || bankDetails.accountNumber,
+          accountName: settingsRes.settings.bankAccountName || bankDetails.accountName,
+        });
+      }
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
@@ -192,9 +209,9 @@ export function OnboardingPaymentView() {
             </div>
             <p className="text-xs text-slate-500">Transfer to our bank account and upload proof of payment.</p>
             <div className="text-xs bg-slate-50 rounded p-2 border border-slate-200">
-              <p><strong>Bank:</strong> Watershed Capital Bank</p>
-              <p><strong>Account:</strong> 0123456789</p>
-              <p><strong>Name:</strong> Watershed Capital Ltd</p>
+              <p><strong>Bank:</strong> {bankDetails.bankName}</p>
+              <p><strong>Account:</strong> {bankDetails.accountNumber}</p>
+              <p><strong>Name:</strong> {bankDetails.accountName}</p>
             </div>
             <div className="space-y-2">
               <Input

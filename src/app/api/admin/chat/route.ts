@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
         },
       })
       .catch(() => []);
-    const userMap = new Map(users.map((u) => [u.id, u]));
+    const userMap = new Map<string, any>(users.map((u: any) => [u.id, u] as [string, any]));
 
     const conversations = Array.from(convMap.values())
       .map((c) => {

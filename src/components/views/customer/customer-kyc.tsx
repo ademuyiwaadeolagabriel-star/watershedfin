@@ -350,7 +350,7 @@ export function CustomerKycView() {
   }
 
   // Step done screen (post-submit confirmation)
-  if (step === 'done' || (status === KYC_STATUSES.PROCESSING && step === 'done')) {
+  if (step === ('done' as Step) || (status === KYC_STATUSES.PROCESSING && step === ('done' as Step))) {
     return (
       <GateCard
         icon={<CheckCircle2 className="h-12 w-12 text-emerald-600" />}

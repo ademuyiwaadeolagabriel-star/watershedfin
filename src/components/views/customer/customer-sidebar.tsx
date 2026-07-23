@@ -222,7 +222,7 @@ export function CustomerSidebar() {
       {hasActiveLoan && data?.activeLoans?.[0] && (
         <div className="px-3 py-2 border-t border-slate-800 shrink-0">
           <button
-            onClick={() => setView('customer-loan-breakdown', { loanId: data.activeLoans[0].id })}
+            onClick={() => setView('customer-loan-breakdown', { loanId: data.activeLoans?.[0]?.id || '' })}
             className="w-full rounded-md bg-slate-800 p-2.5 text-left hover:bg-slate-700 transition-colors"
           >
             <div className="flex items-center gap-1.5 mb-1">

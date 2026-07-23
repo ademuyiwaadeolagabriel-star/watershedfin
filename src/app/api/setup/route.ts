@@ -116,18 +116,24 @@ export async function POST(req: NextRequest) {
     }
 
     // Seed Loan Products
-    for (const p of LOAN_PRODUCTS) {
+    // LoanPlan schema uses `name` + `slug` (unique) + `duration` + `interest` + `min`/`max`.
+    // LOAN_PRODUCTS data uses `title`/`minimumAmount`/`maximumAmount`/`interestRate`/`minTenor`/`maxTenor`.
+    const slugify = (s: string) => s.toString().toLowerCase().trim()
+      .replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-');
+    for (const p of LOAN_PRODUCTS as any[]) {
+      const slug = slugify(p.title);
+      const duration = p.maxTenor || p.minTenor || 12;
       await db.loanPlan.upsert({
-        where: { title: p.title },
+        where: { slug },
         update: {},
         create: {
-          title: p.title,
+          name: p.title,
+          slug,
           description: p.description,
-          minimumAmount: p.minimumAmount,
-          maximumAmount: p.maximumAmount,
-          interestRate: p.interestRate,
-          minTenor: p.minTenor,
-          maxTenor: p.maxTenor,
+          min: p.minimumAmount,
+          max: p.maximumAmount,
+          interest: p.interestRate,
+          duration,
           status: 1,
         },
       });

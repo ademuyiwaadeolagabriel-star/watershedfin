@@ -3,6 +3,7 @@
 import { useAppStore, ViewKey } from '@/lib/store';
 import { hasPermission, hasAnyPermission } from '@/lib/constants';
 import { useBranding } from '@/lib/branding';
+import { authFetch } from '@/lib/auth-client';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Users, UserPlus, FileText, Gavel, Landmark, Calculator,
@@ -245,6 +246,60 @@ export function Sidebar() {
     if (!useBranding.getState().loaded) loadBranding();
   }, [loadBranding]);
 
+  // v41: Fetch pending counts for sidebar badges (KYC queue, CS payments, Legal CAC)
+  const [pendingCounts, setPendingCounts] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!currentAdmin) return;
+    let cancelled = false;
+    const fetchCounts = async () => {
+      try {
+        const counts: Record<string, number> = {};
+        // CS KYC queue count
+        if (currentAdmin.role === 'super' || currentAdmin.role === 'cs' || currentAdmin.csKycVerify || currentAdmin.kycVerify) {
+          try {
+            const r = await authFetch('/api/admin/kyc').catch(() => null as any);
+            if (r && r.ok) {
+              const d = await r.json();
+              const pending = (d.users || []).filter((u: any) =>
+                u.kycStatus === 'PROCESSING' || u.kycStatus === 'PENDING' || u.kycStatus === 'RESUBMIT'
+              ).length;
+              if (pending > 0) counts['cs-kyc-queue'] = pending;
+            }
+          } catch {}
+        }
+        // CS payment verification count
+        if (currentAdmin.role === 'super' || currentAdmin.role === 'cs' || currentAdmin.csPaymentVerify) {
+          try {
+            const r = await authFetch('/api/admin/cs/payments?status=pending').catch(() => null as any);
+            if (r && r.ok) {
+              const d = await r.json();
+              const pending = (d.payments || []).length;
+              if (pending > 0) counts['cs-payment-verification'] = pending;
+            }
+          } catch {}
+        }
+        // Legal CAC search count
+        if (currentAdmin.role === 'super' || currentAdmin.legalCacSearch) {
+          try {
+            const r = await authFetch('/api/legal/cac-search').catch(() => null as any);
+            if (r && r.ok) {
+              const d = await r.json();
+              const pending = (d.cases || []).filter((c: any) =>
+                c.status === 'pending' || c.status === 'in_review' || c.status === 'customer_responded'
+              ).length;
+              if (pending > 0) counts['legal-cac-search'] = pending;
+            }
+          } catch {}
+        }
+        if (!cancelled) setPendingCounts(counts);
+      } catch {}
+    };
+    fetchCounts();
+    // Refresh every 60 seconds
+    const interval = setInterval(fetchCounts, 60000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [currentAdmin]);
+
   const toggleGroup = (id: string) =>
     setExpandedGroups((s) => ({ ...s, [id]: !s[id] }));
 
@@ -351,7 +406,13 @@ export function Sidebar() {
                         >
                           <Icon className="h-4 w-4 shrink-0" />
                           <span className="flex-1 text-left truncate">{item.label}</span>
-                          {item.badge && (
+                          {/* v41: Dynamic pending count badge */}
+                          {pendingCounts[item.key] && (
+                            <span className="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white animate-pulse">
+                              {pendingCounts[item.key]}
+                            </span>
+                          )}
+                          {item.badge && !pendingCounts[item.key] && (
                             <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white">
                               {item.badge}
                             </span>

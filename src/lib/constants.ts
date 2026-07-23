@@ -129,17 +129,17 @@ export const LOAN_STEP_LABELS: Record<string, string> = {
   COLLECTIONS: 'Collections',
   LOAN_CLOSURE: 'Loan Closure',
   // Legacy steps (kept for backward compatibility with existing loans)
-  LO_ASSESSMENT: 'LO Assessment (Legacy)',
-  LEGAL_CAC_CHECK: 'Legal CAC Check (Legacy)',
-  HOC_STRUCTURING: 'HOC Structuring (Legacy)',
-  HOC_APPROVAL: 'HOC Approval (Legacy)',
-  CRO_VERIFICATION: 'CRO Verification (Legacy)',
-  LEGAL_REVIEW: 'Legal Review (Legacy)',
-  LEGAL_FINAL_REVIEW: 'Legal Final Review (Legacy)',
-  HOC_AGGREGATION: 'HOC Aggregation (Legacy)',
-  INTERNAL_CONTROL_CHECK: 'Internal Control (Legacy)',
-  HOC_FINALIZATION: 'Finalization (Legacy)',
-  TREASURY_PAYOUT: 'Treasury Payout (Legacy)',
+  LEGACY_LO_ASSESSMENT: 'LO Assessment (Legacy)',
+  LEGACY_LEGAL_CAC_CHECK: 'Legal CAC Check (Legacy)',
+  LEGACY_HOC_STRUCTURING: 'HOC Structuring (Legacy)',
+  LEGACY_HOC_APPROVAL: 'HOC Approval (Legacy)',
+  LEGACY_CRO_VERIFICATION: 'CRO Verification (Legacy)',
+  LEGACY_LEGAL_REVIEW: 'Legal Review (Legacy)',
+  LEGACY_LEGAL_FINAL_REVIEW: 'Legal Final Review (Legacy)',
+  LEGACY_HOC_AGGREGATION: 'HOC Aggregation (Legacy)',
+  LEGACY_INTERNAL_CONTROL_CHECK: 'Internal Control (Legacy)',
+  LEGACY_HOC_FINALIZATION: 'Finalization (Legacy)',
+  LEGACY_TREASURY_PAYOUT: 'Treasury Payout (Legacy)',
 };
 
 // ============================================================================
@@ -160,9 +160,10 @@ export const WORKFLOW_TRANSITIONS: Record<string, string[]> = {
 
   // Phase 3: Governance Layer
   CRO_RISK: ['CFO_REVIEW', 'HOC_REVIEW'],
-  CFO_REVIEW: ['LEGAL_AGGREGATION', 'CRO_RISK'],
-  LEGAL_AGGREGATION: ['MD_APPROVAL', 'CFO_REVIEW'],  // Legal compiles Executive Credit Pack
-  MD_APPROVAL: ['CUSTOMER_ACCEPTANCE', 'LEGAL_AGGREGATION'],
+  CFO_REVIEW: ['LEGAL_MCC', 'CRO_RISK'],  // v41: CFO → Legal MCC (compliance review)
+  LEGAL_MCC: ['MD_APPROVAL', 'CFO_REVIEW'],  // v41: Legal MCC compliance — approve→MD, reject→CFO
+  LEGAL_AGGREGATION: ['MD_APPROVAL', 'CFO_REVIEW'],  // Legal compiles Executive Credit Pack (legacy path, kept for backward compat)
+  MD_APPROVAL: ['CUSTOMER_ACCEPTANCE', 'LEGAL_MCC'],  // MD can return to Legal MCC
 
   // Phase 4: Closing
   CUSTOMER_ACCEPTANCE: ['HOC_SCHEDULING', 'CUSTOMER_NEGOTIATION'],
@@ -209,6 +210,7 @@ export const STEP_PERMISSIONS: Record<string, string> = {
   // Phase 3: Governance
   CRO_RISK: 'loanRisk',
   CFO_REVIEW: 'loanCfoReview',
+  LEGAL_MCC: 'legalMcc',  // v41: Legal MCC compliance review — Legal staff with legalMcc permission
   LEGAL_AGGREGATION: 'loanLegal',
   MD_APPROVAL: 'loanMcc',
 
@@ -255,7 +257,7 @@ export const WORKFLOW_PHASES = [
   {
     id: 'governance',
     label: 'Governance Layer',
-    steps: ['CRO_RISK', 'CFO_REVIEW', 'LEGAL_AGGREGATION', 'MD_APPROVAL'],
+    steps: ['CRO_RISK', 'CFO_REVIEW', 'LEGAL_MCC', 'MD_APPROVAL'],
     color: 'purple',
   },
   {
@@ -391,6 +393,61 @@ export const COMPLIANCE_STATUS_LABELS: Record<string, string> = {
   conditions_pending: 'Conditions Pending',
   conditions_met: 'Conditions Met',
   cleared_for_disbursement: 'Cleared for Disbursement',
+};
+
+// ---------------------------------------------------------------------------
+// v41: ONBOARDING STAGES — centralized to prevent string drift across files
+// ---------------------------------------------------------------------------
+
+export const ONBOARDING_STAGES = {
+  ONBOARDING_SUBMITTED: 'onboarding_submitted',
+  CS_KYC_REVIEW: 'cs_kyc_review',
+  PAYMENT_PENDING: 'payment_pending',
+  LEGAL_CAC_SEARCH: 'legal_cac_search',
+  LEGAL_REJECTED: 'legal_rejected',
+  ONBOARDING_COMPLETE: 'onboarding_complete',
+} as const;
+
+export const ONBOARDING_STAGE_LABELS: Record<string, string> = {
+  onboarding_submitted: 'Application Submitted',
+  cs_kyc_review: 'CS KYC Review',
+  payment_pending: 'Payment Pending',
+  legal_cac_search: 'Legal CAC Search',
+  legal_rejected: 'Legal Rejected',
+  onboarding_complete: 'Onboarding Complete',
+};
+
+export const ONBOARDING_STAGE_ORDER: string[] = [
+  'onboarding_submitted',
+  'cs_kyc_review',
+  'payment_pending',
+  'legal_cac_search',
+  'onboarding_complete',
+];
+
+export const ONBOARDING_STAGE_DESCRIPTIONS: Record<string, string> = {
+  onboarding_submitted: 'Application has been submitted and is awaiting Customer Service KYC review.',
+  cs_kyc_review: 'Customer Service is reviewing your KYC documents.',
+  payment_pending: 'KYC approved. Please pay the CAC search fee to continue.',
+  legal_cac_search: 'Payment confirmed. Legal department is conducting CAC Name Search.',
+  legal_rejected: 'Legal rejected your application. Please review and respond.',
+  onboarding_complete: 'Onboarding complete. Your account number has been assigned.',
+};
+
+// ---------------------------------------------------------------------------
+// v41: ACCOUNT NUMBER STATUS
+// ---------------------------------------------------------------------------
+
+export const ACCOUNT_NUMBER_STATUSES = {
+  PENDING: 'pending',
+  ASSIGNED: 'assigned',
+  REJECTED: 'rejected',
+} as const;
+
+export const ACCOUNT_NUMBER_STATUS_LABELS: Record<string, string> = {
+  pending: 'Pending (awaiting Legal CAC approval)',
+  assigned: 'Assigned',
+  rejected: 'Rejected',
 };
 
 // ---------------------------------------------------------------------------
@@ -660,6 +717,269 @@ export const COLLATERAL_DOCUMENT_TYPES = [
 ] as const;
 
 // ---------------------------------------------------------------------------
+// v42 — LOAN PRODUCT × GRADE RATE/FEE TIER MATRIX
+// Mirrors the Excel FINANCIAL ANALYSIS!G184:G187 nested IF formulas.
+// The LO selects a product + the system grades the loan cycle (A/B/C/D/NEW),
+// then the interest rate and upfront fee auto-populate from this matrix.
+// Rates are MONTHLY percentages (matching the Excel's E181 output).
+// ---------------------------------------------------------------------------
+
+export type LoanProductKey = 'micro' | 'sme' | 'sme_plus' | 'lpo' | 'asset_finance' | 'exception';
+export type LoanCycleGrade = 'A' | 'B' | 'C' | 'D' | 'NEW';
+
+export const LOAN_PRODUCT_LABELS: Record<LoanProductKey, string> = {
+  micro: 'Micro Loan',
+  sme: 'SME Loan',
+  sme_plus: 'SME Plus',
+  lpo: 'LPO Finance',
+  asset_finance: 'Asset Finance',
+  exception: 'Exception',
+};
+
+// Monthly interest rate % by product × grade
+// (Excel G184-G187: micro/sme=5%, sme_plus=4.25%, lpo/asset=E180, exception=E180)
+export const RATE_TIER_MATRIX: Record<LoanProductKey, Record<LoanCycleGrade, number>> = {
+  micro:        { A: 5.0,  B: 5.0,  C: 5.0,  D: 5.0,  NEW: 5.0 },
+  sme:          { A: 5.0,  B: 5.0,  C: 5.0,  D: 5.0,  NEW: 5.0 },
+  sme_plus:     { A: 4.25, B: 4.25, C: 4.25, D: 4.25, NEW: 4.25 },
+  lpo:          { A: 4.5,  B: 4.5,  C: 4.5,  D: 4.5,  NEW: 4.5 },
+  asset_finance:{ A: 4.5,  B: 4.5,  C: 4.5,  D: 4.5,  NEW: 4.5 },
+  exception:    { A: 4.5,  B: 4.5,  C: 4.5,  D: 4.5,  NEW: 4.5 },
+};
+
+// Upfront fee % by product × grade
+// (Excel G184-G187: micro/sme=5%, sme_plus=4.25%, others=E182)
+export const UPFRONT_FEE_TIER_MATRIX: Record<LoanProductKey, Record<LoanCycleGrade, number>> = {
+  micro:        { A: 5.0,  B: 5.0,  C: 5.0,  D: 5.0,  NEW: 5.0 },
+  sme:          { A: 5.0,  B: 5.0,  C: 5.0,  D: 5.0,  NEW: 5.0 },
+  sme_plus:     { A: 4.25, B: 4.25, C: 4.25, D: 4.25, NEW: 4.25 },
+  lpo:          { A: 3.2,  B: 3.2,  C: 3.2,  D: 3.2,  NEW: 3.2 },
+  asset_finance:{ A: 3.2,  B: 3.2,  C: 3.2,  D: 3.2,  NEW: 3.2 },
+  exception:    { A: 3.2,  B: 3.2,  C: 3.2,  D: 3.2,  NEW: 3.2 },
+};
+
+// Default CCD % by product
+export const CCD_TIER_MATRIX: Record<LoanProductKey, number> = {
+  micro: 5.0,
+  sme: 5.0,
+  sme_plus: 5.0,
+  lpo: 5.0,
+  asset_finance: 5.0,
+  exception: 5.0,
+};
+
+/**
+ * Look up the interest rate and upfront fee for a given product + grade.
+ * Returns { rate, upfrontFee, ccd } — all monthly percentages.
+ */
+export function lookupRateTier(product: LoanProductKey, grade: LoanCycleGrade): {
+  rate: number;
+  upfrontFee: number;
+  ccd: number;
+} {
+  return {
+    rate: RATE_TIER_MATRIX[product]?.[grade] ?? 4.5,
+    upfrontFee: UPFRONT_FEE_TIER_MATRIX[product]?.[grade] ?? 3.2,
+    ccd: CCD_TIER_MATRIX[product] ?? 5.0,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// v42 — SECTOR BENCHMARK MARGINS (110 sectors from the Excel Sheet1 reference)
+// Used by the Margin Summary Base 3-way comparison + purchase verification.
+// ---------------------------------------------------------------------------
+
+export const SECTOR_BENCHMARK_MARGINS: Record<string, number> = {
+  'Sales of hair extention/accessories': 20.41,
+  'Cosmetics': 19.0,
+  'Sales of wood': 22.72,
+  'Sales of Phone accessories': 19.65,
+  'Sales of Tyres (General Automobile)': 18.31,
+  'Sales of Trucks spare parts': 25.0,
+  'Sales Agro-allied products': 19.22,
+  'Sales of Baby Item': 18.0,
+  'Aluminium profiles and accessories': 14.62,
+  'Fabrication and sale of aluminium roofing sheets': 25.0,
+  'Sales of Suspended Ceiling': 15.9,
+  'Sales of POP': 22.36,
+  'Sales of Plank': 18.62,
+  'Sales of provision and grocery stores': 11.05,
+  'Sales of Auto-paints': 20.46,
+  'Sales of Iphone and accessories': 18.93,
+  'Sales of Pharmaceutical products': 22.62,
+  'Sales of Cellotape': 25.0,
+  'Sales of fabric and textile materials': 19.28,
+  'Sales of Palm Oil': 15.0,
+  'Sale of alcoholic drinks': 10.01,
+  'Sale of non-alcoholic drinks': 8.13,
+  'Sales of assorted wines': 20.44,
+  'Iron and steel rods': 11.35,
+  'Water production/beverage drink': 25.0,
+  'Sales of footwears': 11.32,
+  'Haulage/Logistics': 77.89,
+  'Cooking Gas/home accessories': 11.0,
+  'Food chemicals': 7.19,
+  'Production of paints': 25.0,
+  'Production and sale of polythene product': 25.0,
+  'Building materials (roofing felt)': 16.55,
+  'Food chemicals (industrial)': 18.0,
+  'Hospital': 25.0,
+  'School laboratory equipment': 23.0,
+  'Automobile spare-parts': 25.0,
+  'Building block production/inter-locking': 20.0,
+  'Bakery/Confectionaries': 15.0,
+  'Sale of PVC water pipes and accessories': 19.72,
+  'Sales of Mobile phones': 21.0,
+  'Butchers/sale of meat': 21.36,
+  'Welding Service (Metal/Tanker fabrication/general)': 22.0,
+  'Electrical home accessories': 15.14,
+  'Printing Materials and printing press': 25.0,
+  'Sales of clothings and boutique (Shoes, shirts, etc)': 15.61,
+  'Sale of industrial papers': 19.37,
+  'Sales of Alubond sheet': 21.35,
+  'General building materials': 18.55,
+  'Sales of cars': 22.76,
+  'Sales of Laminated Wood/HDF/MDF Wood/plywood': 20.19,
+  'Sales of Metal Scrap': 22.31,
+  'Animal feeds': 10.19,
+  'Sales of Iron and building material': 13.45,
+  'Sales of electronics and Computer systems': 17.29,
+  'Sales of Car engine': 16.96,
+  'Sales of Electronics': 20.13,
+  'Sales of frozen food': 10.7,
+  'Mattress and pillow': 14.87,
+  'Sales of electrical material': 24.0,
+  'Sales of PMS (Petroleum Product)': 9.78,
+  'Sales recharge cards': 7.99,
+  'Sales of rechargable and stationary': 18.53,
+  'Sales of truck head and spare parts': 14.0,
+  'Poultry farming/sale of egg/chicken feeds': 16.8,
+  'Sales of industrial electric motor': 21.0,
+  'Fabrication and sale of furnitures/embroidery/sewing': 25.0,
+  'Sales of sesame seeds, cashew nuts and ginger': 12.69,
+  'Sales of foodstufs (garri, rice, beans, yams, palm oil)': 13.69,
+  'Sales of building doors (imported doors)': 22.35,
+  'General industrial chemicals': 22.65,
+  'Tailoring materials': 19.25,
+  'Hotel/hospitality': 77.89,
+  'Production of tissue paper/disposable cup&plates': 23.0,
+  'Ladies clothes': 18.0,
+  'Medical & scientific equipment': 22.62,
+  'Sales of bags': 21.95,
+  'Sales of furniture': 19.16,
+  'Production of furnitures': 25.0,
+  'Recycling/production of nylon': 25.0,
+  'Traditional/herbal drugs': 23.48,
+  'Bureau de-change': 6.37,
+  'Sales padlocks and keys': 15.39,
+  'Organic medicine/drugs': 22.58,
+  'School': 77.89,
+  'Sales of jewelries': 24.13,
+  'Generator/generator spare-parts': 24.0,
+  'Production/sale of industrial printing inks/chemicals': 20.17,
+  'Production/sale of chinchin': 21.25,
+  'Sale of motorcycle spare/lubricants': 18.67,
+  'Sales of rubber shoes': 17.07,
+  'Sales of gift items, stationeries and Household': 23.0,
+  'Industrial kitchen equipment': 19.78,
+  'Eatery/confectionery/Restaurant': 25.0,
+  'Household and kitchen utensils': 24.26,
+  'Rental services': 77.89,
+  'Mats and centre rugs': 21.45,
+  'Sales of Leather, sofa/cushion materials': 19.23,
+  'Sales of water dispenser': 21.38,
+  'Polythene/plastics products': 25.0,
+  'Industrial machines': 25.0,
+  'Sales of Solar panels': 23.0,
+  'Sales of wristwatches': 23.2,
+  'Sales of plumbing materials': 22.0,
+  'Production of food spices': 23.0,
+  'Production of hair extension/attachment': 21.0,
+  'Sales of Glass and Accessories': 20.32,
+  'Electric Transformers': 14.94,
+  'Laptop and computer system': 16.18,
+  'Production of edible oil': 10.0,
+};
+
+/**
+ * Look up the sector benchmark margin by sector name (case-insensitive partial match).
+ * Returns 0 if not found.
+ */
+export function lookupSectorMargin(sectorName: string): number {
+  if (!sectorName) return 0;
+  const lower = sectorName.toLowerCase().trim();
+  // Exact match first
+  for (const [key, val] of Object.entries(SECTOR_BENCHMARK_MARGINS)) {
+    if (key.toLowerCase() === lower) return val;
+  }
+  // Partial match
+  for (const [key, val] of Object.entries(SECTOR_BENCHMARK_MARGINS)) {
+    if (key.toLowerCase().includes(lower) || lower.includes(key.toLowerCase())) return val;
+  }
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// v42 — COLLATERAL DEPRECIATION RATES (configurable, Excel defaults: 20%/40%)
+// ---------------------------------------------------------------------------
+
+export const COLLATERAL_DEPRECIATION = {
+  MOVABLE: 0.20,     // 20% — vehicles, equipment
+  IMMOVABLE: 0.40,   // 40% — land, buildings
+  CASH: 0.0,         // 0% — cash collateral doesn't depreciate
+} as const;
+
+// ---------------------------------------------------------------------------
+// v42 — CRC BUREAU LOAN STATUS CLASSIFICATIONS (8 NPL stages)
+// Mirrors the Excel Sheet1 "Loan Status" reference list.
+// ---------------------------------------------------------------------------
+
+export const CRC_LOAN_STATUSES = [
+  'Performing',
+  'Pass & Watch',
+  'Substandard',
+  'Doubtful',
+  'Lost',
+  'Watchlist',
+  'Write-off',
+  'Overdraft',
+] as const;
+
+// ---------------------------------------------------------------------------
+// v42 — COLLATERAL OWNERSHIP TYPES
+// ---------------------------------------------------------------------------
+
+export const COLLATERAL_OWNERSHIP_TYPES = [
+  'Borrower',
+  'Guarantor',
+  'Other Party',
+] as const;
+
+// ---------------------------------------------------------------------------
+// v42 — MOVABLE COLLATERAL TITLE DOCUMENTS
+// ---------------------------------------------------------------------------
+
+export const MOVABLE_COLLATERAL_TITLES = [
+  'Proof of Ownership',
+  'Vehicle License',
+  'Insurance Papers',
+  'Roadworthiness Certificate',
+  'Custom Papers',
+  'Other',
+] as const;
+
+export const IMMOVABLE_COLLATERAL_TITLES = [
+  'Certificate of Occupancy (C of O)',
+  'Deed of Assignment',
+  'Survey Plan',
+  'Purchase Receipt',
+  'Family Receipt',
+  'Governor\'s Consent',
+  'Other',
+] as const;
+
+// ---------------------------------------------------------------------------
+
 // ONBOARDING CHANNELS
 // ---------------------------------------------------------------------------
 

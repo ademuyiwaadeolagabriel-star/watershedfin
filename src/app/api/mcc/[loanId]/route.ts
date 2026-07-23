@@ -279,7 +279,10 @@ export async function GET(
         officerId: icOfficerId,
         officerName: icOfficerName,
         notes: pd?.approvalNotes || pd?.rejectionReason || icApprovalLog?.comments || null,
-        verifiedAt: pd?.approvedAt || loan.auditPassedAt || null,
+        verifiedAt: (() => {
+          const d = pd?.approvedAt || loan.auditPassedAt || null;
+          return d ? d.toISOString() : null;
+        })(),
       }
     );
 

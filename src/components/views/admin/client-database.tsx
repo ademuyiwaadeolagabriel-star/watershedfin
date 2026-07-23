@@ -39,6 +39,7 @@ interface Customer {
   email: string | null;
   phone: string | null;
   bvn: string | null;
+  nin?: string | null;
   accountNumber: string | null;
   kycStatus: string | null;
   createdAt: string;

@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
         },
         select: {
           id: true, status: true, amount: true, finalAmount: true,
-          submittedAt: true, approvedAt: true, disbursedAt: true,
+          submittedAt: true, approvedDate: true, disbursedAt: true,
           currentStep: true,
         },
       });
@@ -64,8 +64,8 @@ export async function GET(req: NextRequest) {
 
       // Processing time: submitted to approved
       const processingTimes = loans
-        .filter(l => l.submittedAt && l.approvedAt)
-        .map(l => (new Date(l.approvedAt!).getTime() - new Date(l.submittedAt!).getTime()) / (1000 * 60 * 60 * 24));
+        .filter(l => l.submittedAt && l.approvedDate)
+        .map(l => (new Date(l.approvedDate!).getTime() - new Date(l.submittedAt!).getTime()) / (1000 * 60 * 60 * 24));
       const avgProcessingDays = processingTimes.length > 0
         ? processingTimes.reduce((a, b) => a + b, 0) / processingTimes.length
         : 0;

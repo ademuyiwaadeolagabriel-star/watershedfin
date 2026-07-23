@@ -33,25 +33,35 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Upsert Contact by email (or by phone if no email)
+    // Find or create Contact — Contact.email is NOT unique in schema, so we use
+    // findFirst + create instead of upsert.
     let contact: any = null;
     try {
       if (email) {
-        contact = await db.contact.upsert({
+        contact = await db.contact.findFirst({
           where: { email },
-          update: {
-            firstName,
-            lastName,
-            mobile: phone || undefined,
-          },
-          create: {
-            firstName,
-            lastName,
-            email,
-            mobile: phone || undefined,
-            subscribed: true,
-          },
+          orderBy: { createdAt: 'desc' },
         });
+        if (contact) {
+          contact = await db.contact.update({
+            where: { id: contact.id },
+            data: {
+              firstName,
+              lastName,
+              mobile: phone || contact.mobile,
+            },
+          });
+        } else {
+          contact = await db.contact.create({
+            data: {
+              firstName,
+              lastName,
+              email,
+              mobile: phone || null,
+              subscribed: true,
+            },
+          });
+        }
       } else {
         contact = await db.contact.create({
           data: {
@@ -64,7 +74,7 @@ export async function POST(req: NextRequest) {
         });
       }
     } catch (e) {
-      // If unique constraint collision on phone etc., fall back to create
+      // Fallback to create if anything goes wrong
       contact = await db.contact.create({
         data: {
           firstName,

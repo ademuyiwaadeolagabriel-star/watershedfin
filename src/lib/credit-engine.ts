@@ -2596,3 +2596,397 @@ export function generateConvertToLoanSchedule(
   };
 }
 
+// ===========================================================================
+// v42 — EXCEL PARITY ENHANCEMENTS
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// v42 — Margin Summary Base (3-way comparison + least figure selection)
+// Mirrors Excel FINANCIAL ANALYSIS!A26-D32.
+// Compares: (a) simple average margin, (b) weighted margin, (c) sector
+// benchmark margin — then picks the LEAST figure as "margin used."
+// ---------------------------------------------------------------------------
+
+export interface MarginSummaryBase {
+  averageMargin: number;       // simple average of inventory line items
+  weightedMargin: number;      // weighted by cost value share
+  benchmarkMargin: number;     // sector benchmark from lookup
+  marginUsed: number;          // least of the three (the "considered" margin)
+  sourceUsed: 'average' | 'weighted' | 'benchmark';
+}
+
+/**
+ * Compute the 3-way margin comparison and pick the least figure.
+ * This is the margin used for all downstream calculations (purchase
+ * verification, cashflow, etc.).
+ *
+ * @param weightedMargin  - from calculateWeightedMargin()
+ * @param simpleAverage   - from calculateWeightedMargin()
+ * @param sectorBenchmark - from lookupSectorMargin() (percentage)
+ * @returns MarginSummaryBase with marginUsed = least of the three
+ */
+export function computeMarginSummaryBase(
+  weightedMargin: number,
+  simpleAverage: number,
+  sectorBenchmark: number,
+): MarginSummaryBase {
+  const benchmark = sectorBenchmark > 0 ? sectorBenchmark / 100 : 0;
+  const candidates: { name: 'average' | 'weighted' | 'benchmark'; value: number }[] = [
+    { name: 'average', value: simpleAverage },
+    { name: 'weighted', value: weightedMargin },
+    { name: 'benchmark', value: benchmark },
+  ];
+  // Filter out zeros, then pick the least
+  const valid = candidates.filter(c => c.value > 0);
+  const least = valid.length > 0
+    ? valid.reduce((min, c) => c.value < min.value ? c : min, valid[0])
+    : { name: 'weighted' as const, value: 0 };
+
+  return {
+    averageMargin: simpleAverage,
+    weightedMargin,
+    benchmarkMargin: benchmark,
+    marginUsed: least.value,
+    sourceUsed: least.name,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// v42 — Extended Collateral Item (with title docs, chassis, land measurement)
+// Mirrors Excel COLLATERAL PLEDGE sheet structure.
+// ---------------------------------------------------------------------------
+
+export interface ExtendedCollateralItem {
+  id: string;
+  category: 'MOVABLE' | 'IMMOVABLE' | 'CASH';
+  name: string;
+  description?: string;
+  address?: string;              // for immovable
+  marketValue: number;
+  depreciationRate: number;      // 0.20 for movable, 0.40 for immovable
+  forcedSaleValue: number;       // marketValue - (depRate × marketValue)
+  coveragePercent: number;       // FSV / loanBase × 100
+  // Title documents
+  titleDocuments: string[];      // e.g. ['Deed of Assignment', 'Survey Plan']
+  documentExpiryDate?: string;
+  // Movable-specific
+  vehicleChassisNumber?: string;
+  vehicleYear?: number;
+  // Immovable-specific
+  landMeasurement?: string;      // e.g. "345.734 sq metres"
+  // Ownership
+  ownership: 'Borrower' | 'Guarantor' | 'Other Party';
+}
+
+/**
+ * Calculate FSV and coverage for a single collateral item.
+ */
+export function calculateCollateralItem(
+  item: Omit<ExtendedCollateralItem, 'forcedSaleValue' | 'coveragePercent'>,
+  loanBase: number,
+): ExtendedCollateralItem {
+  const forcedSaleValue = item.marketValue - (item.depreciationRate * item.marketValue);
+  const coveragePercent = loanBase > 0 ? (forcedSaleValue / loanBase) * 100 : 0;
+  return {
+    ...item,
+    forcedSaleValue,
+    coveragePercent,
+  };
+}
+
+/**
+ * Calculate the full collateral mix from a list of extended items.
+ * Returns totals by category + overall coverage.
+ */
+export function calculateExtendedCollateralMix(
+  items: ExtendedCollateralItem[],
+  loanBase: number,
+  cashCollateral: number = 0,
+  stockValue: number = 0,
+): {
+  movableTotal: number;
+  immovableTotal: number;
+  cashTotal: number;
+  stockTotal: number;  // 10% of stock value
+  grandTotal: number;
+  coveragePercent: number;
+  mix: { type: string; value: number; percent: number }[];
+} {
+  const movableTotal = items
+    .filter(i => i.category === 'MOVABLE')
+    .reduce((s, i) => s + i.forcedSaleValue, 0);
+  const immovableTotal = items
+    .filter(i => i.category === 'IMMOVABLE')
+    .reduce((s, i) => s + i.forcedSaleValue, 0);
+  const cashTotal = cashCollateral;
+  const stockTotal = stockValue * 0.10;  // 10% of stock
+  const grandTotal = movableTotal + immovableTotal + cashTotal + stockTotal;
+  const coveragePercent = loanBase > 0 ? (grandTotal / loanBase) * 100 : 0;
+
+  const mix = [
+    { type: 'Movable', value: movableTotal, percent: loanBase > 0 ? (movableTotal / loanBase) * 100 : 0 },
+    { type: 'Immovable', value: immovableTotal, percent: loanBase > 0 ? (immovableTotal / loanBase) * 100 : 0 },
+    { type: 'Cash Collateral', value: cashTotal, percent: loanBase > 0 ? (cashTotal / loanBase) * 100 : 0 },
+    { type: 'Stock (10%)', value: stockTotal, percent: loanBase > 0 ? (stockTotal / loanBase) * 100 : 0 },
+  ];
+
+  return { movableTotal, immovableTotal, cashTotal, stockTotal, grandTotal, coveragePercent, mix };
+}
+
+// ---------------------------------------------------------------------------
+// v42 — Extended Guarantor (full business profile)
+// Mirrors Excel GUARANTORS' INFO sheet.
+// ---------------------------------------------------------------------------
+
+export interface ExtendedGuarantor {
+  id: string;
+  guarantorNumber: 1 | 2;
+  // Business info
+  businessName: string;
+  registrationNumber?: string;
+  businessDescription?: string;
+  monthlySalary?: number;
+  phoneNumber?: string;
+  businessAddress?: string;
+  landmark?: string;
+  // Owner info
+  ownerName: string;
+  sex?: 'M' | 'F';
+  residenceAddress?: string;
+  residenceLandmark?: string;
+  houseOwnership?: 'Owned' | 'Family' | 'Rented';
+  yearsAtHouse?: number;
+  houseDescription?: string;
+  relationshipToCustomer?: string;
+  maritalStatus?: 'Single' | 'Married' | 'Divorced' | 'Widow(er)';
+  religion?: string;
+  nationality?: string;
+  churchOrMosqueName?: string;
+  isWflClient?: boolean;
+  // Financials
+  businessWorth: number;
+  stockOfGoods: number;
+  monthlySales: number;
+  costOfGoodsSold: number;
+  grossProfit: number;         // monthlySales - costOfGoodsSold
+  operationFamilyExpenses: number;
+  netProfit: number;           // grossProfit - operationFamilyExpenses
+  wflInstallmentAmount: number;
+  repaymentCapacity: number;   // netProfit - wflInstallmentAmount
+  dsr: number;                 // wflInstallmentAmount / repaymentCapacity
+}
+
+/**
+ * Calculate guarantor financials from the raw inputs.
+ * Mirrors Excel GUARANTORS' INFO!E23-M24 formulas.
+ */
+export function calculateGuarantorFinancials(
+  input: Omit<ExtendedGuarantor, 'grossProfit' | 'netProfit' | 'repaymentCapacity' | 'dsr'>,
+): ExtendedGuarantor {
+  const grossProfit = input.monthlySales - input.costOfGoodsSold;
+  const netProfit = grossProfit - input.operationFamilyExpenses;
+  const repaymentCapacity = netProfit - input.wflInstallmentAmount;
+  const dsr = repaymentCapacity > 0 ? input.wflInstallmentAmount / repaymentCapacity : 999;
+  return { ...input, grossProfit, netProfit, repaymentCapacity, dsr };
+}
+
+// ---------------------------------------------------------------------------
+// v42 — CRC Bureau Loan Entry (extended with NPL classification)
+// Mirrors Excel CLIENT'S INFORMATION!A66-N83.
+// ---------------------------------------------------------------------------
+
+export interface CrcBureauLoan {
+  id: string;
+  sn: number;
+  institution: string;
+  loanAmount: number;
+  reportedDate?: string;
+  installmentAmount: number;
+  currentBalance: number;
+  loanTenure?: string;
+  loanStatus: string;          // from CRC_LOAN_STATUSES
+  lastPaymentDate?: string;
+  daysInDefault?: string | number;
+}
+
+/**
+ * Sum the current balances of all CRC bureau loans.
+ */
+export function sumCrcBureauBalances(loans: CrcBureauLoan[]): number {
+  return loans.reduce((sum, l) => sum + (l.currentBalance || 0), 0);
+}
+
+/**
+ * Sum the monthly installments of all CRC bureau loans.
+ */
+export function sumCrcBureauInstallments(loans: CrcBureauLoan[]): number {
+  return loans.reduce((sum, l) => sum + (l.installmentAmount || 0), 0);
+}
+
+// ---------------------------------------------------------------------------
+// v42 — Monthly Bank Statement Grid (12 months)
+// Mirrors Excel FINANCIAL ANALYSIS!A110-H119 (inflow) and A146-H155 (outflow).
+// ---------------------------------------------------------------------------
+
+export interface MonthlyBankStatementEntry {
+  month: number;   // 1-12
+  inflow: number;  // credit side (sales)
+  outflow: number; // debit side (purchases)
+}
+
+/**
+ * Compute average monthly inflow and outflow from a 12-month bank statement grid.
+ */
+export function computeBankStatementAverages(entries: MonthlyBankStatementEntry[]): {
+  totalInflow: number;
+  totalOutflow: number;
+  averageInflow: number;
+  averageOutflow: number;
+} {
+  const valid = entries.filter(e => e.inflow > 0 || e.outflow > 0);
+  const totalInflow = valid.reduce((s, e) => s + e.inflow, 0);
+  const totalOutflow = valid.reduce((s, e) => s + e.outflow, 0);
+  const count = valid.length || 1;
+  return {
+    totalInflow,
+    totalOutflow,
+    averageInflow: totalInflow / count,
+    averageOutflow: totalOutflow / count,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// v42 — 3-Day Spot Check Sales (×8 monthly estimate)
+// Mirrors Excel FINANCIAL ANALYSIS!A101-H108.
+// ---------------------------------------------------------------------------
+
+export interface SpotCheckDay {
+  day: number;       // 1, 2, 3
+  cashSales: number;
+}
+
+/**
+ * Compute the monthly estimate from 3-day spot check.
+ * Formula: (Day1 + Day2 + Day3) × 8 = monthly estimate
+ */
+export function computeSpotCheckMonthly(days: SpotCheckDay[]): {
+  total: number;
+  monthlyEstimate: number;
+} {
+  const total = days.reduce((s, d) => s + d.cashSales, 0);
+  return { total, monthlyEstimate: total * 8 };
+}
+
+// ---------------------------------------------------------------------------
+// v42 — 6-Month Sales/Purchase Records Grid
+// Mirrors Excel FINANCIAL ANALYSIS!A121-E125 (sales) and A157-E161 (purchases).
+// ---------------------------------------------------------------------------
+
+export interface MonthlyRecordEntry {
+  month: number;  // 1-6
+  amount: number;
+}
+
+/**
+ * Compute average from 6-month records.
+ */
+export function computeSixMonthAverage(records: MonthlyRecordEntry[]): number {
+  const valid = records.filter(r => r.amount > 0);
+  if (valid.length === 0) return 0;
+  return valid.reduce((s, r) => s + r.amount, 0) / valid.length;
+}
+
+// ---------------------------------------------------------------------------
+// v42 — Previous Balance Sheet Snapshot
+// Mirrors Excel FINANCIAL ANALYSIS!J45-M83 (PREVIOUS column).
+// ---------------------------------------------------------------------------
+
+export interface PreviousBalanceSheet {
+  periodDate: string;
+  cashAtHand: number;
+  cashInBanks: number;
+  wflBalance: number;
+  receivables: number;
+  advanceToSuppliers: number;
+  stockValue: number;
+  fixedBusinessAssets: number;
+  fixedFamilyAssets: number;
+  shortTermLiabilities: number;
+  advanceFromCustomers: number;
+  wflLoan: number;
+  otherBankLoans: number;
+  longTermLiabilities: number;
+  wflLongTermLoan: number;
+  otherLongTermLoans: number;
+  totalAssets: number;
+  totalLiabilities: number;
+  equity: number;
+}
+
+/**
+ * Compute totals for the previous balance sheet.
+ */
+export function computePreviousBalanceSheetTotals(
+  input: Omit<PreviousBalanceSheet, 'totalAssets' | 'totalLiabilities' | 'equity'>,
+): PreviousBalanceSheet {
+  const totalAssets =
+    input.cashAtHand + input.cashInBanks + input.wflBalance +
+    input.receivables + input.advanceToSuppliers + input.stockValue +
+    input.fixedBusinessAssets + input.fixedFamilyAssets;
+  const totalLiabilities =
+    input.shortTermLiabilities + input.advanceFromCustomers +
+    input.wflLoan + input.otherBankLoans +
+    input.longTermLiabilities + input.wflLongTermLoan + input.otherLongTermLoans;
+  const equity = totalAssets - totalLiabilities;
+  return { ...input, totalAssets, totalLiabilities, equity };
+}
+
+/**
+ * Compute the difference between current and previous balance sheets.
+ * Returns a row-by-row comparison.
+ * v42: This is a simpler version that works with the extended previous BS.
+ */
+export function compareBalanceSheetsExtended(
+  current: { totalAssets: number; totalLiabilities: number; equity: number; stockValue: number; cashAtHand: number; cashInBanks: number },
+  previous: PreviousBalanceSheet,
+): {
+  assetDifference: number;
+  liabilityDifference: number;
+  equityDifference: number;
+  stockDifference: number;
+  treasuryDifference: number;
+} {
+  return {
+    assetDifference: current.totalAssets - previous.totalAssets,
+    liabilityDifference: current.totalLiabilities - previous.totalLiabilities,
+    equityDifference: current.equity - previous.equity,
+    stockDifference: current.stockValue - previous.stockValue,
+    treasuryDifference: (current.cashAtHand + current.cashInBanks) - (previous.cashAtHand + previous.cashInBanks),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// v42 — Visitation GPS Coordinates
+// ---------------------------------------------------------------------------
+
+export interface VisitationCoordinates {
+  businessLocation?: { lat: number; lng: number; accuracy?: number };
+  collateralLocation?: { lat: number; lng: number; accuracy?: number };
+  guarantor1Location?: { lat: number; lng: number; accuracy?: number };
+  guarantor2Location?: { lat: number; lng: number; accuracy?: number };
+}
+
+// ---------------------------------------------------------------------------
+// v42 — Committee Decision Signature
+// ---------------------------------------------------------------------------
+
+export interface CommitteeSignature {
+  approverId: string;
+  approverName: string;
+  approverRole: string;
+  signatureData?: string;      // base64 image or typed name
+  signatureType: 'typed' | 'uploaded';
+  signedAt: string;            // ISO date
+  ipAddress?: string;
+}
+

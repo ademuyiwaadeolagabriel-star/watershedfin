@@ -18,7 +18,9 @@ export async function POST(
   try {
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
-    const adminId = authPayload.id;
+    // Prefer JWT auth, fall back to body.adminId for legacy clients
+    const authPayload = getAuthFromRequest(req);
+    const adminId = authPayload?.id || body.adminId;
 
     const existing = await db.blog.findUnique({
       where: { id },
@@ -47,7 +49,7 @@ export async function POST(
     });
 
     // Audit log
-    let actor = null;
+    let actor: any = null;
     if (adminId) {
       actor = await db.admin.findUnique({
         where: { id: adminId },

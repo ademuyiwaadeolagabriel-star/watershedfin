@@ -93,6 +93,7 @@ import { FeeManagerView } from '@/components/views/admin/fee-manager';
 import { StaffCreateView } from '@/components/views/admin/staff-create';
 import { ChangePasswordView } from '@/components/views/admin/change-password';
 import { ForgotPasswordView } from '@/components/views/forgot-password';
+import { ResetPasswordView } from '@/components/views/reset-password';  // v41
 import { CsKycQueueView } from '@/components/views/cs/cs-kyc-queue';
 import { CsPaymentVerificationView } from '@/components/views/cs/cs-payment-verification';
 import { LegalCacSearchView } from '@/components/views/legal/legal-cac-search';
@@ -106,8 +107,22 @@ import { RespondToLegalView } from '@/components/views/customer/respond-to-legal
 import { useEffect, useState } from 'react';
 
 export default function Home() {
-  const { currentAdmin, currentUser, currentView, theme } = useAppStore();
+  const { currentAdmin, currentUser, currentView, theme, setView } = useAppStore();
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
+
+  // v41: Detect reset-password URL on mount — email reset link lands on /?token=xxx
+  // We check for the token query param and force the reset-password view.
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const resetToken = params.get('token');
+      const path = window.location.pathname;
+      // If URL is /reset-password or there's a token param, show reset view
+      if (path === '/reset-password' || (resetToken && path === '/')) {
+        setView('reset-password');
+      }
+    }
+  }, [setView]);
 
   // Check if system needs first-run setup (only when no admin is logged in)
   useEffect(() => {
@@ -133,6 +148,12 @@ export default function Home() {
       document.documentElement.classList.toggle('dark', theme === 'dark');
     }
   }, [theme]);
+
+  // ── v41: Reset password view — always render if requested (even if logged in) ──
+  // This ensures the email reset link works regardless of persisted auth state.
+  if (currentView === 'reset-password') {
+    return <ResetPasswordView />;
+  }
 
   // ── First-run setup wizard ─────────────────────────────────────────────
   // If no admin exists and system needs setup, show the setup wizard

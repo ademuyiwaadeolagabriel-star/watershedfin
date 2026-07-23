@@ -13,9 +13,6 @@ export async function GET(
         acknowledgments: {
           orderBy: { acknowledgedAt: 'desc' },
           take: 100,
-          include: {
-            admin: { select: { id: true, firstName: true, lastName: true, username: true, role: true } },
-          },
         },
       },
     });

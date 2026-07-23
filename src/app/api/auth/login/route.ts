@@ -122,7 +122,13 @@ export async function POST(req: NextRequest) {
     console.log(`[LOGIN] Success: "${cleanUsername}" (role: ${admin.role})`);
 
     const { password: _pw, ...safeAdmin } = admin;
-    return NextResponse.json({ admin: safeAdmin, token });
+    // v41: Include mustChangePassword flag so frontend can force password change
+    // on first login (when admin creates staff with a temp password)
+    return NextResponse.json({
+      admin: safeAdmin,
+      token,
+      mustChangePassword: (admin as any).mustChangePassword === true,
+    });
   } catch (e: any) {
     console.error('[LOGIN] FATAL error:', e);
     return NextResponse.json(

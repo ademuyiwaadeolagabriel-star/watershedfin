@@ -13,7 +13,6 @@ export async function GET(req: NextRequest) {
       take: 200,
       include: {
         expenseAccount: true,
-        paymentAccount: true,
         createdBy: { select: { id: true, firstName: true, lastName: true } },
       },
     });

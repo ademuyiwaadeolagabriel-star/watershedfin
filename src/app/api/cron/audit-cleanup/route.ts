@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     const setting = await db.systemSetting.findUnique({
       where: { key: 'audit_retention_days' },
     });
-    const days = setting ? parseInt(setting.value, '10') : 365;
+    const days = setting ? parseInt(setting.value, 10) : 365;
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
     const r1 = await db.auditLog.deleteMany({ where: { createdAt: { lt: cutoff } } });

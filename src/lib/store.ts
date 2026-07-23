@@ -129,6 +129,7 @@ export type ViewKey =
   | 'staff-create'
   | 'change-password'
   | 'forgot-password'
+  | 'reset-password'  // v41: consumed by email reset link
   | 'legal-cac-search'
   | 'legal-mcc'
   | 'cs-kyc-queue'

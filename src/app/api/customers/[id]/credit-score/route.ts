@@ -24,7 +24,7 @@ export async function GET(
       where: { id: userId },
       include: {
         loans: {
-          select: { id: true, status: true, amount: true, currentStep: true, riskGrade: true },
+          select: { id: true, status: true, amount: true, currentStep: true },
         },
       },
     });

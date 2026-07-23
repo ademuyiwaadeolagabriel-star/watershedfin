@@ -21,7 +21,8 @@ import {
 } from 'lucide-react';
 
 // No demo customers — real accounts only. Customers must be onboarded by staff or self-register.
-const DEMO_CUSTOMERS: never[] = [];
+type DemoCustomer = { email: string; name: string; desc: string };
+const DEMO_CUSTOMERS: DemoCustomer[] = [];
 
 export function CustomerLoginView() {
   const { loginAsCustomer, setView } = useAppStore();

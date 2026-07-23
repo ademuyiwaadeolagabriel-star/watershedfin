@@ -102,7 +102,8 @@ export function LegalMccView() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          nextStep: action === 'approve' ? 'MD_MCC_APPROVAL' : 'CFO_REVIEW',
+          action: action === 'approve' ? 'forward' : 'return',  // v41: required field — forward=approve, return=reject
+          nextStep: action === 'approve' ? 'MD_APPROVAL' : 'CFO_REVIEW',
           notes: action === 'approve'
             ? `Legal MCC approved — all ${checks.length} compliance checks passed. ${mccNotes}`
             : `Legal MCC rejected: ${rejectReason}`,

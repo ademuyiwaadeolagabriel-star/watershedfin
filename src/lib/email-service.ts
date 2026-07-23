@@ -176,7 +176,7 @@ class PostmarkProvider implements EmailProvider {
         console.error('[EMAIL] postmark not installed. Run: bun add postmark');
         return { success: false, error: 'postmark not installed' };
       }
-      const client = new postmark.ServerClient(process.env.POSTMARK_API_KEY!);
+      const client = new (postmark as any).ServerClient(process.env.POSTMARK_API_KEY!);
       const result = await client.sendEmail({
         From: process.env.EMAIL_FROM || 'noreply@watershedcapital.com',
         To: Array.isArray(message.to) ? message.to.join(',') : message.to,

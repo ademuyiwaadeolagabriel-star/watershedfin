@@ -13,7 +13,6 @@ export async function GET(req: NextRequest) {
       orderBy: { date: 'desc' },
       take: 200,
       include: {
-        user: { select: { id: true, firstName: true, lastName: true, email: true } },
         payments: true,
       },
     });
@@ -53,7 +52,7 @@ export async function POST(req: NextRequest) {
         status: 'sent',
         revenueAccountId: revenueAccountId || null,
       },
-      include: { user: true },
+      include: { payments: true },
     });
 
     return NextResponse.json({ invoice }, { status: 201 });

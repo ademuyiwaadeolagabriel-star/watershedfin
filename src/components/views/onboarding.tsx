@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import {
   ONBOARDING_CHANNELS,
@@ -120,9 +120,14 @@ interface FormState {
   bmId: string;
   staffId: string;
 
-  // uploads (paths only, demo)
+  // uploads (v41: real file paths persisted to Business via /api/customer/kyc-upload)
   passportPhoto: string;
   idCardPhoto: string;
+  idCardBackPhoto: string;
+  meansOfIdPhoto: string;       // v41: Acceptable Means of ID (NIN/Passport/Driver's/Voter's)
+  proofOfAddressPhoto: string;  // v41: NEPA/Utility Bill
+  shopPhoto: string;            // v41: Picture/Certificate of Business
+  cacCertificatePhoto: string;  // v41: CAC Certificate
   additionalDocs: string;
 
   // agreement
@@ -168,6 +173,11 @@ const emptyForm: FormState = {
   staffId: '',
   passportPhoto: '',
   idCardPhoto: '',
+  idCardBackPhoto: '',
+  meansOfIdPhoto: '',
+  proofOfAddressPhoto: '',
+  shopPhoto: '',
+  cacCertificatePhoto: '',
   additionalDocs: '',
   agreed: false,
 };
@@ -239,6 +249,8 @@ export function OnboardingView() {
   const [showConsent, setShowConsent] = useState(false);
   const [cacFee, setCacFee] = useState<number>(5000);
   const [consentAccepted, setConsentAccepted] = useState(false);
+  // v41: file upload state — tracks which doc is currently uploading
+  const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
 
   // ----- load supporting data on mount -----
   useEffect(() => {
@@ -316,6 +328,52 @@ export function OnboardingView() {
   const setField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
     setTouched((t) => ({ ...t, [key]: true }));
+  };
+
+  // ----- v41: KYC document upload handler -----
+  // Uploads a file to /api/customer/kyc-upload and stores the returned path
+  // in the form state. The path is also persisted to the Business record by
+  // the API so CS staff can view it in the KYC queue.
+  const uploadDoc = async (
+    docType: 'passport' | 'id_front' | 'id_back' | 'proof_of_address' | 'shop_photo' | 'cac_certificate' | 'means_of_id',
+    fieldKey: keyof FormState,
+    file: File
+  ) => {
+    if (!file) return;
+    setUploadingDoc(docType);
+    try {
+      // We need a userId to upload. For self_onboard, we don't have one yet
+      // (user is created on submit). So we upload to a temp path and store
+      // the filename in form state; the actual path persistence happens
+      // after submit when we know the userId.
+      //
+      // For staff onboarding, the admin may have a draft userId. We try
+      // uploading with userId='pending' and the API will store the file
+      // but skip the Business update. After submit, the onboarding API
+      // will update the Business record with the paths.
+      const formData = new FormData();
+      formData.append('docType', docType);
+      formData.append('file', file);
+      // userId will be set by the API after user creation; for now pass 'pending'
+      formData.append('userId', 'pending');
+
+      const res = await fetch('/api/customer/kyc-upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setField(fieldKey, data.path);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setSubmitError(`Upload failed for ${docType}: ${err.error || 'Unknown error'}`);
+      }
+    } catch (e: any) {
+      setSubmitError(`Upload error: ${e.message}`);
+    } finally {
+      setUploadingDoc(null);
+    }
   };
 
   // ----- duplicate detection -----
@@ -397,6 +455,13 @@ export function OnboardingView() {
         if (!form.staffId) errs.push('staffId');
       }
       if (!form.agreed) errs.push('agreed');
+      // v41: Mandatory KYC documents (spec point #1)
+      if (!form.passportPhoto) errs.push('passportPhoto');
+      if (!form.idCardPhoto) errs.push('idCardPhoto');
+      if (!form.meansOfIdPhoto) errs.push('meansOfIdPhoto');
+      if (!form.proofOfAddressPhoto) errs.push('proofOfAddressPhoto');
+      if (!form.shopPhoto) errs.push('shopPhoto');
+      if (!form.cacCertificatePhoto) errs.push('cacCertificatePhoto');
     }
     return errs;
   };
@@ -520,6 +585,23 @@ export function OnboardingView() {
             branchId: form.branchId || undefined,
             staffId: form.staffId || (channel === 'field_onboard' ? adminId : undefined),
           },
+          // v41: Send uploaded document paths so the API can persist them on Business
+          documents: {
+            passportPhoto: form.passportPhoto || undefined,
+            idCardFront: form.idCardPhoto || undefined,
+            idCardBack: form.idCardBackPhoto || undefined,
+            meansOfId: form.meansOfIdPhoto || undefined,
+            proofOfAddress: form.proofOfAddressPhoto || undefined,
+            shopPhoto: form.shopPhoto || undefined,
+            cacCertificate: form.cacCertificatePhoto || undefined,
+            additionalDocs: form.additionalDocs || undefined,
+          },
+          // v41: Send consent metadata so the API can persist OnboardingConsent
+          consent: consentAccepted ? {
+            feeKey: 'fee_cac_search',
+            feeAmount: cacFee,
+            acceptedAt: new Date().toISOString(),
+          } : undefined,
         }),
       });
       const data = await res.json();
@@ -857,6 +939,8 @@ export function OnboardingView() {
             branchManagers={branchManagers}
             loanOfficers={loanOfficers}
             isFieldInvalid={isFieldInvalid}
+            uploadDoc={uploadDoc}
+            uploadingDoc={uploadingDoc}
           />
         )}
 
@@ -903,6 +987,61 @@ export function OnboardingView() {
           )}
         </div>
       </div>
+
+      {/* v39: CAC Search Consent Dialog (lives in OnboardingView scope so it can access state) */}
+      {showConsent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-600" />
+              <h3 className="text-base font-bold text-slate-900">CAC Name Search Fee</h3>
+            </div>
+            <p className="text-sm text-slate-600">
+              Your application will be reviewed by Customer Service for KYC verification. After
+              KYC approval, a <strong>CAC Name Search</strong> will be conducted which attracts
+              a fee of <strong>₦{cacFee.toLocaleString()}</strong>.
+            </p>
+            <p className="text-sm text-slate-600">
+              By clicking <strong>Accept</strong>, you agree to pay this fee after your KYC is
+              approved. You can pay via Paystack (card) or manual bank transfer.
+            </p>
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+              <p className="text-xs text-amber-800">
+                <AlertCircle className="h-3.5 w-3.5 inline mr-1" />
+                If you click <strong>Reject</strong>, your application will be cancelled.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                className="text-red-600 border-red-300 hover:bg-red-50"
+                onClick={() => {
+                  // v41: Auto-cancel the application as per spec point #2
+                  setShowConsent(false);
+                  setConsentAccepted(false);
+                  setSubmitError('Application cancelled. You declined the CAC Name Search fee consent. Your application has not been submitted.');
+                  setStep(0); // Return to first step so the user can restart if they change their mind
+                  if (typeof window !== 'undefined') {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }
+                }}
+              >
+                Reject / Cancel Application
+              </Button>
+              <Button
+                className="bg-emerald-600 hover:bg-emerald-700"
+                onClick={() => {
+                  setConsentAccepted(true);
+                  setShowConsent(false);
+                  void doSubmit();
+                }}
+              >
+                <CheckCircle2 className="h-4 w-4 mr-1" /> Accept & Submit
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1566,12 +1705,17 @@ function StepAssignment({
   branchManagers,
   loanOfficers,
   isFieldInvalid,
+  uploadDoc,
+  uploadingDoc,
 }: StepProps & {
   channel: string;
   currentAdmin: any;
   branches: any[];
   branchManagers: any[];
   loanOfficers: any[];
+  // v41: document upload handlers (passed from OnboardingView)
+  uploadDoc: (docType: 'passport' | 'id_front' | 'id_back' | 'proof_of_address' | 'shop_photo' | 'cac_certificate' | 'means_of_id', fieldKey: keyof FormState, file: File) => void;
+  uploadingDoc: string | null;
 }) {
   return (
     <div className="space-y-5">
@@ -1743,77 +1887,125 @@ function StepAssignment({
         </CardContent>
       </Card>
 
-      {/* Uploads card */}
+      {/* Uploads card — v41: real file uploads persisted via /api/customer/kyc-upload */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Upload className="h-4 w-4 text-emerald-600" />
-            Document Uploads
+            Mandatory KYC Document Uploads
           </CardTitle>
           <CardDescription>
-            Demo only — files are accepted but not stored. Production will upload to S3.
+            Upload all required documents. Files are securely stored and will be reviewed by Customer Service during KYC verification. Accepted formats: JPG, PNG, WebP, PDF (max 10MB each).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Field label="Passport Photo">
-              <div className="rounded-lg border border-dashed border-slate-300 p-4 text-center hover:border-emerald-400 transition-colors">
-                <div className="h-24 w-20 mx-auto bg-slate-100 rounded-md flex items-center justify-center mb-2">
-                  <IdCard className="h-6 w-6 text-slate-400" />
-                </div>
-                <Input
-                  type="file"
-                  accept="image/*"
-                  className="text-xs"
-                  onChange={(e) => setField('passportPhoto', e.target.files?.[0]?.name || '')}
-                />
-                <p className="text-[10px] text-slate-500 mt-1">150×180px preview</p>
-              </div>
-            </Field>
-            <Field label="ID Card Photo">
-              <div className="rounded-lg border border-dashed border-slate-300 p-4 text-center hover:border-emerald-400 transition-colors">
-                <div className="h-24 w-20 mx-auto bg-slate-100 rounded-md flex items-center justify-center mb-2">
-                  <FileText className="h-6 w-6 text-slate-400" />
-                </div>
-                <Input
-                  type="file"
-                  accept="image/*,application/pdf"
-                  className="text-xs"
-                  onChange={(e) => setField('idCardPhoto', e.target.files?.[0]?.name || '')}
-                />
-                <p className="text-[10px] text-slate-500 mt-1">Image or PDF</p>
-              </div>
-            </Field>
-            <Field label="Additional Documents">
-              <div className="rounded-lg border border-dashed border-slate-300 p-4 text-center hover:border-emerald-400 transition-colors">
-                <div className="h-24 w-20 mx-auto bg-slate-100 rounded-md flex items-center justify-center mb-2">
-                  <FileText className="h-6 w-6 text-slate-400" />
-                </div>
-                <Input
-                  type="file"
-                  multiple
-                  className="text-xs"
-                  onChange={(e) =>
-                    setField(
-                      'additionalDocs',
-                      Array.from(e.target.files || []).map((f) => f.name).join(', ')
-                    )
-                  }
-                />
-                <p className="text-[10px] text-slate-500 mt-1">Multiple files allowed</p>
-              </div>
-            </Field>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Passport Photo */}
+            <DocUploadField
+              label="Passport Photo *"
+              hint="150×180px, clear face shot"
+              accept="image/*"
+              value={form.passportPhoto}
+              uploading={uploadingDoc === 'passport'}
+              onChange={(file) => uploadDoc('passport', 'passportPhoto', file)}
+              onClear={() => setField('passportPhoto', '')}
+            />
+            {/* ID Card Front */}
+            <DocUploadField
+              label="ID Card — Front *"
+              hint="Front of National ID / Driver's License / Voter's Card"
+              accept="image/*,application/pdf"
+              value={form.idCardPhoto}
+              uploading={uploadingDoc === 'id_front'}
+              onChange={(file) => uploadDoc('id_front', 'idCardPhoto', file)}
+              onClear={() => setField('idCardPhoto', '')}
+            />
+            {/* ID Card Back */}
+            <DocUploadField
+              label="ID Card — Back"
+              hint="Back of ID (if applicable)"
+              accept="image/*,application/pdf"
+              value={form.idCardBackPhoto}
+              uploading={uploadingDoc === 'id_back'}
+              onChange={(file) => uploadDoc('id_back', 'idCardBackPhoto', file)}
+              onClear={() => setField('idCardBackPhoto', '')}
+            />
+            {/* Means of ID — separate from ID card photos */}
+            <DocUploadField
+              label="Acceptable Means of Identification *"
+              hint="National ID, International Passport, Driver's License, or Voter's Card"
+              accept="image/*,application/pdf"
+              value={form.meansOfIdPhoto}
+              uploading={uploadingDoc === 'means_of_id'}
+              onChange={(file) => uploadDoc('means_of_id', 'meansOfIdPhoto', file)}
+              onClear={() => setField('meansOfIdPhoto', '')}
+            />
+            {/* NEPA / Utility Bill */}
+            <DocUploadField
+              label="NEPA / Utility Bill *"
+              hint="Recent utility bill (max 3 months old)"
+              accept="image/*,application/pdf"
+              value={form.proofOfAddressPhoto}
+              uploading={uploadingDoc === 'proof_of_address'}
+              onChange={(file) => uploadDoc('proof_of_address', 'proofOfAddressPhoto', file)}
+              onClear={() => setField('proofOfAddressPhoto', '')}
+            />
+            {/* Picture / Certificate of Business */}
+            <DocUploadField
+              label="Picture / Certificate of Business *"
+              hint="Shop photo or business certificate (where applicable)"
+              accept="image/*"
+              value={form.shopPhoto}
+              uploading={uploadingDoc === 'shop_photo'}
+              onChange={(file) => uploadDoc('shop_photo', 'shopPhoto', file)}
+              onClear={() => setField('shopPhoto', '')}
+            />
+            {/* CAC Certificate */}
+            <DocUploadField
+              label="CAC Certificate *"
+              hint="Corporate Affairs Commission registration certificate"
+              accept="image/*,application/pdf"
+              value={form.cacCertificatePhoto}
+              uploading={uploadingDoc === 'cac_certificate'}
+              onChange={(file) => uploadDoc('cac_certificate', 'cacCertificatePhoto', file)}
+              onClear={() => setField('cacCertificatePhoto', '')}
+            />
+            {/* Additional Documents */}
+            <DocUploadField
+              label="Additional Documents"
+              hint="Any other supporting documents (optional)"
+              accept="image/*,application/pdf"
+              value={form.additionalDocs}
+              uploading={false}
+              onChange={(file) => setField('additionalDocs', file.name)}
+              onClear={() => setField('additionalDocs', '')}
+            />
           </div>
-          {(form.passportPhoto || form.idCardPhoto || form.additionalDocs) && (
-            <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3">
-              <p className="text-xs font-semibold text-emerald-700 mb-1">Selected files:</p>
-              <ul className="text-xs text-slate-700 space-y-0.5">
-                {form.passportPhoto && <li>• Passport: {form.passportPhoto}</li>}
-                {form.idCardPhoto && <li>• ID Card: {form.idCardPhoto}</li>}
-                {form.additionalDocs && <li>• Additional: {form.additionalDocs}</li>}
-              </ul>
-            </div>
-          )}
+
+          {/* Upload summary */}
+          {(() => {
+            const uploaded = [
+              form.passportPhoto && 'Passport Photo',
+              form.idCardPhoto && 'ID Front',
+              form.idCardBackPhoto && 'ID Back',
+              form.meansOfIdPhoto && 'Means of ID',
+              form.proofOfAddressPhoto && 'Utility Bill',
+              form.shopPhoto && 'Business Photo',
+              form.cacCertificatePhoto && 'CAC Certificate',
+            ].filter(Boolean);
+            return uploaded.length > 0 ? (
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3">
+                <p className="text-xs font-semibold text-emerald-700 mb-1">
+                  ✓ {uploaded.length} document(s) uploaded:
+                </p>
+                <ul className="text-xs text-slate-700 space-y-0.5">
+                  {uploaded.map((name, i) => (
+                    <li key={i}>• {name}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null;
+          })()}
         </CardContent>
       </Card>
 
@@ -1851,53 +2043,6 @@ function StepAssignment({
         </CardContent>
       </Card>
 
-      {/* v39: CAC Search Consent Dialog */}
-      {typeof showConsent !== 'undefined' && showConsent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 space-y-4">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-amber-600" />
-              <h3 className="text-base font-bold text-slate-900">CAC Name Search Fee</h3>
-            </div>
-            <p className="text-sm text-slate-600">
-              Your application will be reviewed by Customer Service for KYC verification. After
-              KYC approval, a <strong>CAC Name Search</strong> will be conducted which attracts
-              a fee of <strong>₦{cacFee.toLocaleString()}</strong>.
-            </p>
-            <p className="text-sm text-slate-600">
-              By clicking <strong>Accept</strong>, you agree to pay this fee after your KYC is
-              approved. You can pay via Paystack (card) or manual bank transfer.
-            </p>
-            <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
-              <p className="text-xs text-amber-800">
-                <AlertCircle className="h-3.5 w-3.5 inline mr-1" />
-                If you click <strong>Reject</strong>, your application will be cancelled.
-              </p>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowConsent(false);
-                  setConsentAccepted(false);
-                }}
-              >
-                Reject / Cancel
-              </Button>
-              <Button
-                className="bg-emerald-600 hover:bg-emerald-700"
-                onClick={() => {
-                  setConsentAccepted(true);
-                  setShowConsent(false);
-                  void doSubmit();
-                }}
-              >
-                <CheckCircle2 className="h-4 w-4 mr-1" /> Accept & Submit
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -1928,6 +2073,86 @@ function Field({
       {children}
       {hint && !invalid && <p className="text-[11px] text-slate-500">{hint}</p>}
       {invalid && <p className="text-[11px] text-red-600">Required field</p>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// v41: Document Upload Field — real file upload with progress + preview
+// ---------------------------------------------------------------------------
+
+function DocUploadField({
+  label,
+  hint,
+  accept,
+  value,
+  uploading,
+  onChange,
+  onClear,
+}: {
+  label: string;
+  hint?: string;
+  accept: string;
+  value: string;
+  uploading: boolean;
+  onChange: (file: File) => void;
+  onClear: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">{label}</Label>
+      <div
+        className={cn(
+          'rounded-lg border border-dashed p-4 text-center transition-colors cursor-pointer',
+          value
+            ? 'border-emerald-300 bg-emerald-50 hover:bg-emerald-100'
+            : 'border-slate-300 hover:border-emerald-400 hover:bg-slate-50'
+        )}
+        onClick={() => !uploading && inputRef.current?.click()}
+      >
+        {uploading ? (
+          <div className="py-4">
+            <Loader2 className="h-6 w-6 text-emerald-600 animate-spin mx-auto mb-2" />
+            <p className="text-xs text-slate-600">Uploading…</p>
+          </div>
+        ) : value ? (
+          <div className="py-2">
+            <CheckCircle2 className="h-6 w-6 text-emerald-600 mx-auto mb-1" />
+            <p className="text-xs font-medium text-emerald-700 truncate max-w-full">
+              {value.split('/').pop()}
+            </p>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onClear();
+                if (inputRef.current) inputRef.current.value = '';
+              }}
+              className="text-[10px] text-red-500 hover:text-red-700 mt-1 underline"
+            >
+              Remove
+            </button>
+          </div>
+        ) : (
+          <div className="py-4">
+            <Upload className="h-6 w-6 text-slate-400 mx-auto mb-2" />
+            <p className="text-xs text-slate-500">Click to upload</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">{hint}</p>
+          </div>
+        )}
+        <Input
+          ref={inputRef}
+          type="file"
+          accept={accept}
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) onChange(file);
+          }}
+        />
+      </div>
     </div>
   );
 }

@@ -40,7 +40,12 @@ export function LoginView() {
         setAuthToken(data.token);
       }
       loginAs(data.admin.id, data.admin);
-      setView('dashboard');
+      // v41: Force password change on first login if mustChangePassword is true
+      if (data.mustChangePassword) {
+        setView('change-password');
+      } else {
+        setView('dashboard');
+      }
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {

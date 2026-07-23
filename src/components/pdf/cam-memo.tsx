@@ -387,9 +387,47 @@ export function CamMemoPDF({
           <Text style={[styles.paragraph, { marginTop: 6 }]}>{recommendation}</Text>
         </View>
 
+        {/* v42-M8/M9: Repayment Schedule Header + Customer Signature */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>6. Repayment Schedule Summary</Text>
+          <View style={styles.table}>
+            <View style={[styles.tableRow, { backgroundColor: '#f0f0f0' }]}>
+              <Text style={[styles.cell, { flex: 2, fontWeight: 'bold' }]}>Customer Details</Text>
+              <Text style={[styles.cell, { flex: 2, fontWeight: 'bold' }]}>Loan Details</Text>
+            </View>
+            <View style={styles.tableRow}>
+              <Text style={styles.cell}>
+                Name: {loan.user?.firstName} {loan.user?.lastName}{'\n'}
+                NUBAN: {loan.user?.business?.name || '—'}{'\n'}
+                Phone: {loan.user?.phone || '—'}
+              </Text>
+              <Text style={styles.cell}>
+                Currency: NGN{'\n'}
+                Tenure: {loan.duration || recommendedTenor || '—'} months{'\n'}
+                Amount Approved: {naira(recommendedAmount || loan.amount)}{'\n'}
+                Total Payable: {naira((recommendedAmount || loan.amount || 0) * (1 + (recommendedRate || 0) / 100) * (loan.duration || recommendedTenor || 0))}
+              </Text>
+            </View>
+          </View>
+
+          {/* Customer signature line (Excel FLAT/REDUCING REPAYMENT!B37) */}
+          <View style={{ marginTop: 20, flexDirection: 'row', justifyContent: 'space-between' }}>
+            <View>
+              <Text style={{ fontSize: 9, color: '#666' }}>Customer's Signature & Date:</Text>
+              <View style={{ marginTop: 30, width: 200, borderTopWidth: 1, borderTopColor: '#333' }} />
+              <Text style={{ fontSize: 8, color: '#999', marginTop: 2 }}>{loan.user?.firstName} {loan.user?.lastName}</Text>
+            </View>
+            <View>
+              <Text style={{ fontSize: 9, color: '#666' }}>Date:</Text>
+              <View style={{ marginTop: 30, width: 120, borderTopWidth: 1, borderTopColor: '#333' }} />
+              <Text style={{ fontSize: 8, color: '#999', marginTop: 2 }}>DD / MM / YYYY</Text>
+            </View>
+          </View>
+        </View>
+
         {/* Approval Signatures */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>6. Approval Signatures</Text>
+          <Text style={styles.sectionTitle}>7. Approval Signatures</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
             {signatories.length === 0 ? (
               <Text style={[styles.paragraph, { color: '#999' }]}>
@@ -402,8 +440,8 @@ export function CamMemoPDF({
                   <Text style={styles.sigName}>{s.name}</Text>
                   <Text style={styles.sigRole}>{s.role}</Text>
                   <View style={styles.sigLine} />
-                  <Text style={styles.sigDate}>
-                    {s.signed ? `Signed · ${fmtDate(s.date)}` : 'Pending signature'}
+                  <Text style={styles.sigDate as any}>
+                    {s.signed ? `Signed · ${fmtDate(s.date as any)}` : 'Pending signature'}
                   </Text>
                 </View>
               ))

@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
     const adminId = authPayload.id;
 
     // Verify the admin exists (optional — fail soft if missing)
-    let author = null;
+    let author: any = null;
     if (adminId) {
       author = await db.admin.findUnique({
         where: { id: adminId },

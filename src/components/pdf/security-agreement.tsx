@@ -550,7 +550,7 @@ export function SecurityAgreementPDF({
               </View>
               <View style={[styles.digSigRow, { marginTop: 4 }]}>
                 <Text style={styles.digSigLabel}>Signature Hash:</Text>
-                <Text style={[styles.digSigValue, { fontSize: 7, wordBreak: 'break-all' }]}>
+                <Text style={[styles.digSigValue, { fontSize: 7, wordBreak: 'break-all' } as any]}>
                   {digitalSignature.hash}
                 </Text>
               </View>

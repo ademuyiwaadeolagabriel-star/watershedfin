@@ -157,6 +157,84 @@ export function CustomerDetailView() {
         </CardContent>
       </Card>
 
+      {/* v41: Onboarding Status Card — visible to LO/BM so they know the current stage */}
+      {user.onboardingStage && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ShieldCheck className="h-4 w-4 text-emerald-600" /> Onboarding Status
+            </CardTitle>
+            <CardDescription>Current stage in the customer onboarding pipeline</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="rounded-md border border-slate-200 p-3">
+                <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Onboarding Stage</p>
+                <p className={cn(
+                  'text-sm font-semibold mt-1',
+                  user.onboardingStage === 'onboarding_complete' ? 'text-emerald-600' :
+                  user.onboardingStage === 'legal_rejected' ? 'text-red-600' :
+                  'text-amber-600'
+                )}>
+                  {(user.onboardingStage || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                </p>
+              </div>
+              <div className="rounded-md border border-slate-200 p-3">
+                <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Account Number Status</p>
+                <p className={cn(
+                  'text-sm font-semibold mt-1',
+                  user.accountNumberStatus === 'assigned' ? 'text-emerald-600' :
+                  user.accountNumberStatus === 'rejected' ? 'text-red-600' :
+                  'text-amber-600'
+                )}>
+                  {user.accountNumberStatus === 'assigned' ? '✓ Assigned' :
+                   user.accountNumberStatus === 'rejected' ? '✗ Rejected' :
+                   '⏳ Pending (awaiting Legal CAC approval)'}
+                </p>
+                {user.accountNumber && (
+                  <p className="text-xs font-mono text-slate-600 mt-1">{user.accountNumber}</p>
+                )}
+              </div>
+              <div className="rounded-md border border-slate-200 p-3">
+                <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">KYC Status</p>
+                <p className={cn(
+                  'text-sm font-semibold mt-1',
+                  user.kycStatus === 'APPROVED' ? 'text-emerald-600' :
+                  user.kycStatus === 'DECLINED' ? 'text-red-600' :
+                  'text-amber-600'
+                )}>
+                  {user.kycStatus || '—'}
+                </p>
+                {user.business?.declineReason && (
+                  <p className="text-[10px] text-red-600 mt-1 truncate" title={user.business.declineReason}>
+                    {user.business.declineReason}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Pending action hint */}
+            {user.onboardingStage !== 'onboarding_complete' && (
+              <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 p-3">
+                <p className="text-xs text-blue-800">
+                  <AlertCircle className="h-3.5 w-3.5 inline mr-1" />
+                  {user.onboardingStage === 'cs_kyc_review' && 'Pending: Customer Service KYC verification.'}
+                  {user.onboardingStage === 'payment_pending' && 'Pending: Customer needs to pay CAC search fee.'}
+                  {user.onboardingStage === 'legal_cac_search' && 'Pending: Legal CAC Name Search in progress.'}
+                  {user.onboardingStage === 'legal_rejected' && 'Action needed: Legal rejected — customer has been notified to respond.'}
+                  {user.onboardingStage === 'onboarding_submitted' && 'Pending: Application submitted, awaiting CS KYC review.'}
+                </p>
+                {user.onboardingStage === 'legal_rejected' && (
+                  <p className="text-[10px] text-red-700 mt-1">
+                    LO/BM can continue working on the CAM draft, but cannot submit for appraisal until Legal approves and account number is assigned.
+                  </p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Business info */}
         <Card className="lg:col-span-2">

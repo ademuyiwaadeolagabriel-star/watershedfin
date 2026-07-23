@@ -417,7 +417,7 @@ export function OfferLetterPDF({
             </View>
             <View style={[styles.sigRow, { marginTop: 4 }]}>
               <Text style={styles.sigLabel}>Signature Hash:</Text>
-              <Text style={[styles.sigValue, { fontSize: 7, wordBreak: 'break-all' }]}>
+              <Text style={[styles.sigValue, { fontSize: 7, wordBreak: 'break-all' } as any]}>
                 {signature.signatureHash}
               </Text>
             </View>

@@ -85,24 +85,32 @@ export async function POST(
         const allowed = WORKFLOW_TRANSITIONS[currentStep] || [];
         newStep = nextStep && allowed.includes(nextStep) ? nextStep : (allowed[0] || currentStep);
 
-        // v38: BM Self-Vet — if a BM is forwarding from LO_ENTRY and they are the loan's creator,
-        // skip BM_QC and go directly to HOC_ASSIGNMENT
-        if (currentStep === 'LO_ENTRY' && admin.role === 'bm' && loan.staffId === admin.id) {
-          newStep = 'HOC_ASSIGNMENT'; // Skip BM_QC — BM self-vets
-          // Log the self-vet in audit trail
-          try {
-            await db.workflowRework.create({
-              data: {
-                loanId: loan.id,
-                fromStep: 'LO_ENTRY',
-                toStep: 'HOC_ASSIGNMENT',
-                reworkedById: admin.id,
-                reason: 'BM self-vet — skipped BM_QC (BM is the loan creator)',
-                comments: 'BM created and vetted this loan themselves',
-              },
-            });
-          } catch (e) {
-            // non-blocking
+        // v38: BM Self-Vet — if a BM is forwarding from LO_ENTRY and they created
+        // the customer (or are the assigned BM), skip BM_QC and go directly to HOC_ASSIGNMENT.
+        // v41: Fixed the condition — previously checked loan.staffId === admin.id which
+        // never held for bm_onboard (staffId is set to the chosen LO, not the BM).
+        // Now checks createdBy and assignedBmId on the user record.
+        if (currentStep === 'LO_ENTRY' && admin.role === 'bm') {
+          const loanUser = loan.user as any;
+          const isCreator = loanUser?.createdBy === admin.id;
+          const isAssignedBm = loanUser?.assignedBmId === admin.id;
+          if (isCreator || isAssignedBm) {
+            newStep = 'HOC_ASSIGNMENT'; // Skip BM_QC — BM self-vets
+            // Log the self-vet in audit trail
+            try {
+              await db.workflowRework.create({
+                data: {
+                  loanId: loan.id,
+                  fromStep: 'LO_ENTRY',
+                  toStep: 'HOC_ASSIGNMENT',
+                  reworkedById: admin.id,
+                  reason: 'BM self-vet — skipped BM_QC (BM is the loan creator)',
+                  comments: 'BM created and vetted this loan themselves',
+                },
+              });
+            } catch (e) {
+              // non-blocking
+            }
           }
         }
 
@@ -143,10 +151,17 @@ export async function POST(
             }
             break;
           case 'HOC_ASSIGNMENT':
-            // HOC assigns analyst — record assignment
+            // HOC assigns analyst — record assignment on CreditAppraisal (not LoanApplicants)
             updates.hocStructuredAt = new Date();
-            if (mccDecision) {
-              updates.assignedAnalystId = mccDecision.assignedAnalystId || null;
+            if (mccDecision?.assignedAnalystId) {
+              try {
+                await db.creditAppraisal.updateMany({
+                  where: { loanApplicantId: id },
+                  data: { assignedAnalystId: mccDecision.assignedAnalystId },
+                });
+              } catch (e) {
+                console.warn('[LOAN TRANSITION] Failed to assign analyst on CreditAppraisal:', e);
+              }
             }
             break;
           case 'ANALYST_STRUCTURING':
@@ -190,6 +205,27 @@ export async function POST(
             // facility agreement, insurance, regulatory compliance
             updates.finalOfferGeneratedAt = new Date();
             break;
+          case 'LEGAL_MCC':
+            // v41: Legal MCC Compliance Review — separate from Legal Name Search (onboarding)
+            // and separate from LEGAL_AGGREGATION (credit pack compilation).
+            // Legal staff verify all 10 compliance checks (loan agreement, offer letter,
+            // CAC docs, ID, address, collateral, insurance, regulatory, AML, sanctions).
+            updates.legalClearedAt = new Date();
+            updates.auditPassedAt = new Date();  // Internal control gate passed
+            // Persist the compliance report on the CreditAppraisal as JSON metadata
+            if (mccDecision) {
+              try {
+                await db.creditAppraisal.updateMany({
+                  where: { loanApplicantId: id },
+                  data: {
+                    engineDump: JSON.stringify({ legalMccReport: mccDecision, legalMccDecisionAt: new Date().toISOString() }),
+                  },
+                });
+              } catch (e) {
+                // non-blocking
+              }
+            }
+            break;
           case 'MD_APPROVAL':
             updates.mdApprovedAt = new Date();
             updates.offerLetterGeneratedAt = new Date();
@@ -207,7 +243,7 @@ export async function POST(
               const mdAmount = Number(mccDecision.recommendedAmount) || 0;
               const mdTenor = Number(mccDecision.duration) || loan.duration;
               const mdRate = Number(mccDecision.interestRatePercentage) || loan.percent || 24;
-              const mdMethod = loan.repaymentPlan || 'REDUCING';
+              const mdMethod: 'REDUCING' | 'FLAT' = (loan.repaymentPlan as 'REDUCING' | 'FLAT') || 'REDUCING';
 
               if (mdAmount > 0 && mdTenor > 0) {
                 try {
@@ -454,7 +490,7 @@ export async function POST(
     if (action === 'forward' || action === 'return') {
       void notifyNextGateStaff(newStep, loan.branchId, {
         loanId: id,
-        applicationRef: loan.applicationRef,
+        applicationRef: loan.applicationRef || '',
         customerName,
         amount: Number(loan.amount) || undefined,
       });
