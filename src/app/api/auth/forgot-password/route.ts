@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import crypto from 'crypto';
 
+// v49: Rate limiting for forgot-password (3 per IP per 15 minutes)
+const fpAttempts = new Map<string, { count: number; firstAttempt: number }>();
+const MAX_FP = 3;
+const FP_WINDOW = 15 * 60 * 1000;
+
 /**
  * POST /api/auth/forgot-password
  * Body: { email }
@@ -9,6 +14,23 @@ import crypto from 'crypto';
  */
 export async function POST(req: NextRequest) {
   try {
+    // v49: Rate limiting
+    const clientIp = req.headers.get('x-forwarded-for') || 'unknown';
+    const now = Date.now();
+    const attempts = fpAttempts.get(clientIp);
+    if (attempts && now - attempts.firstAttempt < FP_WINDOW && attempts.count >= MAX_FP) {
+      return NextResponse.json(
+        { error: 'Too many password reset requests. Please try again later.' },
+        { status: 429 }
+      );
+    }
+    // Update attempt counter
+    if (attempts && now - attempts.firstAttempt < FP_WINDOW) {
+      fpAttempts.set(clientIp, { count: attempts.count + 1, firstAttempt: attempts.firstAttempt });
+    } else {
+      fpAttempts.set(clientIp, { count: 1, firstAttempt: now });
+    }
+
     const { email } = await req.json();
     if (!email) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
@@ -32,8 +54,9 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Send reset email via Resend (falls back to console.log if not configured)
-    console.log(`Password reset link for ${admin.email}: /reset-password?token=${token}`);
+    // v54 (audit #12): Never log raw reset tokens / OTPs / credentials.
+    // Send reset email via Resend (falls back to console log message WITHOUT the token)
+    console.log(`Password reset link sent for ${admin.email}`);
 
     const resetUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
     try {

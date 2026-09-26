@@ -1,16 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireCustomerAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { createNotification } from '@/lib/notifications';
 
 // POST /api/customer/apply-loan
-// Body: { userId, amount, duration, planId, purpose, hasExternalLoans, isGuarantorsewhere }
+// Authorization: Bearer <customer-jwt>
+// Body: { amount, duration, planId, purpose, hasExternalLoans, isGuarantorsewhere }
+// v53 — P1 IDOR fix: userId removed from body; derived from JWT.
 export async function POST(req: NextRequest) {
+  // v51 — customer auth gate: identity derived from JWT, NOT body.userId.
+  const authResult_v51 = await requireCustomerAuth(req);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+  const authPayload_v51 = authResult_v51 as { id: string; type: string };
+
   try {
     const body = await req.json();
-    const { userId, amount, duration, planId, purpose, hasExternalLoans, isGuarantorsewhere } = body;
+    const { amount, duration, planId, purpose, hasExternalLoans, isGuarantorsewhere } = body || {};
+    // v53 — IDOR fix: userId from JWT, not body.
+    const userId = authPayload_v51.id;
 
-    if (!userId || !amount || !duration) {
-      return NextResponse.json({ error: 'userId, amount, duration required' }, { status: 400 });
+    if (!amount || !duration) {
+      return NextResponse.json({ error: 'amount, duration required' }, { status: 400 });
     }
 
     const user = await db.user.findUnique({
@@ -33,8 +43,21 @@ export async function POST(req: NextRequest) {
     const applicationRef = `LN-${year}-${seq}`;
 
     // Get plan details for interest rate
+    // v54 (audit #7): fail-closed — if a planId was supplied, the plan MUST
+    // exist and carry an interest rate. If no planId, require the rate to be
+    // set later (LO/BM stage) and reject the submission as incomplete rather
+    // than silently defaulting to 24%.
     const plan = planId ? await db.loanPlan.findUnique({ where: { id: planId } }) : null;
-    const interestRate = plan?.interest || 24;
+    if (planId && !plan) {
+      return NextResponse.json({ error: 'Selected loan plan no longer exists.' }, { status: 400 });
+    }
+    const interestRate = plan ? Number(plan.interest) : null;
+    if (interestRate == null || isNaN(interestRate) || interestRate <= 0) {
+      return NextResponse.json(
+        { error: 'Loan plan is missing an interest rate. Please select a valid plan or contact your loan officer.' },
+        { status: 400 }
+      );
+    }
 
     // Create loan
     const loan = await db.loanApplicants.create({

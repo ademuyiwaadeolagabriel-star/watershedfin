@@ -1,14 +1,8 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { BrandingBootstrap } from "@/components/branding-bootstrap";
 import { ErrorBoundary } from "@/components/error-boundary";
-
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Watershed Capital — Banking Governance Platform",
@@ -21,7 +15,7 @@ export const metadata: Metadata = {
 
 // Inline script that runs before hydration to apply the persisted theme.
 // This prevents a flash of the wrong theme and avoids hydration mismatches
-// by setting the `dark` class on <html> before React mounts.
+// by setting the "dark" class on <html> before React mounts.
 const themeScript = `
 (function() {
   try {
@@ -46,9 +40,7 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body
-        className={`${inter.variable} antialiased bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100`}
-      >
+      <body className="antialiased bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
         <BrandingBootstrap />
         <ErrorBoundary>
           {children}
@@ -58,3 +50,4 @@ export default function RootLayout({
     </html>
   );
 }
+

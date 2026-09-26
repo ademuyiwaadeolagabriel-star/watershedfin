@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requireRole } from '@/lib/auth';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // v51 — auth gate.
+  const authResult_v51 = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'communications']);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
   try {
     const tickets = await db.ticket.findMany({
       include: { user: { select: { firstName: true, lastName: true } } },

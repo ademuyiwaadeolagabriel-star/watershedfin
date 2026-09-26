@@ -1,9 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole, requireMakerChecker } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { postJournal } from '@/lib/accounting';
 
 // POST: record vendor bill payment
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
+  const authResult_v51 = await requireRole(req, ['super', 'md', 'cfo', 'hoc', 'cro', 'finance', 'accountant']);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+
+  // v53-P4 (audit #43/#44) — maker-checker gate (graceful rollout).
+  // Only enforced when the caller passes `?stage=propose|review|authorize|execute`.
+  // Without a stage query param the route falls back to its existing behavior.
+  const url_v53 = new URL(req.url);
+  if (url_v53.searchParams.get('stage')) {
+    const mc_v53 = await requireMakerChecker(req, {
+      operation: 'bill_pay',
+      stages: ['propose', 'review', 'authorize', 'execute'],
+      enforceSegregation: true,
+      makerRoles: ['finance', 'accountant', 'cfo'],
+      checkerRoles: ['finance', 'accountant', 'cfo'],
+      authorizerRoles: ['cfo', 'super'],
+      executorRoles: ['finance', 'accountant', 'cfo'],
+    });
+    if (mc_v53 instanceof NextResponse) return mc_v53;
+  }
+
   try {
     const { id } = await params;
     const body = await req.json();
@@ -15,8 +37,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const amt = Number(amount);
     if (!amt || amt <= 0) return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
 
-    const newTotalPaid = bill.totalPaid + amt;
-    const newStatus = newTotalPaid >= bill.totalAmount - 0.01 ? 'paid' : 'partial';
+    const newTotalPaid = Number(bill.totalPaid) + amt;
+    const newStatus = newTotalPaid >= Number(bill.totalAmount) - 0.01 ? 'paid' : 'partial';
 
     const payment = await db.vendorPayment.create({
       data: {

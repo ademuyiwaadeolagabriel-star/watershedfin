@@ -54,11 +54,14 @@ export async function assessLoanOverdue(
   // reminder/NPL logic still works.
   if (repayments.length === 0) {
     const { calculateLoanSchedule } = await import('@/lib/loan-calc');
+    // v51 — Decimal arithmetic: loan final/vetted/approved/percent fields
+    // are Decimal. Wrap each fallback with Number() so calculateLoanSchedule
+    // receives plain numbers (signature expects number, not Decimal).
     const principal =
-      loan.finalAmount || loan.vettedAmount || loan.approvedAmount || loan.amount;
+      Number(loan.finalAmount) || Number(loan.vettedAmount) || Number(loan.approvedAmount) || Number(loan.amount);
     const tenorMonths =
-      loan.finalTenure || loan.vettedDuration || loan.approvedTenor || loan.duration;
-    const annualRate = loan.finalInterestRate || loan.percent || 24;
+      Number(loan.finalTenure) || Number(loan.vettedDuration) || Number(loan.approvedTenor) || Number(loan.duration);
+    const annualRate = Number(loan.finalInterestRate) || Number(loan.percent) || 24;
     const repaymentMethod =
       (loan.repaymentPlan as 'REDUCING' | 'FLAT') || 'REDUCING';
     const startDate = loan.disbursedAt || loan.disbursementDate || new Date();
@@ -101,7 +104,10 @@ export async function assessLoanOverdue(
   for (const r of repayments) {
     const due = new Date(r.dueDate);
     due.setHours(0, 0, 0, 0);
-    const outstanding = (r.amountDue || 0) - (r.amountPaid || 0);
+    // v50 — Decimal arithmetic: LoanRepayment.amountDue + amountPaid
+    // migrated Float → Decimal. Wrap with Number() to compute the
+    // outstanding difference.
+    const outstanding = Number(r.amountDue || 0) - Number(r.amountPaid || 0);
     if (due <= now && outstanding > 0.5) {
       totalOverdueAmount += outstanding;
       if (!earliestPastDueDate || due < earliestPastDueDate) {
@@ -122,7 +128,8 @@ export async function assessLoanOverdue(
   const nextDue = repayments.find((r) => {
     const due = new Date(r.dueDate);
     due.setHours(0, 0, 0, 0);
-    const outstanding = (r.amountDue || 0) - (r.amountPaid || 0);
+    // v50 — Decimal arithmetic.
+    const outstanding = Number(r.amountDue || 0) - Number(r.amountPaid || 0);
     return outstanding > 0.5 && due >= now;
   });
 
@@ -135,7 +142,8 @@ export async function assessLoanOverdue(
     totalOverdueAmount,
     nextDueRepaymentId: nextDue?.id ?? null,
     nextDueDate: nextDue ? new Date(nextDue.dueDate) : null,
-    nextDueAmount: nextDue ? nextDue.amountDue : null,
+    // v50 — wrap with Number() since LoanRepayment.amountDue is now Decimal.
+    nextDueAmount: nextDue ? Number(nextDue.amountDue) : null,
     isDefaulter: daysOverdue > 30,
   };
 }
@@ -212,4 +220,115 @@ export async function recordReminderSent(params: {
       }),
     },
   });
+}
+
+// ============================================================================
+// v51 — AUTHORITATIVE OUTSTANDING BALANCE FROM LEDGER
+// ============================================================================
+// Issue #18 + #19 from the v49 audit: the customer payment route and
+// early-payoff route reconstruct the loan schedule via
+// calculateLoanSchedule() and then compute the outstanding balance from
+// the reconstructed schedule. But the DB already has authoritative rows:
+//   - LoanRepayment (persisted instalment schedule)
+//   - LoanTransaction (actual repayments)
+//
+// If the reconstructed schedule diverges from the persisted schedule
+// (e.g. admin manually edited a LoanRepayment row, or a partial-payment
+// edge case wasn't captured by the schedule formula), the customer-facing
+// "outstanding balance" can differ from the real ledger truth.
+//
+// This helper reads the authoritative ledger and returns the real
+// outstanding principal + accrued interest. Routes that need the
+// outstanding balance should use THIS function rather than reconstructing.
+// ============================================================================
+
+export interface OutstandingBalanceAssessment {
+  loanId: string;
+  // Total amount the customer is contractually required to repay (sum of all
+  // LoanRepayment.amountDue rows). NULL when no schedule exists yet — caller
+  // must fall back to schedule reconstruction.
+  scheduledTotal: number | null;
+  // Total amount actually paid (sum of LoanTransaction.amount where
+  // type='repayment'). NULL when no transactions exist — caller should
+  // treat as 0.
+  paidTotal: number | null;
+  // Outstanding = max(0, scheduledTotal - paidTotal)
+  outstandingBalance: number;
+  // Source: 'ledger' (authoritative) | 'schedule_reconstruct' (fallback)
+  source: 'ledger' | 'schedule_reconstruct';
+  // The LoanRepayment rows that are still unpaid (status in
+  // pending/partial/overdue). Useful for next-due-date display.
+  unpaidRepayments: Array<{
+    id: string;
+    dueDate: Date;
+    amountDue: number;
+    amountPaid: number;
+    outstanding: number;
+    status: string;
+  }>;
+}
+
+/**
+ * Compute the authoritative outstanding balance for a loan by reading
+ * the persisted ledger (LoanRepayment + LoanTransaction).
+ *
+ * Returns `source: 'ledger'` when LoanRepayment rows exist (authoritative),
+ * or `source: 'schedule_reconstruct'` when no schedule rows exist yet
+ * (caller should fall back to calculateLoanSchedule()).
+ */
+export async function getAuthoritativeOutstandingBalance(
+  loanId: string,
+): Promise<OutstandingBalanceAssessment> {
+  const [repayments, transactions] = await Promise.all([
+    db.loanRepayment.findMany({
+      where: { loanApplicantId: loanId },
+      orderBy: { dueDate: 'asc' },
+    }),
+    db.loanTransaction.findMany({
+      where: { loanApplicantId: loanId, type: 'repayment' },
+    }),
+  ]);
+
+  if (repayments.length === 0) {
+    // No persisted schedule — caller must reconstruct.
+    return {
+      loanId,
+      scheduledTotal: null,
+      paidTotal: transactions.length > 0 ? transactions.reduce((s, t) => s + Number(t.amount), 0) : null,
+      outstandingBalance: 0,
+      source: 'schedule_reconstruct',
+      unpaidRepayments: [],
+    };
+  }
+
+  // Authoritative: sum amountDue and amountPaid from LoanRepayment rows.
+  const scheduledTotal = repayments.reduce((s, r) => s + Number(r.amountDue), 0);
+  const paidFromSchedule = repayments.reduce((s, r) => s + Number(r.amountPaid), 0);
+  const paidFromTransactions = transactions.reduce((s, t) => s + Number(t.amount), 0);
+
+  // If the two sums disagree, prefer the schedule's amountPaid (which is
+  // updated atomically in the payment webhook). Transactions may include
+  // duplicate / pending rows not yet applied to the schedule.
+  const paidTotal = Math.max(paidFromSchedule, paidFromTransactions);
+  const outstandingBalance = Math.max(0, scheduledTotal - paidTotal);
+
+  const unpaidRepayments = repayments
+    .filter(r => r.status !== 'paid')
+    .map(r => ({
+      id: r.id,
+      dueDate: new Date(r.dueDate),
+      amountDue: Number(r.amountDue),
+      amountPaid: Number(r.amountPaid),
+      outstanding: Math.max(0, Number(r.amountDue) - Number(r.amountPaid)),
+      status: r.status,
+    }));
+
+  return {
+    loanId,
+    scheduledTotal,
+    paidTotal,
+    outstandingBalance,
+    source: 'ledger',
+    unpaidRepayments,
+  };
 }

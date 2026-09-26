@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthFromRequest } from '@/lib/auth';
+import { requireCustomerAuth } from '@/lib/auth';
 import { createNotification } from '@/lib/notifications';
 
 /**
@@ -8,21 +8,50 @@ import { createNotification } from '@/lib/notifications';
  * Customer submits a response to Legal's rejection
  * Body: { caseId, customerResponse }
  *
- * v41: Now fans out a notification to all Legal staff so they know the customer
- * has responded and the case is ready for re-review.
+ * v52 — IDOR fix (#25 from governance audit):
+ *  - Customer identity is derived from the JWT via `requireCustomerAuth`,
+ *    NOT from any body field. The previous implementation used the weak
+ *    `getAuthFromRequest` which accepted ANY valid JWT (including admin
+ *    tokens). A malicious customer could submit responses against any
+ *    other customer's Legal case simply by supplying that case's id.
+ *  - After fetching the LegalNameSearch, we verify that
+ *    `legalCase.userId === authPayload.id`. A mismatch returns 403.
+ *  - Empty / whitespace-only `customerResponse` is rejected with 400.
+ *  - The two state writes (LegalNameSearch.update + User.update) are
+ *    wrapped in `db.$transaction` so they commit or roll back together.
+ *
+ * v41: Fans out a notification to all Legal staff so they know the customer
+ * has responded and the case is ready for re-review (fire-and-forget).
  */
 export async function POST(req: NextRequest) {
   try {
-    const authPayload = getAuthFromRequest(req);
-    if (!authPayload) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    // --- Auth gate: customer JWT mandatory -------------------------------
+    const authResult = await requireCustomerAuth(req);
+    if (authResult instanceof NextResponse) return authResult;
+    const authPayload = authResult as { id: string; type: string };
+    const customerId = authPayload.id; // v52 — derived from JWT, NOT body
+
+    const body = await req.json().catch(() => ({}));
+    const { caseId, customerResponse } = body || {};
+
+    if (!caseId || typeof caseId !== 'string') {
+      return NextResponse.json(
+        { error: 'caseId is required' },
+        { status: 400 },
+      );
     }
 
-    const body = await req.json();
-    const { caseId, customerResponse } = body;
-
-    if (!caseId || !customerResponse) {
-      return NextResponse.json({ error: 'caseId and customerResponse are required' }, { status: 400 });
+    // Reject empty / whitespace-only customerResponse.
+    if (
+      customerResponse === undefined ||
+      customerResponse === null ||
+      typeof customerResponse !== 'string' ||
+      customerResponse.trim().length === 0
+    ) {
+      return NextResponse.json(
+        { error: 'customerResponse is required and must be non-empty' },
+        { status: 400 },
+      );
     }
 
     const legalCase = await db.legalNameSearch.findUnique({ where: { id: caseId } });
@@ -30,22 +59,49 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Case not found' }, { status: 404 });
     }
 
-    // Update the case with the customer's response + set status to customer_responded
-    const updated = await db.legalNameSearch.update({
-      where: { id: caseId },
-      data: {
-        customerResponse,
-        status: 'customer_responded',
-      },
+    // v52 — IDOR fix: the case MUST belong to the authenticated customer.
+    // Without this check, any logged-in customer could submit a response
+    // against any other customer's Legal case.
+    if (legalCase.userId !== customerId) {
+      return NextResponse.json(
+        { error: 'Forbidden: case does not belong to authenticated customer.' },
+        { status: 403 },
+      );
+    }
+
+    // --- Atomic multi-write ---------------------------------------------
+    // v52 — Wrap the two state-mutating writes in a single Prisma
+    // transaction. If either fails, both roll back. Previously a failure
+    // between the LegalNameSearch.update and the User.update could leave
+    // the case in 'customer_responded' while the user's onboardingStage
+    // still pointed at the previous stage.
+    const updated = await db.$transaction(async (tx) => {
+      const caseUpdate = await tx.legalNameSearch.update({
+        where: { id: caseId },
+        data: {
+          customerResponse: customerResponse.trim(),
+          status: 'customer_responded',
+        },
+      });
+
+      // Re-mark the case as active (customer has re-engaged) and push the
+      // user's onboarding stage back to the legal review stage.
+      await tx.user.update({
+        where: { id: legalCase.userId },
+        data: { onboardingStage: 'legal_cac_search' },
+      }).catch(() => {
+        // The user row may not exist in some seed/edge cases; the case
+        // update still commits. We intentionally swallow this error
+        // inside the transaction so the customer's response is preserved
+        // even if the user-stage sync fails.
+      });
+
+      return caseUpdate;
     });
 
-    // Update user's onboarding stage
-    await db.user.update({
-      where: { id: legalCase.userId },
-      data: { onboardingStage: 'legal_cac_search' },
-    }).catch(() => {});
-
-    // v41: Notify all Legal staff that the customer has responded
+    // v41 — Notify all Legal staff that the customer has responded.
+    // Fire-and-forget: notification failures must never cause the customer's
+    // response submission to fail.
     try {
       const legalStaff = await db.admin.findMany({
         where: { role: 'legal', status: 1, legalCacSearch: true },
@@ -55,7 +111,9 @@ export async function POST(req: NextRequest) {
         where: { id: legalCase.userId },
         select: { firstName: true, lastName: true },
       });
-      const customerName = customer ? `${customer.firstName} ${customer.lastName}` : 'A customer';
+      const customerName = customer
+        ? `${customer.firstName} ${customer.lastName}`
+        : 'A customer';
       await Promise.all(legalStaff.map(ls =>
         createNotification({
           adminId: ls.id,

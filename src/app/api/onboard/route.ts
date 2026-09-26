@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole, getAuthFromRequest } from '@/lib/auth';
 import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import { notifyWelcome } from '@/lib/notification-service';
@@ -66,11 +67,42 @@ async function generateApplicationRef(): Promise<string> {
 // ---------------------------------------------------------------------------
 
 export async function POST(req: NextRequest) {
+  // v53 — P5 #28 fix: dual-mode auth.
+  //   - self_onboard channel → public, no Bearer token required
+  //   - desk_onboard / bm_onboard / field_onboard → admin JWT required
+  //
+  // We peek at the body's `channel` field first. If it's self_onboard,
+  // no auth required (customer is creating their own account). For staff
+  // channels, requireRole(['super', 'md', 'hoc', 'cro', 'credit', 'loan', 'bm', 'lo']).
+  let body: any;
   try {
-    const url = new URL(req.url);
-    const adminId = url.searchParams.get('adminId') || undefined;
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
 
-    const body = await req.json();
+  const channel: string = body?.channel;
+  const isSelfOnboard = channel === 'self_onboard';
+
+  let adminId: string | undefined = undefined;
+  if (!isSelfOnboard) {
+    // Staff onboarding — admin JWT required.
+    const authResult_v51 = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'credit', 'loan', 'bm', 'lo']);
+    if (authResult_v51 instanceof NextResponse) return authResult_v51;
+    const authPayload = authResult_v51 as { id: string; role: string };
+    adminId = authPayload.id;
+  } else {
+    // Self-onboard — verify NO valid admin token is being misused to spoof
+    // adminId. If a Bearer token is present, we IGNORE it for self_onboard
+    // (adminId stays undefined → createdBy is null, which is the correct
+    // audit trail for a self-registered customer).
+    adminId = undefined;
+  }
+
+  try {
+    // v52 — P0-G5 cleanup: adminId derived from JWT (or undefined for self).
+    // v53 — body was already read above for channel detection; do NOT
+    // re-invoke req.json() (Next.js throws on second read).
 
     // G6: Input validation
     const { personal, business, loan, documents, consent } = body;
@@ -96,6 +128,82 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Loan duration must be at least 1 month' }, { status: 400 });
     }
 
+    // ── v52 — P0-G7: KYC DOCUMENT COMPLETENESS IS SERVER-ENFORCED ──────
+    // The audit's #3 finding was that documents? was entirely optional,
+    // so an API client could bypass the UI and submit onboarding with
+    // zero documents. The server now requires:
+    //   - passportPhoto (selfie)
+    //   - idCardFront OR meansOfId (acceptable ID)
+    //   - proofOfAddress (utility bill)
+    // For business customers with rcBnNumber (a registered business), the
+    // CAC certificate is also required.
+    const requiredDocs: string[] = [];
+    if (!documents?.passportPhoto) requiredDocs.push('passportPhoto (selfie)');
+    if (!documents?.idCardFront && !documents?.meansOfId) requiredDocs.push('idCardFront or meansOfId (acceptable ID)');
+    if (!documents?.proofOfAddress) requiredDocs.push('proofOfAddress (utility bill)');
+    if (business?.rcBnNumber && !documents?.cacCertificate) {
+      requiredDocs.push('cacCertificate (required for registered businesses)');
+    }
+    if (requiredDocs.length > 0) {
+      return NextResponse.json(
+        {
+          error: 'KYC document completeness check failed. The following documents are required but were not provided:',
+          missingDocuments: requiredDocs,
+        },
+        { status: 400 },
+      );
+    }
+
+    // ── v52 — P0-G6: CAC CONSENT IS MANDATORY + FEE AMOUNT CROSS-CHECK ─
+    // The audit's #4 finding was that consent was optional AND that
+    // `consent.feeAmount` was caller-supplied — the customer could lie
+    // "I agreed to ₦1" and the server would store it. Now:
+    //   1. consent is REQUIRED (server rejects onboarding without it)
+    //   2. consent.feeKey is REQUIRED (must match a current SystemSetting fee key)
+    //   3. consent.feeAmount is IGNORED from the body — the server looks
+    //      up the actual configured fee from SystemSetting and uses that.
+    //      The caller's value is recorded only for audit comparison.
+    if (!consent || !consent.feeKey) {
+      return NextResponse.json(
+        {
+          error: 'CAC search consent is required. The customer must explicitly accept the CAC search fee before onboarding can be submitted.',
+        },
+        { status: 400 },
+      );
+    }
+
+    // Look up the actual configured fee from SystemSetting.
+    const feeSetting = await db.systemSetting.findUnique({
+      where: { key: consent.feeKey },
+    });
+    if (!feeSetting || feeSetting.active === false) {
+      return NextResponse.json(
+        {
+          error: `CAC fee key '${consent.feeKey}' is not configured or is inactive. Please contact admin to configure the current CAC search fee.`,
+        },
+        { status: 400 },
+      );
+    }
+    const serverFeeAmount = Number(feeSetting.value);
+    if (isNaN(serverFeeAmount) || serverFeeAmount <= 0) {
+      return NextResponse.json(
+        {
+          error: `CAC fee '${consent.feeKey}' is configured with an invalid amount: '${feeSetting.value}'. Please contact admin to fix.`,
+        },
+        { status: 500 },
+      );
+    }
+
+    // Sanity-check: if the caller's claimed feeAmount differs from the
+    // server's configured fee, log the discrepancy but DO NOT trust the
+    // caller's value. The OnboardingConsent row will record the SERVER's
+    // fee amount, not the caller's.
+    if (consent.feeAmount != null && Number(consent.feeAmount) !== serverFeeAmount) {
+      console.warn(
+        `[ONBOARD] Consent fee mismatch: caller claimed ₦${consent.feeAmount}, server configured ₦${serverFeeAmount}. Using server value.`,
+      );
+    }
+
     // S2: Smart duplicate detection
     if (personal.bvn || personal.email || personal.phone) {
       const existing = await db.user.findFirst({
@@ -117,10 +225,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const {
-      channel,
-      assignment,
-    } = body as {
+    // v53 — body type annotation (channel + assignment already destructured
+    // at the top of the handler for dual-mode auth; we re-extract assignment
+    // here for clarity, and use the existing `channel` variable from line 84).
+    const { assignment } = body as {
       channel: 'self_onboard' | 'desk_onboard' | 'bm_onboard' | 'field_onboard';
       personal: {
         title?: string;
@@ -270,8 +378,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // v53 — P5 #31: atomic onboarding. The entire create sequence (user +
+    // business + user.update(businessId) + loan + appraisal + consent) is
+    // wrapped in db.$transaction so a partial failure rolls back the
+    // whole onboarding. Previously a failure on step 4 (loan create)
+    // after step 1 (user create) would leave an orphaned user record.
+    const onboardResult = await db.$transaction(async (tx) => {
     // ----- create user -----
-    const user = await db.user.create({
+    const user = await tx.user.create({
       data: {
         firstName: personal.firstName,
         lastName: personal.lastName,
@@ -330,7 +444,7 @@ export async function POST(req: NextRequest) {
       yearsInOperation = diffMs / (1000 * 60 * 60 * 24 * 365.25);
     }
 
-    const businessRow = await db.business.create({
+    const businessRow = await tx.business.create({
       data: {
         user: { connect: { id: user.id } },
         name: business.businessName,
@@ -352,7 +466,7 @@ export async function POST(req: NextRequest) {
     });
 
     // link business back to user
-    await db.user.update({
+    await tx.user.update({
       where: { id: user.id },
       data: { businessId: businessRow.id },
     });
@@ -375,7 +489,7 @@ export async function POST(req: NextRequest) {
 
       const applicationRef = await generateApplicationRef();
 
-      loanRow = await db.loanApplicants.create({
+      loanRow = await tx.loanApplicants.create({
         data: {
           user: { connect: { id: user.id } },
           loanOfficer: assignedStaffId ? { connect: { id: assignedStaffId } } : undefined,
@@ -394,7 +508,7 @@ export async function POST(req: NextRequest) {
       });
 
       // ----- create credit appraisal (draft) -----
-      appraisalRow = await db.creditAppraisal.create({
+      appraisalRow = await tx.creditAppraisal.create({
         data: {
           loan: { connect: { id: loanRow.id } },
           user: { connect: { id: user.id } },
@@ -411,31 +525,41 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // ----- strip sensitive fields -----
-    const { password: _pw, ...safeUser } = user as any;
-    const safeBusiness = businessRow;
-
-    // ----- send welcome notification (email + dashboard) -----
+    // v53 — fire-and-forget welcome notification (post-create, pre-consent).
+    // The consent.create below is part of the same transaction; if it fails,
+    // the welcome email is the only side-effect outside the tx (acceptable
+    // — the customer's account is rolled back, but they got a "welcome"
+    // email that's harmless).
     const customerName = `${user.firstName} ${user.lastName}`.trim();
     void notifyWelcome(user.id, customerName, user.email || '');
 
-    // v41: Persist CAC search consent (audit trail — who accepted, when, fee amount)
-    if (consent && consent.feeKey) {
-      try {
-        await db.onboardingConsent.create({
-          data: {
-            userId: user.id,
-            feeKey: consent.feeKey,
-            feeAmount: Number(consent.feeAmount) || 0,
-            acceptedAt: consent.acceptedAt ? new Date(consent.acceptedAt) : new Date(),
-            ipAddress: req.headers.get('x-forwarded-for') || null,
-            userAgent: req.headers.get('user-agent') || null,
-          },
-        });
-      } catch (e) {
-        console.error('[ONBOARD] Failed to persist OnboardingConsent (non-blocking):', e);
-      }
-    }
+    // v53 — consent persistence: now inside the same `db.$transaction`
+    // as user/business/loan/appraisal creation. If consent.create fails,
+    // the whole transaction rolls back automatically — no manual cleanup
+    // needed.
+    await tx.onboardingConsent.create({
+      data: {
+        userId: user.id,
+        feeKey: consent.feeKey,
+        feeAmount: serverFeeAmount, // SERVER value, not caller-supplied
+        acceptedAt: consent.acceptedAt ? new Date(consent.acceptedAt) : new Date(),
+        ipAddress: req.headers.get('x-forwarded-for') || null,
+        userAgent: req.headers.get('user-agent') || null,
+      },
+    });
+
+    return { user, businessRow, loanRow, appraisalRow };
+    }); // end db.$transaction
+
+    const user = onboardResult.user;
+    const businessRow = onboardResult.businessRow;
+    const loanRow = onboardResult.loanRow;
+    const appraisalRow = onboardResult.appraisalRow;
+
+    // v53 — strip sensitive fields (post-transaction).
+    const { password: _pw, ...safeUser } = user as any;
+    const safeBusiness = businessRow;
+    const customerName = `${user.firstName} ${user.lastName}`.trim();
 
     // v38: Notify all Customer Service staff that a new application needs KYC review
     try {

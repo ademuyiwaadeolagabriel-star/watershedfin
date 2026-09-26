@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireCustomerAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { calculateLoanSchedule, applyPaymentsToSchedule, computeLoanProgress } from '@/lib/loan-calc';
 
 // GET /api/customer/dashboard?userId=
 // Returns comprehensive dashboard data for a borrower
 export async function GET(req: NextRequest) {
+  // v51 — customer auth gate: identity derived from JWT, NOT body.userId.
+  const authResult_v51 = await requireCustomerAuth(req);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+  const authPayload_v51 = authResult_v51 as { id: string; type: string };
+
   try {
     const url = new URL(req.url);
-    const userId = url.searchParams.get('userId');
+    const userId = authPayload_v51.id; // v53 - derived from JWT
     if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 });
 
     const user = await db.user.findUnique({
@@ -68,32 +74,46 @@ export async function GET(req: NextRequest) {
     const declinedLoans = loans.filter(l => l.status === 'declined');
 
     // Total borrowed = sum of all disbursed loan principals
+    // v51 — wrap Decimal reads with Number()
     const totalBorrowed = loans
       .filter(l => l.status === 'running' || l.status === 'paid')
-      .reduce((s, l) => s + (l.finalAmount || l.approvedAmount || l.amount || 0), 0);
+      .reduce((s, l) => s + (Number(l.finalAmount) || Number(l.approvedAmount) || Number(l.amount) || 0), 0);
 
     // Total repaid = sum of all repayment transactions
+    // v50 — Prisma Decimal arithmetic: wrap with Number() to avoid type errors
+    // after the Float→Decimal migration on LoanTransaction.amount.
     const totalRepaid = loanTransactions
       .filter(t => t.type === 'repayment')
-      .reduce((s, t) => s + t.amount, 0);
+      .reduce((s, t) => s + Number(t.amount), 0);
 
     // Outstanding balance across all active loans
     let totalOutstanding = 0;
     const activeLoansWithBreakdown: any[] = [];
 
     for (const loan of activeLoans) {
-      const principal = loan.finalAmount || loan.vettedAmount || loan.approvedAmount || loan.amount;
+      // v51 — wrap Decimal reads with Number()
+      const principal = Number(loan.finalAmount) || Number(loan.vettedAmount) || Number(loan.approvedAmount) || Number(loan.amount);
       const tenorMonths = loan.finalTenure || loan.vettedDuration || loan.approvedTenor || loan.duration;
-      const annualRate = loan.finalInterestRate || loan.percent || loan.plan?.interest || 24;
-      const ccdPercent = loan.finalCcdFeePercent || 10;
-      const upfrontFeePercent = loan.finalUpfrontFeePercent || 1;
+      const annualRate = loan.finalInterestRate || loan.percent || loan.plan?.interest; // v53-P3: removed || 24 fallback
+      if (annualRate == null || isNaN(Number(annualRate))) {
+        return NextResponse.json({ error: "Loan is missing finalInterestRate. MD approval must record the rate before this operation can proceed." }, { status: 400 });
+      }
+      const ccdPercent = loan.finalCcdFeePercent; // v53-P3: removed || 10 fallback
+      if (ccdPercent == null || isNaN(Number(ccdPercent))) {
+        return NextResponse.json({ error: "Loan is missing finalCcdFeePercent." }, { status: 400 });
+      }
+      const upfrontFeePercent = loan.finalUpfrontFeePercent; // v53-P3: removed || 1 fallback
+      if (upfrontFeePercent == null || isNaN(Number(upfrontFeePercent))) {
+        return NextResponse.json({ error: "Loan is missing finalUpfrontFeePercent." }, { status: 400 });
+      }
       const repaymentMethod = (loan.repaymentPlan as 'REDUCING' | 'FLAT') || 'REDUCING';
       const startDate = loan.disbursedAt || loan.disbursementDate || new Date();
 
       const calc = calculateLoanSchedule(principal, annualRate, tenorMonths, repaymentMethod, startDate, ccdPercent, upfrontFeePercent, 0);
 
       const loanRepayments = loanTransactions.filter(t => t.loanApplicantId === loan.id && t.type === 'repayment');
-      const totalPaidForLoan = loanRepayments.reduce((s, t) => s + t.amount, 0);
+      // v50 — Number() wrap for Decimal arithmetic.
+      const totalPaidForLoan = loanRepayments.reduce((s, t) => s + Number(t.amount), 0);
 
       const scheduleWithPayments = applyPaymentsToSchedule(calc.schedule, totalPaidForLoan, new Date());
       const progress = computeLoanProgress(scheduleWithPayments, totalPaidForLoan);
@@ -285,7 +305,7 @@ export async function GET(req: NextRequest) {
         type: 'application',
         action: 'APPLIED',
         title: 'Loan Application Submitted',
-        description: `Applied for ₦${loan.amount.toLocaleString()} (${loan.plan?.name || 'Loan'}) — ${loan.applicationRef}`,
+        description: `Applied for ₦${Number(loan.amount).toLocaleString()} (${loan.plan?.name || 'Loan'}) — ${loan.applicationRef}`,
         timestamp: loan.createdAt,
         loanRef: loan.applicationRef,
         actor: 'You',
@@ -325,7 +345,8 @@ export async function GET(req: NextRequest) {
     if (user.kycStatus === 'APPROVED' && activeLoans.length === 0 && pendingLoans.length === 0 && paidLoans.length > 0) {
       // Customer with good history — offer a top-up
       preQualifiedOffer = {
-        amount: Math.min(5000000, (paidLoans[0].approvedAmount || paidLoans[0].amount) * 1.5),
+        // v51 — Decimal arithmetic: paidLoans[0].approvedAmount/amount are Decimal.
+        amount: Math.min(5000000, Number(paidLoans[0].approvedAmount || paidLoans[0].amount) * 1.5),
         rate: 22,
         tenor: 12,
         type: 'Top-Up Loan',

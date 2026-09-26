@@ -62,7 +62,8 @@ async function computeActuals(loIds: string[], start: Date, end: Date) {
     },
     select: { id: true, amount: true, finalAmount: true, staffId: true },
   });
-  const totalDisbursed = disbursedLoans.reduce((sum, l) => sum + (l.finalAmount || l.amount), 0);
+  // v51 — Decimal arithmetic: loanApplicants.finalAmount/amount are Decimal.
+  const totalDisbursed = disbursedLoans.reduce((sum, l) => sum + Number(l.finalAmount || l.amount), 0);
   const loanCount = disbursedLoans.length;
   const submittedLoans = await db.loanApplicants.count({
     where: {
@@ -100,7 +101,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authPayload = getAuthFromRequest(req);
+    const authPayload = await getAuthFromRequest(req);
     if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
 
     const { id: branchId } = await params;
@@ -148,7 +149,8 @@ export async function GET(
       select: { id: true, amount: true, finalAmount: true, staffId: true },
     }) : [];
     const monthlyActuals = {
-      totalDisbursed: monthlyDisbursedLoans.reduce((s, l) => s + (l.finalAmount || l.amount), 0),
+      // v51 — Decimal arithmetic.
+      totalDisbursed: monthlyDisbursedLoans.reduce((s, l) => s + Number(l.finalAmount || l.amount), 0),
       loanCount: monthlyDisbursedLoans.length,
       submittedLoans: loIds.length > 0 ? await db.loanApplicants.count({
         where: { staffId: { in: loIds }, submittedAt: { gte: monthRange.start, lt: monthRange.end } },
@@ -233,7 +235,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authPayload = getAuthFromRequest(req);
+    const authPayload = await getAuthFromRequest(req);
     if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
 
     const { id: branchId } = await params;

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 
 function calcRating(score: number): string {
@@ -8,10 +9,13 @@ function calcRating(score: number): string {
   return 'low';
 }
 
-export async function GET(
-  _req: NextRequest,
+export async function GET(req : NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
+  const authResult_v51 = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'ic']);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+
   try {
     const { id } = await params;
     const risk = await db.riskAssessment.findUnique({
@@ -33,6 +37,10 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
+  const authResult_v51 = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'ic']);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+
   try {
     const { id } = await params;
     const body = await req.json();
@@ -85,10 +93,13 @@ export async function PUT(
   }
 }
 
-export async function DELETE(
-  _req: NextRequest,
+export async function DELETE(req : NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
+  const authResult_v51 = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'ic']);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+
   try {
     const { id } = await params;
     await db.riskAssessment.delete({ where: { id } });

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requireCronAuth } from '@/lib/cron-auth';
 
 // ============================================================================
 // CRON — AUDIT LOG RETENTION PURGE
@@ -13,12 +14,9 @@ import { db } from '@/lib/db';
 // ============================================================================
 
 export async function GET(req: NextRequest) {
-  // Verify cron secret
-  const authHeader = req.headers.get('authorization');
-  const expected = `Bearer ${process.env.CRON_SECRET || 'watershed-cron-secret'}`;
-  if (authHeader !== expected) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  // v50 — fail-closed cron auth (no more hardcoded fallback secret).
+  const cronAuth = requireCronAuth(req);
+  if (cronAuth instanceof NextResponse) return cronAuth;
 
   try {
     const setting = await db.systemSetting.findUnique({

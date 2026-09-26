@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requireRole } from '@/lib/auth';
 
 // POST /api/whistleblow — submit a whistleblower report (anonymous or named)
 export async function POST(req: NextRequest) {
@@ -73,10 +74,15 @@ export async function POST(req: NextRequest) {
 
 // GET /api/whistleblow — list all reports (super admin only)
 export async function GET(req: NextRequest) {
+  // v54 — Blocker 1: admin auth gate + adminId from JWT.
+  const authResult_v54 = await requireRole(req, ['super', 'internal_audit', 'compliance']);
+  if (authResult_v54 instanceof NextResponse) return authResult_v54;
+  const authPayload = authResult_v54 as { id: string; role: string };
+
   try {
     const url = new URL(req.url);
-    const adminId = url.searchParams.get('adminId');
-    if (!adminId) return NextResponse.json({ error: 'adminId required' }, { status: 400 });
+    // v54-Blocker1: adminId from JWT, not query string.
+    const adminId = authPayload.id;
 
     const admin = await db.admin.findUnique({ where: { id: adminId } });
     if (!admin || (admin.role !== 'super' && !admin.auditAccess)) {

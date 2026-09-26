@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await requireRole(req, ['super', 'md', 'hoc']);
   if (auth instanceof NextResponse) return auth;
-  const payload = getAuthFromRequest(req);
+  const payload = await getAuthFromRequest(req);
 
   try {
     const body = await req.json();

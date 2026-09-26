@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthFromRequest } from '@/lib/auth';
+import { requireRole, getAuthFromRequest } from '@/lib/auth';
 import {
   CP_CHECKLIST_ITEMS,
   CP_CHECKLIST_TOTAL,
@@ -100,24 +100,56 @@ export async function GET(
 }
 
 // POST /api/mcc/[loanId]/checklist
+// Authorization: Bearer <admin-jwt>
 // Body variants:
-//   { adminId, itemId, verified, satisfaction? }     → toggle one item
-//   { adminId, action: 'verify_all', notes? }        → verify all + advance to CFO_DISBURSEMENT
-//   { adminId, action: 'reject', reason }            → reject, send loan back to MD_APPROVAL
+//   { itemId, verified, satisfaction? }                  → toggle one item
+//   { action: 'verify_all', notes? }                    → verify all + advance to CFO_DISBURSEMENT
+//   { action: 'reject', reason }                       → reject, send loan back to MD_APPROVAL
+//
+// v52 — P0-G4 FIX (#35 from governance audit):
+//   - `verify_all` is now restricted to internal-control / pre-disbursement
+//     roles only. Previously any authenticated admin could mark all
+//     conditions verified and advance the loan to CFO_DISBURSEMENT —
+//     defeating the entire 8-level approval chain by jumping past MD.
+//     Now `verify_all` requires `requireRole(['super', 'md', 'hoc', 'cro',
+//     'ic', 'internal_control'])`. The route still allows ordinary
+//     item-level toggles (`{ itemId, verified }`) for any authorized role.
+//   - Removed `body.adminId` — actor derived from JWT.
+//   - Reject action now requires non-empty `reason` (#22).
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ loanId: string }> }
 ) {
+  // v52 — auth gate mandatory. The wider role list allows any senior
+  // admin to toggle individual items (LO/BM/HOC etc. can mark documents
+  // received). The narrower INTERNAL_CONTROL_ROLES list below is used
+  // for the `verify_all` action specifically.
+  const authResult_v52 = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'legal', 'ic', 'internal_control', 'cfo', 'bm', 'loan', 'credit', 'analyst']);
+  if (authResult_v52 instanceof NextResponse) return authResult_v52;
+  const authPayload = authResult_v52 as { id: string; role: string };
+
+  // v52 — actor derived from JWT, not body.
+  const adminId = authPayload.id;
+
   try {
     const { loanId } = await params;
-    const body = await req.json();
-    // A1 FIX: Get adminId from JWT token
-    const authPayload = getAuthFromRequest(req);
-    if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    const adminId = authPayload.id;
+    const body = await req.json().catch(() => ({}));
 
-    if (!adminId) {
-      return NextResponse.json({ error: 'adminId is required' }, { status: 400 });
+    // v52 — verify_all requires INTERNAL_CONTROL role specifically.
+    const INTERNAL_CONTROL_ROLES = ['super', 'ic', 'internal_control', 'hoc', 'cro'];
+    if (body.action === 'verify_all' && !INTERNAL_CONTROL_ROLES.includes(authPayload.role)) {
+      return NextResponse.json(
+        { error: `Action 'verify_all' is restricted to internal-control / pre-disbursement roles (ic, internal_control, hoc, cro, super). Your role '${authPayload.role}' is not authorized to mark all conditions verified.` },
+        { status: 403 },
+      );
+    }
+
+    // v52 — reject action requires non-empty reason (#22).
+    if (body.action === 'reject' && (!body.reason || String(body.reason).trim().length === 0)) {
+      return NextResponse.json(
+        { error: 'A non-empty reason is required for reject actions.' },
+        { status: 400 },
+      );
     }
 
     const [admin, loan] = await Promise.all([

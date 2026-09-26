@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const auth = await requireRole(req, ['super']);
   if (auth instanceof NextResponse) return auth;
-  const payload = getAuthFromRequest(req);
+  const payload = await getAuthFromRequest(req);
 
   try {
     const { searchParams } = new URL(req.url);

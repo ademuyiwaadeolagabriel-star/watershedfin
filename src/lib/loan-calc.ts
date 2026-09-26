@@ -45,14 +45,11 @@ export function calculateLoanSchedule(
   upfrontFeePercent: number = 0,
   adminFeePercent: number = 0,
 ): LoanCalculation {
-  // Determine monthly rate
-  // If rate > 20, treat as annual % → divide by 12/100; else treat as monthly decimal already
-  let monthlyRate: number;
-  if (annualRatePercent > 20) {
-    monthlyRate = annualRatePercent / 100 / 12;
-  } else {
-    monthlyRate = annualRatePercent / 100;
-  }
+  // v48 FIX (P0-16): Always treat rate as annual percentage and divide by 12.
+  // Previous code treated rates ≤20 as monthly percentages, which meant 18% annual
+  // became 18% MONTHLY (216% APR) — a massive financial miscalculation.
+  // All rates in the system are now annual percentages (e.g., 24 = 24% p.a.)
+  const monthlyRate = annualRatePercent / 100 / 12;
 
   let monthlyInstallment: number;
   let schedule: ScheduleRow[] = [];
@@ -120,9 +117,10 @@ export function calculateLoanSchedule(
   const upfrontFeeAmount = principal * (upfrontFeePercent / 100);
   const adminFeeAmount = principal * (adminFeePercent / 100);
 
+  // v48 FIX (Calc-2): CCD IS deducted from net disbursement (was missing).
   // Net disbursement = principal - upfront fee - CCD - admin fee
-  // (CCD is usually refundable but deducted at disbursement)
-  const netDisbursement = principal - upfrontFeeAmount - adminFeeAmount;
+  // CCD is held as a deposit (refundable at loan closure) but NOT disbursed to borrower.
+  const netDisbursement = principal - upfrontFeeAmount - ccdAmount - adminFeeAmount;
 
   // Total cost of credit = total interest + fees (non-refundable)
   const totalCostOfCredit = totalInterest + upfrontFeeAmount + adminFeeAmount;
@@ -173,9 +171,53 @@ export function calculateCcdLoanSchedule(
   tenorMonths: number,
   startDate: Date = new Date(),
 ): LoanCalculation {
-  // CCD is treated as a separate loan at the same interest rate.
-  // No CCD/upfront/admin fees are layered onto the CCD schedule itself.
-  return calculateLoanSchedule(ccdAmount, annualRate, tenorMonths, 'REDUCING', startDate, 0, 0, 0);
+  // v46: CCD is a DEPOSIT, not a loan — it should NOT accrue interest.
+  // The installment is simply ccdAmount / tenorMonths (straight-line).
+  // Previously this called calculateLoanSchedule() with REDUCING which
+  // incorrectly applied PMT interest, inflating the installment.
+  const monthlyInstallment = tenorMonths > 0 ? ccdAmount / tenorMonths : ccdAmount;
+
+  const schedule: ScheduleRow[] = [];
+  let balance = ccdAmount;
+  for (let i = 1; i <= tenorMonths; i++) {
+    const dueDate = new Date(startDate);
+    dueDate.setMonth(dueDate.getMonth() + i);
+    const principal = monthlyInstallment;  // Entire payment is principal (no interest)
+    const newBalance = balance - principal;
+    schedule.push({
+      month: i,
+      dueDate,
+      openingBalance: balance,
+      installment: monthlyInstallment,
+      interest: 0,  // No interest on CCD
+      principal,
+      closingBalance: Math.max(0, newBalance),
+      status: 'upcoming',
+      amountPaid: 0,
+    });
+    balance = newBalance;
+  }
+
+  const totalRepayment = monthlyInstallment * tenorMonths;
+  const totalInterest = 0;  // No interest on CCD
+
+  return {
+    principal: ccdAmount,
+    annualRate: 0,  // CCD carries no interest
+    monthlyRate: 0,
+    tenorMonths,
+    repaymentMethod: 'FLAT',  // Straight-line
+    monthlyInstallment,
+    totalRepayment,
+    totalInterest,
+    ccdAmount: 0,  // CCD doesn't have its own CCD
+    upfrontFeeAmount: 0,
+    adminFeeAmount: 0,
+    netDisbursement: ccdAmount,
+    totalCostOfCredit: 0,  // No cost of credit on CCD
+    effectiveAPR: 0,
+    schedule,
+  };
 }
 
 /**
@@ -193,8 +235,10 @@ export function calculateEarlyPayoff(
   totalPayoff: number;
   interestSaved: number;
 } {
+  // v48 FIX (Calc-3): Sum actual outstanding principal from ALL remaining rows
+  // instead of assuming the first remaining row's opening balance
   const remaining = schedule.filter(s => s.month > currentMonth && s.status !== 'paid');
-  const remainingPrincipal = remaining.length > 0 ? remaining[0].openingBalance : 0;
+  const remainingPrincipal = remaining.reduce((sum, s) => sum + s.principal, 0);
   const remainingInterest = remaining.reduce((sum, s) => sum + s.interest, 0);
   const penaltyAmount = remainingInterest * (penaltyPercent / 100);
   const totalPayoff = remainingPrincipal + penaltyAmount;

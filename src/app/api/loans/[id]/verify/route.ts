@@ -1,24 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { createNotification } from '@/lib/notifications';
 
+// ============================================================================
 // POST /api/loans/[id]/verify
-// Body: { adminId, type: 'bvn'|'cac', action: 'verify'|'reject', notes? }
-// BVN: done by Loan Officer during LO_ASSESSMENT
-// CAC: done by Legal during LEGAL_CAC_CHECK
+// Authorization: Bearer <admin-jwt>
+// Body: { type: 'bvn'|'cac', action: 'verify'|'reject', notes? }
+//
+// v52 — P0-G5 FIX (#36 from governance audit):
+//   Removed `body.adminId`. The actor is now derived from the JWT via
+//   `requireRole()`. The previous implementation accepted any admin's ID
+//   in the request body, looked up that admin, and recorded the
+//   verification as if THAT admin had performed it — breaking the audit
+//   trail. An attacker could perform a CAC verification and record it
+//   as "performed by Legal Head A" even if Legal Head A never touched it.
+//
+//   The route now also enforces rejection-reason mandatory (#22):
+//   `action === 'reject'` requires non-empty `notes`.
+// ============================================================================
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // v52 — auth gate: admin JWT mandatory. Role list widened to include
+  // 'legal' so Legal can perform CAC verification.
+  const authResult_v51 = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'credit', 'loan', 'legal', 'bm']);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+  const authPayload = authResult_v51 as { id: string; role: string };
+
+  // v52 — P0-G5: adminId is DERIVED FROM JWT, never from body.
+  const adminId = authPayload.id;
+
   try {
     const { id } = await params;
-    const { adminId, type, action, notes } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { type, action, notes } = body || {};
 
-    if (!adminId || !type || !action) {
-      return NextResponse.json({ error: 'adminId, type, and action required' }, { status: 400 });
+    if (!type || !action) {
+      return NextResponse.json({ error: 'type and action required' }, { status: 400 });
     }
 
-    const admin = await db.admin.findUnique({ where: { id: adminId } });
+    // v52 — #22: rejection requires non-empty notes/reason.
+    if (action === 'reject' && (!notes || String(notes).trim().length === 0)) {
+      return NextResponse.json(
+        { error: 'A non-empty notes/reason is required for reject actions.' },
+        { status: 400 },
+      );
+    }
+
+    const admin = await db.admin.findUnique({
+      where: { id: adminId },
+      select: { id: true, firstName: true, lastName: true, role: true, roleType: true, branchId: true, loanOrigination: true, loanLegal: true },
+    });
     if (!admin) return NextResponse.json({ error: 'Admin not found' }, { status: 404 });
 
     const loan = await db.loanApplicants.findUnique({
@@ -46,14 +81,13 @@ export async function POST(
         await db.auditLog.create({
           data: { adminId, action: 'verified', module: 'kyc',
             description: `BVN verified externally by LO for loan ${loan.applicationRef}`,
-            severity: 'info', metadata: JSON.stringify({ loanId: id, type: 'bvn' }) },
+            severity: 'info', metadata: JSON.stringify({ loanId: id, type: 'bvn', authSource: 'jwt' }) },
         });
         await db.approvalLog.create({
           data: { loanApplicantId: id, adminId, action: 'BVN_VERIFIED',
             roleAtTimeOfAction: admin.role, comments: notes || 'BVN verified externally' },
         });
 
-        // ── Notify customer (fire-and-forget) ────────────────────────────────
         void createNotification({
           userId: loan.userId,
           type: 'cp_verified',
@@ -66,7 +100,7 @@ export async function POST(
           metadata: { loanId: id, applicationRef: loan.applicationRef, type: 'bvn', action: 'verify' },
         });
 
-        return NextResponse.json({ success: true, message: 'BVN verified successfully.' });
+        return NextResponse.json({ success: true, message: 'BVN verified successfully.', authSource: 'jwt' });
       }
 
       if (action === 'reject') {
@@ -75,14 +109,13 @@ export async function POST(
         await db.auditLog.create({
           data: { adminId, action: 'rejected', module: 'kyc',
             description: `BVN verification FAILED for loan ${loan.applicationRef}. Reason: ${notes}`,
-            severity: 'warning', metadata: JSON.stringify({ loanId: id, type: 'bvn', reason: notes }) },
+            severity: 'warning', metadata: JSON.stringify({ loanId: id, type: 'bvn', reason: notes, authSource: 'jwt' }) },
         });
         await db.approvalLog.create({
           data: { loanApplicantId: id, adminId, action: 'BVN_REJECTED',
             roleAtTimeOfAction: admin.role, comments: notes || 'BVN verification failed' },
         });
 
-        // ── Notify customer (fire-and-forget) ────────────────────────────────
         void createNotification({
           userId: loan.userId,
           type: 'kyc_rejected',
@@ -97,7 +130,7 @@ export async function POST(
           metadata: { loanId: id, applicationRef: loan.applicationRef, type: 'bvn', action: 'reject', notes },
         });
 
-        return NextResponse.json({ success: true, message: 'BVN rejected. Application returned to LO.' });
+        return NextResponse.json({ success: true, message: 'BVN rejected. Application returned to LO.', authSource: 'jwt' });
       }
     }
 
@@ -117,14 +150,13 @@ export async function POST(
         await db.auditLog.create({
           data: { adminId, action: 'verified', module: 'compliance',
             description: `CAC verified externally by Legal for loan ${loan.applicationRef}`,
-            severity: 'info', metadata: JSON.stringify({ loanId: id, type: 'cac' }) },
+            severity: 'info', metadata: JSON.stringify({ loanId: id, type: 'cac', authSource: 'jwt' }) },
         });
         await db.approvalLog.create({
           data: { loanApplicantId: id, adminId, action: 'CAC_VERIFIED',
             roleAtTimeOfAction: admin.role, comments: notes || 'CAC verified. Forwarded to BM.' },
         });
 
-        // ── Notify customer (fire-and-forget) ────────────────────────────────
         void createNotification({
           userId: loan.userId,
           type: 'cp_verified',
@@ -137,7 +169,7 @@ export async function POST(
           metadata: { loanId: id, applicationRef: loan.applicationRef, type: 'cac', action: 'verify' },
         });
 
-        return NextResponse.json({ success: true, message: 'CAC verified. Forwarded to Branch Manager.' });
+        return NextResponse.json({ success: true, message: 'CAC verified. Forwarded to Branch Manager.', authSource: 'jwt' });
       }
 
       if (action === 'reject') {
@@ -148,14 +180,13 @@ export async function POST(
         await db.auditLog.create({
           data: { adminId, action: 'rejected', module: 'compliance',
             description: `CAC verification FAILED for loan ${loan.applicationRef}. Reason: ${notes}`,
-            severity: 'warning', metadata: JSON.stringify({ loanId: id, type: 'cac', reason: notes }) },
+            severity: 'warning', metadata: JSON.stringify({ loanId: id, type: 'cac', reason: notes, authSource: 'jwt' }) },
         });
         await db.approvalLog.create({
           data: { loanApplicantId: id, adminId, action: 'CAC_REJECTED',
             roleAtTimeOfAction: admin.role, comments: notes || 'CAC failed. Returned to LO.' },
         });
 
-        // ── Notify customer (fire-and-forget) ────────────────────────────────
         void createNotification({
           userId: loan.userId,
           type: 'kyc_rejected',
@@ -170,7 +201,7 @@ export async function POST(
           metadata: { loanId: id, applicationRef: loan.applicationRef, type: 'cac', action: 'reject', notes },
         });
 
-        return NextResponse.json({ success: true, message: 'CAC rejected. Returned to Loan Officer.' });
+        return NextResponse.json({ success: true, message: 'CAC rejected. Returned to Loan Officer.', authSource: 'jwt' });
       }
     }
 

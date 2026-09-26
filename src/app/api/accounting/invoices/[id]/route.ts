@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { postJournal } from '@/lib/accounting';
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req : NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
+  const authResult_v51 = await requireRole(req, ['super', 'md', 'cfo', 'hoc', 'cro', 'finance', 'accountant']);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+
   try {
     const { id } = await params;
     const invoice = await db.invoice.findUnique({
@@ -19,6 +24,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 // POST: record payment
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
+  const authResult_v51 = await requireRole(req, ['super', 'md', 'cfo', 'hoc', 'cro', 'finance', 'accountant']);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+
   try {
     const { id } = await params;
     const body = await req.json();
@@ -30,8 +39,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const amt = Number(amount);
     if (!amt || amt <= 0) return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
 
-    const newTotalPaid = invoice.totalPaid + amt;
-    const newStatus = newTotalPaid >= invoice.totalAmount - 0.01 ? 'paid' : 'partial';
+    const newTotalPaid = Number(invoice.totalPaid) + amt;
+    const newStatus = newTotalPaid >= Number(invoice.totalAmount) - 0.01 ? 'paid' : 'partial';
 
     const reference = `IP-${invoice.invoiceNumber}-${Date.now().toString().slice(-6)}`;
     const payment = await db.invoicePayment.create({

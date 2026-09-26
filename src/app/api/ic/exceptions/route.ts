@@ -20,7 +20,7 @@ async function genExceptionCode(): Promise<string> {
 
 export async function GET(req: NextRequest) {
   // v44: Added auth check
-  const authPayload = getAuthFromRequest(req);
+  const authPayload = await getAuthFromRequest(req);
   if (!authPayload) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
   }
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   // v44: Added auth + role check
-  const authPayload = getAuthFromRequest(req);
+  const authPayload = await getAuthFromRequest(req);
   if (!authPayload) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
   }

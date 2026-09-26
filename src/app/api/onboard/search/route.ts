@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 
 /**
@@ -10,6 +11,10 @@ import { db } from '@/lib/db';
  * `contains` filter behaves like ILIKE here.
  */
 export async function GET(req: NextRequest) {
+  // v53 — auth gate: least-privilege role check.
+  const authResult_v53 = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'cs', 'compliance', 'bm', 'lo']);
+  if (authResult_v53 instanceof NextResponse) return authResult_v53;
+
   try {
     const url = new URL(req.url);
     const q = (url.searchParams.get('q') || '').trim();

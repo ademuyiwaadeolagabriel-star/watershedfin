@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth';
 
 // ============================================================================
 // BVN VERIFICATION VIA EXTERNAL SITE
@@ -16,6 +17,10 @@ import { NextRequest, NextResponse } from 'next/server';
 const BVN_VERIFICATION_PORTAL = 'https://verify.bvn.gov.ng'; // Example URL
 
 export async function POST(req: NextRequest) {
+  // v53 — auth gate: least-privilege role check.
+  const authResult_v53 = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'cs', 'compliance', 'bm', 'lo']);
+  if (authResult_v53 instanceof NextResponse) return authResult_v53;
+
   try {
     const body = await req.json();
     const { action, bvn, referenceCode, userId } = body;

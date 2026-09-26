@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { postJournal } from '@/lib/accounting';
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req : NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
+  const authResult_v51 = await requireRole(req, ['super', 'md', 'cfo', 'hoc', 'cro', 'finance', 'accountant']);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+
   try {
     const { id } = await params;
     const entry = await db.journalEntry.findUnique({
@@ -22,6 +27,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 // POST: reverse the entry — create a counter-entry
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
+  const authResult_v51 = await requireRole(req, ['super', 'md', 'cfo', 'hoc', 'cro', 'finance', 'accountant']);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+
   try {
     const { id } = await params;
     const body = await req.json();

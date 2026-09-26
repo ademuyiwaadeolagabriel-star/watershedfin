@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireCustomerAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 
 /**
@@ -6,12 +7,14 @@ import { db } from '@/lib/db';
  * Returns the user's current payment status + the CAC search fee amount
  */
 export async function GET(req: NextRequest) {
+  // v51 — customer auth gate: identity derived from JWT, NOT body.userId.
+  const authResult_v51 = await requireCustomerAuth(req);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+  const authPayload_v51 = authResult_v51 as { id: string; type: string };
+
   try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get('userId');
-    if (!userId) {
-      return NextResponse.json({ error: 'userId is required' }, { status: 400 });
-    }
+    // v53-IDOR-fix: userId from JWT, not query string.
+    const userId = authPayload_v51.id;
 
     const user = await db.user.findUnique({
       where: { id: userId },

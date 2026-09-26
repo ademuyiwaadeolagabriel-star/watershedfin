@@ -4,8 +4,27 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { signAuthToken } from '@/lib/auth';
 
+// v49: Simple in-memory rate limiting for login endpoint
+// 10 attempts per IP per 15 minutes (prevents brute-force)
+const loginAttempts = new Map<string, { count: number; firstAttempt: number }>();
+const MAX_ATTEMPTS = 10;
+const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
 export async function POST(req: NextRequest) {
   try {
+    // v49: Rate limiting check
+    const clientIp = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown';
+    const now = Date.now();
+    const attempts = loginAttempts.get(clientIp);
+    if (attempts && now - attempts.firstAttempt < WINDOW_MS && attempts.count >= MAX_ATTEMPTS) {
+      const remainingMs = WINDOW_MS - (now - attempts.firstAttempt);
+      const remainingMin = Math.ceil(remainingMs / 60000);
+      return NextResponse.json(
+        { error: `Too many login attempts. Please try again in ${remainingMin} minutes.` },
+        { status: 429 }
+      );
+    }
+
     const { username, password } = await req.json();
     if (!username || !password) {
       return NextResponse.json({ error: 'Username and password required' }, { status: 400 });

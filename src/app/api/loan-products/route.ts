@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // v53 — auth gate: least-privilege role check.
+  // Handler had no req param; inject one so requireRole can read the JWT.
+  const authResult_v53 = await requireRole(req as NextRequest, ['super', 'md', 'hoc', 'cro']);
+  if (authResult_v53 instanceof NextResponse) return authResult_v53;
+
   try {
     const products = await db.loanPlan.findMany({
       orderBy: { createdAt: 'desc' },
@@ -14,6 +20,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // v53 — auth gate: least-privilege role check.
+  const authResult_v53 = await requireRole(req, ['super', 'md', 'hoc', 'cro']);
+  if (authResult_v53 instanceof NextResponse) return authResult_v53;
+
   try {
     const body = await req.json();
     if (!body.name || !body.slug) {

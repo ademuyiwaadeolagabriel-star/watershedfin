@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { KYC_STATUSES } from '@/lib/constants';
 
@@ -9,7 +10,11 @@ import { KYC_STATUSES } from '@/lib/constants';
  *   - kycStatus IN ('PROCESSING', 'RESUBMIT') — legacy KYC flow
  *   - onboardingStage = 'cs_kyc_review' — v26+ onboarding flow
  */
-export async function GET(_req: NextRequest) {
+export async function GET(req : NextRequest) {
+  // v53 — auth gate: least-privilege role check.
+  const authResult_v53 = await requireRole(req, ['super', 'cs', 'compliance']);
+  if (authResult_v53 instanceof NextResponse) return authResult_v53;
+
   try {
     const where = {
       OR: [

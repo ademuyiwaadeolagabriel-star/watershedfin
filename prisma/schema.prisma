@@ -550,8 +550,8 @@ model LoanApplicants {
   acctId            String?
 
   // Request
-  amount            Float
-  payback           Float?
+  amount  Decimal  @db.Decimal(18,2)
+  payback  Decimal? @db.Decimal(18,2)
   duration          Int
   percent           Float?   // interest % p.a.
   reason            String?
@@ -573,21 +573,21 @@ model LoanApplicants {
   defaulter         Boolean  @default(false)
 
   // Vetted/structured/final amounts (Triple Lock)
-  vettedAmount      Float?
+  vettedAmount  Decimal? @db.Decimal(18,2)
   vettedDuration    Int?
   vettedInterestRate Float?
-  structuredAmount  Float?
+  structuredAmount  Decimal? @db.Decimal(18,2)
   structuredTenor   Int?
-  finalAmount       Float?
+  finalAmount  Decimal? @db.Decimal(18,2)
   finalTenure       Int?
   finalInterestRate Float?
   finalCcdFeePercent Float?
   finalUpfrontFeePercent Float?
-  finalAdminFee     Float?
-  approvedAmount    Float?
+  finalAdminFee  Decimal? @db.Decimal(18,2)
+  approvedAmount  Decimal? @db.Decimal(18,2)
   approvedTenor     Int?
   approvedDate      DateTime?
-  appraisedAmount   Float?
+  appraisedAmount  Decimal? @db.Decimal(18,2)
   appraisedTenor    Int?
 
   // Repayment plan
@@ -641,7 +641,7 @@ model LoanApplicants {
   cfoAuthorizedAt   DateTime?
 
   // Vetting (BM)
-  bmRecommendedAmount Float?
+  bmRecommendedAmount  Decimal? @db.Decimal(18,2)
   bmRecommendedTenor Int?
   bmComment         String?
   bmFieldVisit      String?  // JSON
@@ -650,7 +650,7 @@ model LoanApplicants {
   bmValidationData  String?  // JSON
 
   // Structuring (HOC)
-  hocRecommendedAmount Float?
+  hocRecommendedAmount  Decimal? @db.Decimal(18,2)
   hocRecommendedTenor Int?
   hocMoratorium     Int?
   hocRepaymentCycle String?
@@ -658,7 +658,7 @@ model LoanApplicants {
   hocStructureMeta  String?  // JSON
 
   // CFO
-  cfoApprovedAmount Float?
+  cfoApprovedAmount  Decimal? @db.Decimal(18,2)
   cfoApprovedTenor Int?
   scheduledDisbursementDate DateTime?
   cfoComment        String?
@@ -666,10 +666,10 @@ model LoanApplicants {
   cfoVerifiedAt     DateTime?
 
   // CRO — max safe exposure (opinion, not override)
-  riskApprovedAmount Float?
+  riskApprovedAmount  Decimal? @db.Decimal(18,2)
 
   // Final approval
-  finalApprovedAmount Float?
+  finalApprovedAmount  Decimal? @db.Decimal(18,2)
   finalApprovedTenor Int?
 
   // Reference codes
@@ -697,6 +697,9 @@ model LoanApplicants {
   loanDocuments     LoanDocument[]
   loanRepayments    LoanRepayment[]
   loanTransactions  LoanTransaction[]
+  // v52 — immutable customer acceptance evidence (#31)
+  customerAcceptanceEvidence CustomerAcceptanceEvidence?
+  offerAcceptanceOtps        OfferAcceptanceOtp[]
   sectorRef         Sector?  @relation(fields: [sectorId], references: [id])
   sectorId          String?
 
@@ -826,6 +829,7 @@ model CreditAppraisal {
   mdSnapshot        String?  // JSON — MD sanction
   governanceAudits  String?  // JSON — threaded audit log
   engineSnapshot    String?  // JSON — full engine output
+  camFormData       String?  // v47: JSON — ALL structured CAM fields in one blob for draft persistence
   inventorySnapshot String?  // JSON
   assetsRegister    String?  // JSON
   creditBureauReport String? // JSON
@@ -916,7 +920,7 @@ model MccDecision {
   approverName      String
   approverRole      String   // LO, BM, CA, HOC, CRO, LEGAL, GCFO, MD
   approvalLevel     Int      // 1-8
-  recommendedAmount Float?
+  recommendedAmount Decimal? @db.Decimal(18,2)
   duration          Int?     // months
   ccdPercentage     Float?   // Capital Contribution Deposit %
   upfrontFeePercentage Float?
@@ -932,13 +936,31 @@ model MccDecision {
   signedAt          DateTime?
   ipAddress         String?
 
+  // v52 — IMmutability + supersession chain (#21 from governance audit).
+  // Decisions are now append-only. The previous upsert-on-(loanId, approverId,
+  // approverRole) pattern silently overwrote old decisions, making the audit
+  // trail worthless for regulated governance. The new pattern:
+  //   - status: ACTIVE | SUPERSEDED | REVERTED
+  //   - decisionSequence: monotonically increasing per (loanId, approverRole)
+  //   - supersedesDecisionId: self-reference to the prior ACTIVE decision
+  //   - supersededAt / supersededById: when/who marked this SUPERSEDED
+  // The unique constraint on (loanApplicantId, approverRole, status='ACTIVE')
+  // is enforced at the application layer (one ACTIVE per role per loan).
+  status              String   @default("ACTIVE") // ACTIVE | SUPERSEDED | REVERTED
+  decisionSequence    Int      @default(1)
+  supersedesDecisionId String?
+  supersededAt        DateTime?
+  supersededById      String?
+
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  @@unique([loanApplicantId, approverId, approverRole])
+  @@index([loanApplicantId, approverRole, status])
   @@index([loanApplicantId, approvalLevel])
   @@index([approverId])
   @@index([approverRole])
+  @@index([status])
+  @@index([supersedesDecisionId])
 }
 
 model ApprovalLog {
@@ -1107,11 +1129,21 @@ model LoanRepayment {
   loan              LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
   refId             String?  @unique
   dueDate           DateTime
-  amountDue         Float
-  principalPart     Float?
-  interestPart      Float?
-  feePart           Float?
-  amountPaid        Float    @default(0)
+  // v50 — Issue #16: monetary fields migrated Float → Decimal. Float
+  // binary floating-point cannot represent values like 0.1 exactly
+  // (0.1 + 0.2 ≠ 0.3 in JavaScript), which is unacceptable for a
+  // financial ledger. Decimal is the correct type. Migration is
+  // incremental — we start with the most central loan-repayment fields
+  // because they are the ones most heavily recomputed (every payment,
+  // every schedule rederivation, every early-payoff quote).
+  // Future versions should continue migrating the remaining ~190 Float
+  // fields in the schema (loan principal, interest, balances, journal
+  // amounts, etc.).
+  amountDue         Decimal  @db.Decimal(18,2)
+  principalPart     Decimal? @db.Decimal(18,2)
+  interestPart      Decimal? @db.Decimal(18,2)
+  feePart           Decimal? @db.Decimal(18,2)
+  amountPaid        Decimal  @default(0) @db.Decimal(18,2)
   status            String   @default("pending") // pending, partial, paid, overdue
   paidAt            DateTime?
   paymentMethod     String?
@@ -1127,8 +1159,13 @@ model LoanTransaction {
   loanApplicantId   String
   loan              LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
   type              String   // disbursement, repayment, fee, penalty
-  amount            Float
-  reference         String?
+  // v50 — Issue #16: Float → Decimal for monetary values.
+  amount            Decimal  @db.Decimal(18,2)
+  // v50 — @unique enables idempotent repayment processing. If a customer
+  // double-clicks, retries, or the network replays the request, the unique
+  // constraint causes P2002 which the route handler catches and returns as
+  // "already processed" instead of duplicating the repayment.
+  reference         String?  @unique
   transactionDate   DateTime
   metadata          String?  // JSON
   createdAt         DateTime @default(now())
@@ -1349,7 +1386,7 @@ model TreasuryInvestment {
   startDate         DateTime
   maturityDate      DateTime
 
-  accruedInterest   Float    @default(0)
+  accruedInterest  Decimal? @db.Decimal(18,2)
   whtDeducted       Float    @default(0)
 
   payoutType        String   @default("backend") // compounding, monthly, backend
@@ -1385,7 +1422,7 @@ model TreasuryTransaction {
   investmentId      String
   investment        TreasuryInvestment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
   type              String   // subscription, full_redemption, partial_redemption, monthly_payout
-  amount            Float
+  amount  Decimal  @db.Decimal(18,2)
   direction         String   // debit, credit
   reference         String?
   createdAt         DateTime @default(now())
@@ -1441,7 +1478,7 @@ model ChartOfAccount {
   currency          String   @default("NGN")
   isSystem          Boolean  @default(false)
   isActive          Boolean  @default(true)
-  balance           Float    @default(0)
+  balance  Decimal  @db.Decimal(18,2) @default(0)
   parentId          String?
   parent            ChartOfAccount? @relation("AccountHierarchy", fields: [parentId], references: [id])
   children          ChartOfAccount[] @relation("AccountHierarchy")
@@ -1493,8 +1530,8 @@ model JournalItem {
   journalEntry      JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
   accountId         String
   account           ChartOfAccount @relation(fields: [accountId], references: [id])
-  debit             Float    @default(0)
-  credit            Float    @default(0)
+  debit  Decimal  @db.Decimal(18,2) @default(0)
+  credit  Decimal  @db.Decimal(18,2) @default(0)
   createdAt         DateTime @default(now())
 
   @@index([journalEntryId])
@@ -1553,10 +1590,10 @@ model VendorBill {
   vendor            Vendor   @relation(fields: [vendorId], references: [id])
   date              DateTime
   dueDate           DateTime
-  subtotal          Float
-  taxAmount         Float    @default(0)
-  totalAmount       Float
-  totalPaid         Float    @default(0)
+  subtotal  Decimal  @db.Decimal(18,2)
+  taxAmount  Decimal  @db.Decimal(18,2) @default(0)
+  totalAmount  Decimal  @db.Decimal(18,2)
+  totalPaid  Decimal  @db.Decimal(18,2) @default(0)
   status            String   @default("pending") // pending, partial, paid, unpaid
   expenseAccountId  String?
   expenseAccount    ChartOfAccount? @relation(fields: [expenseAccountId], references: [id])
@@ -1579,7 +1616,7 @@ model VendorPayment {
   vendorId          String
   vendor            Vendor   @relation(fields: [vendorId], references: [id])
   paymentDate       DateTime
-  amount            Float
+  amount  Decimal  @db.Decimal(18,2)
   paymentMethod     String?
   referenceNumber   String?
   bankAccountId     String?
@@ -1598,14 +1635,14 @@ model Invoice {
   date              DateTime
   dueDate           DateTime
   description       String?
-  subtotal          Float
-  taxAmount         Float    @default(0)
-  totalAmount       Float
-  totalPaid         Float    @default(0)
+  subtotal  Decimal  @db.Decimal(18,2)
+  taxAmount  Decimal  @db.Decimal(18,2) @default(0)
+  totalAmount  Decimal  @db.Decimal(18,2)
+  totalPaid  Decimal  @db.Decimal(18,2) @default(0)
   notes             String?
   status            String   @default("draft") // draft, sent, partial, paid, overdue, written_off, void
   writtenOffAt      DateTime?
-  writtenOffAmount  Float    @default(0)
+  writtenOffAmount  Decimal  @db.Decimal(18,2) @default(0)
   revenueAccountId  String?
   revenueAccount    ChartOfAccount? @relation("InvoiceRevenueAccount", fields: [revenueAccountId], references: [id])
   expenseAccountId  String?
@@ -1625,7 +1662,7 @@ model InvoicePayment {
   invoiceId         String
   invoice           Invoice  @relation(fields: [invoiceId], references: [id])
   date              DateTime
-  amount            Float
+  amount  Decimal  @db.Decimal(18,2)
   bankAccountId     String?
   paymentMethod     String?
   checkNumber       String?
@@ -1641,7 +1678,7 @@ model Expense {
   id                String   @id @default(cuid())
   date              DateTime
   description       String
-  amount            Float
+  amount  Decimal  @db.Decimal(18,2)
   expenseAccountId  String
   expenseAccount    ChartOfAccount @relation(fields: [expenseAccountId], references: [id])
   paymentAccountId  String?
@@ -1691,13 +1728,13 @@ model Payslip {
   payrollBatchId    String
   payrollBatch      PayrollBatch @relation(fields: [payrollBatchId], references: [id], onDelete: Cascade)
   staffId           String
-  basicSalary       Float
-  totalAllowances   Float    @default(0)
-  totalDeductions   Float    @default(0)
-  taxDeduction      Float    @default(0)
-  pensionDeduction  Float    @default(0)
-  otherDeductions   Float    @default(0)
-  netPay            Float
+  basicSalary  Decimal  @db.Decimal(18,2)
+  totalAllowances  Decimal  @db.Decimal(18,2) @default(0)
+  totalDeductions  Decimal  @db.Decimal(18,2) @default(0)
+  taxDeduction  Decimal  @db.Decimal(18,2) @default(0)
+  pensionDeduction  Decimal  @db.Decimal(18,2) @default(0)
+  otherDeductions  Decimal  @db.Decimal(18,2) @default(0)
+  netPay  Decimal  @db.Decimal(18,2)
   status            String   @default("pending") // pending, paid
   allowancesBreakdown String? // JSON
   deductionsBreakdown String? // JSON
@@ -1712,7 +1749,7 @@ model StaffSalary {
   id                String   @id @default(cuid())
   staffId           String
   staff             Admin    @relation("StaffSalaryForAdmin", fields: [staffId], references: [id])
-  basicSalary       Float
+  basicSalary  Decimal  @db.Decimal(18,2)
   housingAllowance  Float    @default(0)
   transportAllowance Float   @default(0)
   mealAllowance     Float    @default(0)
@@ -1776,7 +1813,7 @@ model TillTransaction {
   tillId            String
   till              Till     @relation(fields: [tillId], references: [id], onDelete: Cascade)
   type              String   // deposit, withdrawal, transfer_in, transfer_out
-  amount            Float
+  amount  Decimal  @db.Decimal(18,2)
   date              DateTime
   reference         String?
   description       String?
@@ -1820,8 +1857,8 @@ model Transactions {
   userId            String
   user              User     @relation(fields: [userId], references: [id])
   type              String   // deposit, withdrawal, transfer, loan_disbursement, loan_repaid, interest
-  amount            Float
-  charge            Float    @default(0)
+  amount  Decimal  @db.Decimal(18,2)
+  charge  Decimal  @db.Decimal(18,2)
   status            String   @default("pending") // pending, success, failed
   reference         String?  @unique
   trxRef            String?
@@ -1839,7 +1876,7 @@ model Balance {
   id                String   @id @default(cuid())
   userId            String   @unique
   user              User     @relation(fields: [userId], references: [id])
-  amount            Float    @default(0)
+  amount  Decimal  @db.Decimal(18,2)
   coinId            Int      @default(1)
   status            Int      @default(1)
   createdAt         DateTime @default(now())
@@ -2451,7 +2488,7 @@ model OnboardingConsent {
 model OnboardingPayment {
   id              String   @id @default(cuid())
   userId          String
-  amount          Float
+  amount  Decimal  @db.Decimal(18,2)
   method          String   // paystack, transfer
   status          String   @default("pending") // pending, confirmed, rejected
   reference       String?  // Paystack reference or bank transfer ref
@@ -2481,9 +2518,17 @@ model LegalNameSearch {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  // v52 — #26: unique-active-case enforcement.
+  // Only one LegalNameSearch per user can be in an "active" state
+  // (pending / in_review / customer_responded). Approved/rejected cases
+  // are historical. The application layer enforces this in the
+  // create-legal-case transaction (see customer/onboarding-payment/upload-proof
+  // + webhook handler).
+  isActive        Boolean  @default(true) // false once approved/rejected
+
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  @@index([userId, isActive])
   @@index([status])
 }
 
@@ -2515,4 +2560,92 @@ model ComplianceQuery {
 
   @@index([loanId])
   @@index([status])
+}
+
+// ============================================================================
+// v51 — MAKER-CHECKER PENDING MUTATIONS
+// ============================================================================
+// Sensitive financial operations (loan disbursement, treasury transactions,
+// large repayments/refunds, accounting adjustments, chart-of-account
+// changes, sector policy changes, loan product changes) require a formal
+// Maker → Checker → Authorizer → Execution flow.
+//
+// See src/lib/auth.ts → requireMakerChecker() / createPendingMutation() /
+// updatePendingMutationStatus() for the helper API.
+// ============================================================================
+model PendingMutation {
+  id              String   @id @default(cuid())
+  operation       String   // 'loan_disbursement' | 'treasury_investment' | ...
+  targetId        String?  // ID of the affected entity (loanId, sectorId, etc.)
+  payloadJson     String   // JSON snapshot of the proposed mutation
+  status          String   @default("PENDING") // PENDING | REVIEWED | AUTHORIZED | EXECUTED | REJECTED | EXPIRED
+  makerId         String   // who proposed
+  checkerId       String?  // who reviewed
+  authorizerId    String?  // who authorized
+  rejectedById    String?  // who rejected (if status=REJECTED)
+  reviewedAt      DateTime?
+  authorizedAt    DateTime?
+  rejectedAt      DateTime?
+  executedAt      DateTime?
+  expiresAt       DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([operation, status])
+  @@index([makerId])
+  @@index([targetId])
+}
+
+// ============================================================================
+// v52 — CUSTOMER ACCEPTANCE EVIDENCE (#31)
+// ============================================================================
+// Immutable record of the customer's acceptance of the final loan terms.
+// Captures IP, user-agent, signature, offer-terms-hash so the acceptance
+// can be cryptographically tied to a specific offer version.
+// ============================================================================
+model CustomerAcceptanceEvidence {
+  id                  String   @id @default(cuid())
+  loanApplicantId     String   @unique // one evidence record per loan
+  loan                LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
+  userId              String
+  acceptedAt          DateTime @default(now())
+  ipAddress           String?
+  userAgent           String?
+  signature           String?  // typed name or base64 image
+  signatureType       String   @default("typed") // typed, uploaded
+  // SHA-256 hash of the JSON of accepted terms (amount, rate, tenor, fees).
+  // Tamper-evident: if the loan's finalAmount/rate/tenor changes after
+  // acceptance, the hash no longer matches and the acceptance is invalid.
+  acceptedTermsHash   String
+  offerVersion        Int      @default(1)
+  createdAt           DateTime @default(now())
+
+  @@index([userId])
+  @@index([loanApplicantId])
+}
+
+// ============================================================================
+// v54 — Blocker 5: OFFER ACCEPTANCE OTP
+// ============================================================================
+// Purpose-bound OTP for customer offer acceptance. An OTP issued for loan A
+// cannot satisfy the acceptance for loan B. Bound to the exact terms hash
+// so the customer cannot accept terms that have changed since the OTP was
+// issued. Single-use (consumedAt). 5-minute expiry. Attempt-count limited.
+// ============================================================================
+model OfferAcceptanceOtp {
+  id              String   @id @default(cuid())
+  loanApplicantId String
+  loan            LoanApplicants @relation(fields: [loanApplicantId], references: [id], onDelete: Cascade)
+  userId          String
+  termsHash       String   // SHA-256 of (finalAmount + finalInterestRate + finalTenure + finalCcdFeePercent + finalUpfrontFeePercent)
+  otpHash         String   // SHA-256 of (otp + userId + loanApplicantId + termsHash)
+  expiresAt       DateTime
+  attemptCount    Int      @default(0)
+  maxAttempts     Int      @default(5)
+  consumedAt      DateTime?
+  consumedById    String?  // userId who consumed (should always equal userId)
+  createdAt       DateTime @default(now())
+
+  @@index([loanApplicantId, termsHash])
+  @@index([userId])
+  @@index([expiresAt])
 }

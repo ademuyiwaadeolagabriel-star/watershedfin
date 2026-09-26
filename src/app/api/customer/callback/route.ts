@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireCustomerAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { createNotification } from '@/lib/notifications';
 
@@ -10,9 +11,14 @@ import { createNotification } from '@/lib/notifications';
 // ============================================================================
 
 export async function GET(req: NextRequest) {
+  // v51 — customer auth gate: identity derived from JWT, NOT body.userId.
+  const authResult_v51 = await requireCustomerAuth(req);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+  const authPayload_v51 = authResult_v51 as { id: string; type: string };
+
   try {
     const url = new URL(req.url);
-    const userId = url.searchParams.get('userId');
+    const userId = authPayload_v51.id; // v53 - derived from JWT
     const adminId = url.searchParams.get('adminId');
     const status = url.searchParams.get('status');
 
@@ -64,8 +70,14 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // v51 — customer auth gate: identity derived from JWT, NOT body.userId.
+  const authResult_v51 = await requireCustomerAuth(req);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+  const authPayload_v51 = authResult_v51 as { id: string; type: string };
+
   try {
-    const { userId, preferredTime, reason } = await req.json();
+    const { preferredTime, reason } = await req.json(); // v53-IDOR-fix: userId removed from body
+      const userId = authPayload_v51.id; // v53 - derived from JWT;
 
     if (!userId) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 });

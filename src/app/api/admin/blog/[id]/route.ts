@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthFromRequest } from '@/lib/auth';
+import { getAuthFromRequest, requireAuth } from '@/lib/auth';
 
 /**
  * /api/admin/blog/[id]
@@ -90,7 +90,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const authPayload = getAuthFromRequest(req);
+    const authPayload = await getAuthFromRequest(req);
     if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     const body = await req.json();
 
@@ -190,8 +190,13 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // v50 — auth gate mandatory, no body.adminId fallback.
+    const authResult = await requireAuth(req);
+    if (authResult instanceof NextResponse) return authResult;
+    const authPayload = authResult as { id: string; role: string };
+    const adminId = authPayload.id;
+
     const { id } = await params;
-    const body = await req.json().catch(() => ({}));
 
     const existing = await db.blog.findUnique({
       where: { id },
@@ -203,9 +208,7 @@ export async function DELETE(
 
     await db.blog.delete({ where: { id } });
 
-    // Audit log
-    const authPayload = getAuthFromRequest(req);
-    const adminId = authPayload?.id || body.adminId;
+    // Audit log — actor always derived from the JWT.
     const actor = await getActor(adminId);
     if (actor) {
       await db.auditLog.create({

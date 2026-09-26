@@ -12,14 +12,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'amount and tenor required' }, { status: 400 });
     }
 
+    // v54 (audit #7): fail-closed on rate / ccd / upfront — never silently
+    // default to 24% / 10% / 1%. These defaults would fabricate a financial
+    // schedule that does not reflect any actual loan terms.
+    const numRate = Number(rate);
+    if (isNaN(numRate) || numRate < 0) {
+      return NextResponse.json({ error: 'rate is required for loan calculation' }, { status: 400 });
+    }
+    const numCcd = Number(ccd);
+    if (isNaN(numCcd) || numCcd < 0) {
+      return NextResponse.json({ error: 'ccd fee percent is required for loan calculation' }, { status: 400 });
+    }
+    const numUpfront = Number(upfront);
+    if (isNaN(numUpfront) || numUpfront < 0) {
+      return NextResponse.json({ error: 'upfront fee percent is required for loan calculation' }, { status: 400 });
+    }
+
     const calculation = calculateLoanSchedule(
       Number(amount),
-      Number(rate) || 24,
+      numRate,
       Number(tenor),
       (method as 'REDUCING' | 'FLAT') || 'REDUCING',
       new Date(),
-      Number(ccd) || 10,
-      Number(upfront) || 1,
+      numCcd,
+      numUpfront,
       0,
     );
 

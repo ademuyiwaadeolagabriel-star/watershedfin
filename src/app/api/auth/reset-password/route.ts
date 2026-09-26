@@ -41,6 +41,12 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // v54 (audit #13): Revoke all active sessions for this admin after a password reset.
+    await db.activeSession.updateMany({
+      where: { adminId: admin.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    }).catch(() => {});
+
     await db.auditLog.create({
       data: {
         adminId: admin.id,

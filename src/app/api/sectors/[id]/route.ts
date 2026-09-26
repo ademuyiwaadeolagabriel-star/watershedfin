@@ -1,13 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requireRole } from '@/lib/auth';
+
+// ============================================================================
+// /api/sectors/[id]
+//   PUT    — admin-only: update sector fields (incl. benchmarkedMargin)
+//   DELETE — admin-only: remove a sector
+//
+// v50 FIX (Issue #26): Both mutations are now admin-only. The
+// benchmarkedMargin directly affects CAM affordability calculations
+// (via computeMarginSummaryBase) — see Issue #2/#3 in the v50 audit.
+// Unauthorized modification would let attackers manipulate loan
+// approvals.
+// ============================================================================
+
+const SECTOR_EDITOR_ROLES = ['super', 'md', 'hoc', 'cro'];
 
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // v50 — auth gate.
+    const authResult = await requireRole(req, SECTOR_EDITOR_ROLES);
+    if (authResult instanceof NextResponse) return authResult;
+
     const { id } = await params;
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const data: any = {};
     if (body.name !== undefined) data.name = body.name;
     if (body.riskScore !== undefined) data.riskScore = Number(body.riskScore);
@@ -22,10 +41,14 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // v50 — auth gate.
+    const authResult = await requireRole(req, SECTOR_EDITOR_ROLES);
+    if (authResult instanceof NextResponse) return authResult;
+
     const { id } = await params;
     await db.sector.delete({ where: { id } });
     return NextResponse.json({ ok: true });

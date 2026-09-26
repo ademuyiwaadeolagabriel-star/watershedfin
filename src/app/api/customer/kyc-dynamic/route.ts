@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthFromRequest } from '@/lib/auth';
+import { requireCustomerAuth } from '@/lib/auth';
 
 /**
- * GET /api/customer/kyc-dynamic?userId=xxx
+ * GET /api/customer/kyc-dynamic
+ * Authorization: Bearer <customer-jwt>
  * Returns all enabled KYC fields (grouped by section) + the user's submissions
  *
  * Response shape:
@@ -16,17 +17,14 @@ import { getAuthFromRequest } from '@/lib/auth';
  *   }
  */
 export async function GET(req: NextRequest) {
-  try {
-    const authPayload = getAuthFromRequest(req);
-    if (!authPayload) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
+  // v53 — customer auth gate (replaces v51's weak getAuthFromRequest).
+  const authResult_v51 = await requireCustomerAuth(req);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+  const authPayload_v51 = authResult_v51 as { id: string; type: string };
 
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get('userId');
-    if (!userId) {
-      return NextResponse.json({ error: 'userId is required' }, { status: 400 });
-    }
+  try {
+    // v53-IDOR-fix: userId from JWT, not query string.
+    const userId = authPayload_v51.id;
 
     const user = await db.user.findUnique({
       where: { id: userId },
@@ -130,20 +128,21 @@ export async function GET(req: NextRequest) {
  * - submit=false → save as draft (kycStatus stays 'DRAFT')
  */
 export async function POST(req: NextRequest) {
+  // v53 — customer auth gate (replaces v51's weak getAuthFromRequest).
+  const authResult_v51 = await requireCustomerAuth(req);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+  const authPayload_v51 = authResult_v51 as { id: string; type: string };
+
   try {
-    const authPayload = getAuthFromRequest(req);
-    if (!authPayload) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
-
-    const body = await req.json();
-    const { userId, values, submit } = body as {
-      userId: string;
-      values: Array<{ fieldId: string; value: string; fileName?: string; filePath?: string }>;
+    const body = await req.json().catch(() => ({}));
+    // v53-IDOR-fix: userId from JWT, not body.
+    const { values, submit } = body as {
+      values?: Array<{ fieldId: string; value: string; fileName?: string; filePath?: string }>;
       submit?: boolean;
-    };
+    } || {};
+    const userId = authPayload_v51.id;
 
-    if (!userId || !Array.isArray(values)) {
+    if (!Array.isArray(values)) {
       return NextResponse.json({ error: 'userId and values[] are required' }, { status: 400 });
     }
 
@@ -206,7 +205,7 @@ export async function POST(req: NextRequest) {
           fileName: v.fileName || null,
           filePath: v.filePath || null,
           editedAt: now,
-          editedById: authPayload.id,
+          editedById: authPayload_v51.id,
           // Reset verification on edit
           verified: false,
           verifiedAt: null,

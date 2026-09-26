@@ -1,5 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requireRole } from '@/lib/auth';
+
+// ============================================================================
+// /api/sectors
+//   GET  — public: list all sectors (used by CAM UI + customer onboarding form)
+//   POST — admin-only: create a new sector with benchmarked margin
+//   (PUT/DELETE on /api/sectors/[id] — see that route)
+//
+// v50 FIX (Issue #26): POST/PUT/DELETE on sectors are now admin-only.
+// The sector `benchmarkedMargin` is the AUTHORITATIVE source used by the
+// CAM engine via computeMarginSummaryBase() — if any anonymous user could
+// modify it, they could lower the benchmark to make risky loans look
+// affordable. That is a direct financial-integrity risk.
+//
+// Allowed roles: super, md, hoc, cro, superadmin — anyone senior enough
+// to set lending policy.
+// ============================================================================
+
+const SECTOR_EDITOR_ROLES = ['super', 'md', 'hoc', 'cro'];
 
 export async function GET() {
   try {
@@ -15,7 +34,11 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    // v50 — auth gate: only senior admin roles may create / modify sectors.
+    const authResult = await requireRole(req, SECTOR_EDITOR_ROLES);
+    if (authResult instanceof NextResponse) return authResult;
+
+    const body = await req.json().catch(() => ({}));
     if (!body.name) return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     const sector = await db.sector.create({
       data: {

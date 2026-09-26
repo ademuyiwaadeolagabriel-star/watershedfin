@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { isDebitNormal } from '@/lib/accounting';
 
 export async function GET(req: NextRequest) {
+  // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
+  const authResult_v51 = await requireRole(req, ['super', 'md', 'cfo', 'hoc', 'cro', 'finance', 'accountant']);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+
   try {
     const url = new URL(req.url);
     const type = url.searchParams.get('type') || 'balance_sheet';
@@ -19,7 +24,7 @@ export async function GET(req: NextRequest) {
       });
       const groups: Record<string, any[]> = { asset: [], liability: [], equity: [] };
       for (const a of accounts) groups[a.type]?.push(a);
-      const sum = (arr: any[]) => arr.reduce((s, a) => s + a.balance, 0);
+      const sum = (arr: any[]) => arr.reduce((s, a) => s + Number(a.balance), 0);
       const totalAssets = sum(groups.asset);
       const totalLiabilities = sum(groups.liability);
       const totalEquity = sum(groups.equity);
@@ -51,8 +56,8 @@ export async function GET(req: NextRequest) {
         const m = it.account.type === 'revenue' ? revenueMap : expenseMap;
         const key = it.accountId;
         const cur = m.get(key) || { name: it.account.name, code: it.account.code, amount: 0 };
-        if (it.account.type === 'revenue') cur.amount += it.credit - it.debit;
-        else cur.amount += it.debit - it.credit;
+        if (it.account.type === 'revenue') cur.amount += Number(it.credit) - Number(it.debit);
+        else cur.amount += Number(it.debit) - Number(it.credit);
         m.set(key, cur);
       }
       const revenue = Array.from(revenueMap.values());
@@ -77,7 +82,7 @@ export async function GET(req: NextRequest) {
         orderBy: [{ code: 'asc' }],
       });
       const rows = accounts.map((a) => {
-        const bal = a.balance;
+        const bal = Number(a.balance);
         const debit = isDebitNormal(a.type) && bal > 0 ? bal : !isDebitNormal(a.type) && bal < 0 ? -bal : 0;
         const credit = !isDebitNormal(a.type) && bal > 0 ? bal : isDebitNormal(a.type) && bal < 0 ? -bal : 0;
         return { id: a.id, code: a.code, name: a.name, type: a.type, debit, credit };
@@ -103,14 +108,20 @@ export async function GET(req: NextRequest) {
       });
       const byAccount = new Map<string, { code: string; name: string; inflow: number; outflow: number; net: number; opening: number; closing: number }>();
       for (const a of cashAccounts) {
-        byAccount.set(a.id, { code: a.code, name: a.name, inflow: 0, outflow: 0, net: 0, opening: 0, closing: a.balance });
+        byAccount.set(a.id, { code: a.code, name: a.name, inflow: 0, outflow: 0, net: 0, opening: 0, closing: Number(a.balance) });
       }
       for (const it of items) {
         const row = byAccount.get(it.accountId);
         if (!row) continue;
-        row.inflow += it.credit;
-        row.outflow += it.debit;
-        row.net += it.credit - it.debit;
+        // v48 FIX (Acct-4): Cash-flow direction was reversed for asset accounts
+        // For cash/bank asset accounts: Debit = cash increases (inflow), Credit = cash decreases (outflow)
+        const isInflow = Number(Number(it.debit)) > 0;
+        if (isInflow) {
+          row.inflow += Number(Number(it.debit)) || 0;
+        } else {
+          row.outflow += Number(Number(it.credit)) || 0;
+        }
+        row.net += (Number(Number(it.debit)) || 0) - (Number(Number(it.credit)) || 0);
       }
       // opening = closing - net
       for (const row of byAccount.values()) row.opening = row.closing - row.net;

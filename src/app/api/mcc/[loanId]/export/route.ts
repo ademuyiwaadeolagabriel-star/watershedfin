@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { MCC_ROLES, ROLE_TO_MCC, LOAN_STATUS_LABELS, LOAN_STEP_LABELS } from '@/lib/constants';
 
@@ -11,6 +12,10 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ loanId: string }> }
 ) {
+  // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
+  const authResult_v51 = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'mcc', 'credit']);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+
   try {
     const { loanId } = await params;
 
@@ -42,10 +47,10 @@ export async function GET(
     }));
 
     const TOTAL_MCC_LEVELS = Object.keys(MCC_ROLES).length;
-    const initialAmount = loan.amount || 0;
+    const initialAmount = Number(loan.amount) || 0;
     const lastDecision = decisions.length > 0 ? decisions[decisions.length - 1] : null;
     const finalAmount =
-      lastDecision?.recommendedAmount ?? loan.finalAmount ?? loan.approvedAmount ?? initialAmount;
+      lastDecision?.recommendedAmount ?? Number(loan.finalAmount) ?? Number(loan.approvedAmount) ?? initialAmount;
     const amountChange = (finalAmount || 0) - initialAmount;
     const amountChangePercent =
       initialAmount > 0
@@ -83,7 +88,7 @@ export async function GET(
         applicationRef: loan.applicationRef,
         reason: loan.reason,
         repaymentPlan: loan.repaymentPlan,
-        amount: loan.amount,
+        amount: Number(loan.amount),
         duration: loan.duration,
         createdAt: loan.createdAt,
         updatedAt: loan.updatedAt,

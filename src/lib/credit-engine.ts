@@ -311,6 +311,21 @@ export interface EngineResult {
   policyVersion: string;
   forensics: SalesForensics;
   weightedMargin: WeightedMargin;
+  /**
+   * v50 — Unified 3-way margin comparison.
+   *
+   * Excel rule (FINANCIAL ANALYSIS!A26-D32): the Margin Used for all downstream
+   * calculations (purchase verification, COGS, cashflow, affordability) is the
+   * LOWEST NON-ZERO of:
+   *   (a) Average Margin   = AVERAGEIF(margins, "<>0")
+   *   (b) Weighted Margin  = SUMPRODUCT-style weighted contribution
+   *   (c) Sector Benchmark = DB-configured Sector.benchmarkedMargin
+   *
+   * All downstream consumers (verifyPurchases, generateDetailedCashflow,
+   * runStressTest, runEarlyPayoff, etc.) MUST read from `marginSummary.marginUsed`
+   * and NOT from `weightedMargin.weightedMargin` directly.
+   */
+  marginSummary: MarginSummaryBase;
   purchases: PurchaseVerification;
   pnl: PnL;
   ratios: Ratios;
@@ -469,10 +484,13 @@ export interface EngineInput {
 const SENTINEL_INFINITY = 9.99;
 
 /** Forced Sale Value (FSV) haircuts by collateral type. */
+// v46: Synced with COLLATERAL_DEPRECIATION constants from constants.ts
+// These match the locked UI rates: MOVABLE 20% depreciation → FSV = 80% of MV
+// IMMOVABLE 40% depreciation → FSV = 60% of MV, CASH 0% → FSV = 100%
 const FSV_HAIRCUTS: Record<'MOVABLE' | 'IMMOVABLE' | 'CASH', number> = {
-  MOVABLE: 0.8,
-  IMMOVABLE: 0.6,
-  CASH: 1.0,
+  MOVABLE: 0.8,    // 1 - 0.20 depreciation
+  IMMOVABLE: 0.6,  // 1 - 0.40 depreciation
+  CASH: 1.0,       // No depreciation
 };
 
 /** Stock is accepted as collateral at only 10% of book value. */
@@ -590,7 +608,14 @@ export function calculateWeightedMargin(
         ? sectorBenchmark / 100
         : DEFAULT_MARGIN_FALLBACK;
 
-  const simpleAverage = items.length > 0 ? lineItems.reduce((s, li) => s + li.margin, 0) / items.length : 0;
+  // v50 — Excel parity: AVERAGEIF(lineMargins, "<>0") divides only by the
+  // count of items whose margin is strictly > 0. Previously we divided by
+  // items.length (all rows including zero-margin rows), which diverged from
+  // the spreadsheet whenever an inventory line had a 0% margin (e.g. cost==sell).
+  const nonZeroMargins = lineItems.filter((li) => li.margin > 0);
+  const simpleAverage = nonZeroMargins.length > 0
+    ? nonZeroMargins.reduce((s, li) => s + li.margin, 0) / nonZeroMargins.length
+    : 0;
 
   return {
     totalStockCostValue,
@@ -606,26 +631,37 @@ export function calculateWeightedMargin(
 // ---------------------------------------------------------------------------
 
 /**
- * Derive purchases (COGS) from sales and the weighted margin.
+ * Derive purchases (COGS) from sales and the margin used.
  *
- * Implied purchases = sales × (1 − weightedMargin). If that figure is not
- * positive, the least valid sales source is used instead.
+ * Excel rule: Implied Purchases = Sales × (1 − MarginUsed), where MarginUsed
+ * is the lowest non-zero of (average / weighted / sector benchmark). See
+ * computeMarginSummaryBase(). If the implied purchases is not positive (i.e.
+ * no usable margin), the least valid sales source is used as a fallback.
  *
  * @param sales - The considered sales figure.
- * @param gwm - The weighted gross margin (decimal, e.g. 0.25).
+ * @param marginUsed - The margin decimal (0.25 = 25%) — typically
+ *                     `marginSummary.marginUsed` from computeMarginSummaryBase.
  * @param validSources - Array of valid sales source figures.
  * @returns A {@link PurchaseVerification} object.
  */
 export function verifyPurchases(
   sales: number,
-  gwm: number,
+  marginUsed: number,
   validSources: number[],
 ): PurchaseVerification {
-  const impliedPurchases = sales * (1 - gwm);
+  // v50 — Excel parity fix: when marginUsed is 0 (meaning "no usable margin"
+  // was selected by computeMarginSummaryBase — all three candidates were
+  // zero), the implied-purchases formula `S × (1 − 0) = S` produces a
+  // positive number that is mathematically meaningless. We must fall back
+  // to the least valid sales source instead. The previous condition
+  // `impliedPurchases > 0` failed to detect this case because it returned
+  // `sales` as the implied purchases.
+  const usableMargin = marginUsed > 0;
+  const impliedPurchases = usableMargin ? sales * (1 - marginUsed) : 0;
 
   const leastSource = validSources.length > 0 ? Math.min(...validSources) : 0;
 
-  const useImplied = impliedPurchases > 0;
+  const useImplied = usableMargin && impliedPurchases > 0;
   const finalPurchases = useImplied ? impliedPurchases : leastSource;
   const derivedCogs = finalPurchases;
   const source: PurchaseVerification['source'] = useImplied ? 'IMPLIED_BY_MARGIN' : 'LEAST_SOURCE';
@@ -640,16 +676,17 @@ export function verifyPurchases(
 /**
  * Calculate the monthly loan installment.
  *
- * Rate heuristic: values above 20 are treated as an annual percentage (divided
- * by 12 and by 100); values of 20 or below are treated as a monthly percentage
- * (divided by 100 only).
+ * v50 — Rate interpretation is ALWAYS annual percentage (e.g. 27.5 = 27.5%/yr).
+ * This matches `loan-calc.ts` and removes the legacy ">20 heuristic" that
+ * treated ambiguous inputs as monthly percentages — that heuristic was
+ * dangerous because it could silently misinterpret legitimate rates.
  *
  * For REDUCING balances the standard amortisation formula is used. For FLAT
  * loans the installment is the straight-line principal plus flat interest on
  * the original principal.
  *
  * @param principal - Loan principal amount.
- * @param annualRatePercent - Interest rate (see heuristic above).
+ * @param annualRatePercent - Annual interest rate as a percentage (e.g. 27.5).
  * @param months - Tenor in months.
  * @param method - 'REDUCING' or 'FLAT'.
  * @returns A {@link PMTResult} object.
@@ -660,8 +697,8 @@ export function calculatePMT(
   months: number,
   method: 'REDUCING' | 'FLAT',
 ): PMTResult {
-  const monthlyRate =
-    annualRatePercent > 20 ? annualRatePercent / 12 / 100 : annualRatePercent / 100;
+  // v50 — always annual. Convert to monthly decimal rate.
+  const monthlyRate = annualRatePercent > 0 ? annualRatePercent / 12 / 100 : 0;
 
   let installment: number;
 
@@ -866,7 +903,17 @@ export function runStressTest(
   const forensics = triangulateSales(input.sales);
   const sales = forensics.consideredSales;
   const wm = calculateWeightedMargin(input.inventory, input.sectorBenchmarkMargin);
-  const purchases = verifyPurchases(sales, wm.weightedMargin, forensics.validSources);
+
+  // v50 — Excel parity: stress test must use the SAME marginUsed as the base
+  // appraisal, NOT the weighted margin in isolation. Otherwise the stressed
+  // DSR will be computed against a different margin basis than the base DSR,
+  // making the comparison meaningless.
+  const marginSummary = computeMarginSummaryBase(
+    wm.weightedMargin,
+    wm.simpleAverage,
+    input.sectorBenchmarkMargin,
+  );
+  const purchases = verifyPurchases(sales, marginSummary.marginUsed, forensics.validSources);
   const cogs = purchases.derivedCogs;
   const grossProfit = sales - cogs;
   const grossProfitMargin = sales > 0 ? (grossProfit / sales) * 100 : 0;
@@ -1715,10 +1762,20 @@ export function executeFullAppraisal(input: EngineInput): EngineResult {
   // 2. Weighted margin
   const weightedMargin = calculateWeightedMargin(input.inventory, input.sectorBenchmarkMargin);
 
-  // 3. Purchase verification
+  // v50 — 3-way margin summary: lowest non-zero of (avg / weighted / sector).
+  // This is the AUTHORITATIVE margin for ALL downstream calculations.
+  // verifyPurchases(), generateDetailedCashflow(), runStressTest() must read
+  // from `marginSummary.marginUsed`, NOT from `weightedMargin.weightedMargin`.
+  const marginSummary = computeMarginSummaryBase(
+    weightedMargin.weightedMargin,
+    weightedMargin.simpleAverage,
+    input.sectorBenchmarkMargin,
+  );
+
+  // 3. Purchase verification — uses marginUsed (Excel: P = S × (1 − marginUsed))
   const purchases = verifyPurchases(
     forensics.consideredSales,
-    weightedMargin.weightedMargin,
+    marginSummary.marginUsed,
     forensics.validSources,
   );
 
@@ -1856,10 +1913,11 @@ export function executeFullAppraisal(input: EngineInput): EngineResult {
     : undefined;
 
   // G1: Detailed monthly cashflow (22 rows × 12 months)
+  // v50 — uses marginSummary.marginUsed (Excel: lowest non-zero of avg/weighted/sector)
   const detailedCashflow = input.detailedCashflow
     ? generateDetailedCashflow(
         sales,
-        weightedMargin.weightedMargin,
+        marginSummary.marginUsed,
         opex,
         living,
         input.loan.principal,
@@ -1935,6 +1993,7 @@ export function executeFullAppraisal(input: EngineInput): EngineResult {
     policyVersion: POLICY_VERSION,
     forensics,
     weightedMargin,
+    marginSummary,
     purchases,
     pnl,
     ratios,
@@ -2607,23 +2666,37 @@ export function generateConvertToLoanSchedule(
 // benchmark margin — then picks the LEAST figure as "margin used."
 // ---------------------------------------------------------------------------
 
+// v50 — MarginSummaryBase is the AUTHORITATIVE margin selector.
+// Used by executeFullAppraisal(), runStressTest(), runEarlyPayoff(), and
+// exported so the CAM UI can read marginSummary directly from the engine
+// result instead of recomputing locally.
 export interface MarginSummaryBase {
-  averageMargin: number;       // simple average of inventory line items
+  averageMargin: number;       // simple average of NON-ZERO inventory line margins (Excel AVERAGEIF "<>0")
   weightedMargin: number;      // weighted by cost value share
-  benchmarkMargin: number;     // sector benchmark from lookup
-  marginUsed: number;          // least of the three (the "considered" margin)
-  sourceUsed: 'average' | 'weighted' | 'benchmark';
+  benchmarkMargin: number;     // sector benchmark (decimal — DB Sector.benchmarkedMargin / 100)
+  marginUsed: number;          // LEAST non-zero of the three (the "considered" margin)
+  sourceUsed: 'average' | 'weighted' | 'benchmark' | 'none';
 }
 
 /**
- * Compute the 3-way margin comparison and pick the least figure.
- * This is the margin used for all downstream calculations (purchase
- * verification, cashflow, etc.).
+ * Compute the 3-way margin comparison and pick the LEAST non-zero figure.
  *
- * @param weightedMargin  - from calculateWeightedMargin()
- * @param simpleAverage   - from calculateWeightedMargin()
- * @param sectorBenchmark - from lookupSectorMargin() (percentage)
- * @returns MarginSummaryBase with marginUsed = least of the three
+ * Excel parity (FINANCIAL ANALYSIS!A26-D32):
+ *   averageMargin  = AVERAGEIF(lineMargins, "<>0")   // denominator excludes zeros
+ *   weightedMargin = Σ(margin_i × costShare_i)        // from calculateWeightedMargin()
+ *   benchmarkMargin = Sector.benchmarkedMargin / 100  // DB-configured, dynamic
+ *
+ * `marginUsed` = the LOWEST of the three whose value is strictly > 0. If all
+ * three are zero or undefined, `marginUsed = 0` and `sourceUsed = 'none'` —
+ * downstream consumers MUST treat 0 as "no usable margin" and fall back to
+ * the least valid sales source (see verifyPurchases).
+ *
+ * @param weightedMargin  - decimal (0.25 = 25%) from calculateWeightedMargin()
+ * @param simpleAverage   - decimal from calculateWeightedMargin() — should be
+ *                          the AVERAGEIF("<>0") value (see calculateWeightedMargin)
+ * @param sectorBenchmark - percentage (e.g. 22.5 for 22.5%) from
+ *                          DB Sector.benchmarkedMargin — the dynamic live value
+ * @returns MarginSummaryBase with marginUsed = LEAST non-zero of the three
  */
 export function computeMarginSummaryBase(
   weightedMargin: number,
@@ -2636,12 +2709,21 @@ export function computeMarginSummaryBase(
     { name: 'weighted', value: weightedMargin },
     { name: 'benchmark', value: benchmark },
   ];
-  // Filter out zeros, then pick the least
+  // Filter out zeros (Excel "<>0" semantics), then pick the LEAST
   const valid = candidates.filter(c => c.value > 0);
-  const least = valid.length > 0
-    ? valid.reduce((min, c) => c.value < min.value ? c : min, valid[0])
-    : { name: 'weighted' as const, value: 0 };
-
+  if (valid.length === 0) {
+    return {
+      averageMargin: simpleAverage,
+      weightedMargin,
+      benchmarkMargin: benchmark,
+      marginUsed: 0,
+      sourceUsed: 'none',
+    };
+  }
+  const least = valid.reduce(
+    (min, c) => (c.value < min.value ? c : min),
+    valid[0],
+  );
   return {
     averageMargin: simpleAverage,
     weightedMargin,
@@ -2832,10 +2914,21 @@ export interface MonthlyBankStatementEntry {
   month: number;   // 1-12
   inflow: number;  // credit side (sales)
   outflow: number; // debit side (purchases)
+  // v50 — `present` distinguishes Excel blank cells from numeric zeros.
+  // Excel AVERAGE(...) ignores blank cells but includes explicit 0 entries.
+  // Without this flag, the previous implementation excluded legitimate
+  // zero-revenue months, understating the denominator and overstating averages.
+  inflowPresent?: boolean;
+  outflowPresent?: boolean;
 }
 
 /**
  * Compute average monthly inflow and outflow from a 12-month bank statement grid.
+ *
+ * v50 — Excel parity: a row participates in the inflow average only when its
+ * inflow cell is "present" (non-blank). A present cell with value 0 IS counted
+ * in the denominator — that's how Excel AVERAGE behaves. Blanks are skipped.
+ * The same rule applies independently to the outflow average.
  */
 export function computeBankStatementAverages(entries: MonthlyBankStatementEntry[]): {
   totalInflow: number;
@@ -2843,15 +2936,17 @@ export function computeBankStatementAverages(entries: MonthlyBankStatementEntry[
   averageInflow: number;
   averageOutflow: number;
 } {
-  const valid = entries.filter(e => e.inflow > 0 || e.outflow > 0);
-  const totalInflow = valid.reduce((s, e) => s + e.inflow, 0);
-  const totalOutflow = valid.reduce((s, e) => s + e.outflow, 0);
-  const count = valid.length || 1;
+  const inflowRows = entries.filter(e => e.inflowPresent !== false && (e.inflowPresent === true || e.inflow > 0 || e.outflow > 0));
+  const outflowRows = entries.filter(e => e.outflowPresent !== false && (e.outflowPresent === true || e.inflow > 0 || e.outflow > 0));
+  const totalInflow = inflowRows.reduce((s, e) => s + e.inflow, 0);
+  const totalOutflow = outflowRows.reduce((s, e) => s + e.outflow, 0);
+  const inflowCount = inflowRows.length || 1;
+  const outflowCount = outflowRows.length || 1;
   return {
     totalInflow,
     totalOutflow,
-    averageInflow: totalInflow / count,
-    averageOutflow: totalOutflow / count,
+    averageInflow: totalInflow / inflowCount,
+    averageOutflow: totalOutflow / outflowCount,
   };
 }
 
@@ -2885,13 +2980,20 @@ export function computeSpotCheckMonthly(days: SpotCheckDay[]): {
 export interface MonthlyRecordEntry {
   month: number;  // 1-6
   amount: number;
+  // v50 — `present` distinguishes Excel blank cells from numeric zeros.
+  present?: boolean;
 }
 
 /**
  * Compute average from 6-month records.
+ *
+ * v50 — Excel parity: rows whose `present` flag is explicitly `true` are
+ * counted in the denominator (even when amount == 0). Rows whose `present`
+ * is `false` or `undefined` AND whose amount is 0 are treated as blank and
+ * excluded. This matches Excel's AVERAGE(...) behavior on blank vs zero cells.
  */
 export function computeSixMonthAverage(records: MonthlyRecordEntry[]): number {
-  const valid = records.filter(r => r.amount > 0);
+  const valid = records.filter(r => (r.present === true) || (r.present !== false && r.amount > 0));
   if (valid.length === 0) return 0;
   return valid.reduce((s, r) => s + r.amount, 0) / valid.length;
 }

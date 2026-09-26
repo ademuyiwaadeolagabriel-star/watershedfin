@@ -27,7 +27,7 @@ async function genRiskCode(): Promise<string> {
 
 export async function GET(req: NextRequest) {
   // v44: Added auth check
-  const authPayload = getAuthFromRequest(req);
+  const authPayload = await getAuthFromRequest(req);
   if (!authPayload) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
   }
@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   // v44: Added auth + role check — only CRO, HOC, internal control, or super can create risks
-  const authPayload = getAuthFromRequest(req);
+  const authPayload = await getAuthFromRequest(req);
   if (!authPayload) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
   }

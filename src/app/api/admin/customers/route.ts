@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { KYC_STATUSES } from '@/lib/constants';
 
@@ -10,6 +11,10 @@ import { KYC_STATUSES } from '@/lib/constants';
  * loan counts, plus aggregate stats.
  */
 export async function GET(req: NextRequest) {
+  // v53 — auth gate: least-privilege role check.
+  const authResult_v53 = await requireRole(req, ['super', 'cs', 'compliance', 'bm', 'lo']);
+  if (authResult_v53 instanceof NextResponse) return authResult_v53;
+
   try {
     const { searchParams } = new URL(req.url);
     const search = (searchParams.get('search') || '').trim();

@@ -14,7 +14,7 @@ export async function POST(
 ) {
   try {
     // A1 FIX: Verify authentication via JWT
-    const authPayload = getAuthFromRequest(req);
+    const authPayload = await getAuthFromRequest(req);
     if (!authPayload) {
       return NextResponse.json(
         { error: 'Authentication required. Provide a valid Bearer token.' },
@@ -85,6 +85,59 @@ export async function POST(
         const allowed = WORKFLOW_TRANSITIONS[currentStep] || [];
         newStep = nextStep && allowed.includes(nextStep) ? nextStep : (allowed[0] || currentStep);
 
+        // v52 — P0-G3: SERVER-ENFORCED WORKFLOW GATE.
+        // Before forwarding, verify there is an ACTIVE MccDecision with
+        // decisionType='approved' for the current step's role. The audit's
+        // #18 finding was that the transition API computed `newStep = allowed[0]`
+        // without requiring an actual approval to exist — so an insider
+        // could advance a loan past MD approval without MD ever touching it.
+        //
+        // The MCC role expected for each workflow step is mapped here. We
+        // skip the gate for assignment-only steps (HOC_ASSIGNMENT,
+        // HOC_SCHEDULING, CUSTOMER_ACCEPTANCE) which don't require a
+        // credit-governance approval, only an action.
+        const STEP_TO_REQUIRED_MCC_ROLE: Record<string, string | null> = {
+          LO_ENTRY: null,           // LO submits — no approval needed
+          LO_ASSESSMENT: 'LO',
+          LEGAL_KYC_CHECK: 'LEGAL',
+          BM_QC: 'BM',
+          BM_VETTING: 'BM',
+          HOC_ASSIGNMENT: null,     // HOC assigns analyst — not an approval
+          ANALYST_STRUCTURING: 'CA',
+          HOC_REVIEW: 'HOC',
+          HOC_STRUCTURING: 'HOC',
+          HOC_APPROVAL: 'HOC',
+          CRO_RISK: 'CRO',
+          CFO_REVIEW: 'GCFO',
+          LEGAL_MCC: 'LEGAL',
+          LEGAL_NAME_SEARCH: 'LEGAL',
+          MD_APPROVAL: 'MD',
+          CUSTOMER_ACCEPTANCE: null, // customer action — enforced by customer JWT
+          HOC_SCHEDULING: null,     // HOC go-live — not an approval
+          CFO_DISBURSEMENT: null,    // disbursement 4-eyes enforced in disburse route
+        };
+        const requiredRole = STEP_TO_REQUIRED_MCC_ROLE[currentStep];
+        if (requiredRole) {
+          const activeApproval = await db.mccDecision.findFirst({
+            where: {
+              loanApplicantId: id,
+              approverRole: requiredRole,
+              status: 'ACTIVE',
+              decisionType: 'approved',
+            },
+          });
+          if (!activeApproval) {
+            return NextResponse.json(
+              {
+                error: `Cannot forward from '${currentStep}': no ACTIVE approved MCC decision found for role '${requiredRole}'. The ${requiredRole} must record an approval before this loan can advance.`,
+                currentStep,
+                requiredRole,
+              },
+              { status: 409 },
+            );
+          }
+        }
+
         // v38: BM Self-Vet — if a BM is forwarding from LO_ENTRY and they created
         // the customer (or are the assigned BM), skip BM_QC and go directly to HOC_ASSIGNMENT.
         // v41: Fixed the condition — previously checked loan.staffId === admin.id which
@@ -115,8 +168,13 @@ export async function POST(
         }
 
         if (newStep === currentStep && allowed.length === 0) {
-          // Terminal step — move to disbursement
-          newStatus = 'running';
+          // v54 — Blocker 7: REMOVED `newStatus = 'running'`. The transition
+          // route is NOT the authority for setting loan.status='running'.
+          // That is the sole responsibility of the 4-eyes disbursement
+          // endpoint at /api/loans/[id]/disburse. The terminal-step forward
+          // just advances to ACTIVE_MONITORING; the disbursement endpoint
+          // sets status='running' + disbursedAt when the 4-eyes completes.
+          // (No status mutation here.)
         }
         approvalAction = 'FORWARDED';
 
@@ -242,13 +300,15 @@ export async function POST(
               // ── AUTO-RECALCULATION: If MD changes the amount, regenerate repayment schedule ──
               const mdAmount = Number(mccDecision.recommendedAmount) || 0;
               const mdTenor = Number(mccDecision.duration) || loan.duration;
-              const mdRate = Number(mccDecision.interestRatePercentage) || loan.percent || 24;
+              // v54 (audit #7): fail-closed on interest rate — never silently
+              // default to 24% if MD's MCC decision is missing a rate.
+              const mdRateRaw = Number(mccDecision.interestRatePercentage) || Number(loan.percent);
               const mdMethod: 'REDUCING' | 'FLAT' = (loan.repaymentPlan as 'REDUCING' | 'FLAT') || 'REDUCING';
 
-              if (mdAmount > 0 && mdTenor > 0) {
+              if (mdAmount > 0 && mdTenor > 0 && mdRateRaw > 0) {
                 try {
                   const { calculateLoanSchedule } = await import('@/lib/loan-calc');
-                  const schedule = calculateLoanSchedule(mdAmount, mdRate, mdTenor, mdMethod);
+                  const schedule = calculateLoanSchedule(mdAmount, mdRateRaw, mdTenor, mdMethod);
                   // Store the recalculated schedule for offer letter generation
                   updates.scheduledDisbursementDate = null; // reset — HOC will set later
                   // Delete old repayment schedule and create new one
@@ -282,45 +342,58 @@ export async function POST(
             updates.status = 'queried';
             break;
           case 'HOC_SCHEDULING':
-            // ── HOC GO-LIVE: Loan is activated (status = RUNNING) but money NOT yet moved ──
+            // v53 — HOC GO-LIVE: Loan account is activated (status=running)
+            // but money NOT yet moved. Funds are released only via the
+            // 4-eyes disbursement endpoint at /api/loans/[id]/disburse.
+            // The transition route only stamps HOC scheduling metadata.
             updates.hocFinalizedAt = new Date();
             updates.startDate = mccDecision?.startDate ? new Date(mccDecision.startDate) : new Date();
             updates.maturityDate = mccDecision?.maturityDate ? new Date(mccDecision.maturityDate) : null;
-            newStatus = 'running'; // Loan account is now LIVE
+            // Note: status='running' is intentionally NOT set here. The loan
+            // account exists and the schedule is generated, but the loan is
+            // not "running" until /api/loans/[id]/disburse completes the
+            // 4-eyes disbursement. The disbursement endpoint is the sole
+            // authority for setting status='running' + disbursedAt.
             break;
           case 'CFO_DISBURSEMENT':
-            // ── CFO DISBURSEMENT: Funds are released (separate from activation) ──
-            // Pre-disbursement validation: verify all conditions are met
-            const pendingConditions = await db.complianceCondition.findMany({
-              where: { loanApplicantId: id, status: { not: 'verified' }, priority: 'critical' },
-            });
-            if (pendingConditions.length > 0) {
-              return NextResponse.json({
-                error: `Cannot disburse — ${pendingConditions.length} critical condition(s) not verified: ${pendingConditions.map(c => c.title).join(', ')}`,
-              }, { status: 400 });
-            }
-            updates.disbursedAt = new Date();
-            updates.disbursementDate = new Date();
-            updates.disbursedBy = admin.id;
+            // v53 — REMOVED direct disbursement fields from this branch.
+            // The transition route's CFO_DISBURSEMENT forward should only
+            // advance the workflow state, NOT set disbursedAt/disbursedBy/
+            // disbursementDate. Those fields are the authoritative
+            // responsibility of /api/loans/[id]/disburse (4-eyes).
+            // Pre-disbursement validation is also done by the disburse
+            // route itself.
+            // (No field mutations here — just advance to ACTIVE_MONITORING.)
             break;
         }
         if (Object.keys(updates).length > 0) {
           await db.loanApplicants.update({ where: { id }, data: updates });
         }
 
-        // Record MCC decision if provided
+        // Record MCC decision if provided.
+        // v52 — #21 immutable decisions: replace upsert with supersession chain.
+        // Find any existing ACTIVE decision for this (loanId, approverRole),
+        // mark SUPERSEDED, then INSERT new ACTIVE decision.
         if (mccDecision) {
           const mccRole = ROLE_TO_MCC[admin.role] || ROLE_TO_MCC[admin.roleType || ''] || 'LO';
           const levelMap: Record<string, number> = { LO: 1, BM: 2, CA: 3, HOC: 4, CRO: 5, LEGAL: 6, GCFO: 7, MD: 8 };
-          await db.mccDecision.upsert({
-            where: {
-              loanApplicantId_approverId_approverRole: {
-                loanApplicantId: id,
-                approverId: admin.id,
-                approverRole: mccRole,
-              },
-            },
-            create: {
+          const priorActive = await db.mccDecision.findFirst({
+            where: { loanApplicantId: id, approverRole: mccRole, status: 'ACTIVE' },
+            orderBy: { decisionSequence: 'desc' },
+          });
+          const maxSeq = await db.mccDecision.aggregate({
+            where: { loanApplicantId: id, approverRole: mccRole },
+            _max: { decisionSequence: true },
+          });
+          const nextSeq = (maxSeq._max.decisionSequence || 0) + 1;
+          if (priorActive) {
+            await db.mccDecision.update({
+              where: { id: priorActive.id },
+              data: { status: 'SUPERSEDED', supersededAt: new Date(), supersededById: admin.id },
+            });
+          }
+          await db.mccDecision.create({
+            data: {
               loanApplicantId: id,
               approverId: admin.id,
               approverName: `${admin.firstName} ${admin.lastName}`,
@@ -334,16 +407,9 @@ export async function POST(
               comment: mccDecision.comment || null,
               decisionType: mccDecision.decisionType || 'approved',
               decisionDate: new Date(),
-            },
-            update: {
-              recommendedAmount: mccDecision.recommendedAmount || null,
-              duration: mccDecision.duration || null,
-              ccdPercentage: mccDecision.ccdPercentage || null,
-              upfrontFeePercentage: mccDecision.upfrontFeePercentage || null,
-              interestRatePercentage: mccDecision.interestRatePercentage || null,
-              comment: mccDecision.comment || null,
-              decisionType: mccDecision.decisionType || 'approved',
-              decisionDate: new Date(),
+              status: 'ACTIVE',
+              decisionSequence: nextSeq,
+              supersedesDecisionId: priorActive?.id || null,
             },
           });
         }
@@ -362,6 +428,13 @@ export async function POST(
         newStep = 'QUERY_RESPONSE';
         newStatus = 'queried';
         approvalAction = 'QUERIED';
+        // v47: Unlock the CAM snapshot so the LO can edit and respond to the query
+        try {
+          await db.creditAppraisal.updateMany({
+            where: { loanApplicantId: id },
+            data: { isSnapshotLocked: false },
+          });
+        } catch {}
         break;
       }
 
@@ -372,38 +445,23 @@ export async function POST(
       }
 
       case 'disburse': {
-        // v44: Accept both legacy TREASURY_PAYOUT and current CFO_DISBURSEMENT
-        if (currentStep !== 'TREASURY_PAYOUT' && currentStep !== 'CFO_DISBURSEMENT' && currentStep !== 'INTERNAL_CONTROL_CHECK') {
-          return NextResponse.json({
-            error: `Can only disburse from CFO_DISBURSEMENT step (current: ${currentStep})`
-          }, { status: 400 });
-        }
-
-        // v44: Pre-disbursement validation — verify all critical compliance conditions
-        const pendingConditions = await db.complianceCondition.findMany({
-          where: { loanApplicantId: id, status: { not: 'verified' }, priority: 'critical' },
-        });
-        if (pendingConditions.length > 0) {
-          return NextResponse.json({
-            error: `Cannot disburse — ${pendingConditions.length} critical condition(s) not verified: ${pendingConditions.map(c => c.title || c.conditionType).join(', ')}`,
-          }, { status: 400 });
-        }
-
-        await db.loanApplicants.update({
-          where: { id },
-          data: {
-            disbursedAt: new Date(),
-            disbursementDate: new Date(),
-            disbursedBy: admin.id,
-            startDate: new Date(),
-            status: 'running',
-            currentStep: 'ACTIVE_MONITORING',  // v44: Advance to post-disbursement monitoring
+        // v53 — REMOVED. The transition route no longer performs direct
+        // disbursement — that was a state-machine bypass of the 4-eyes
+        // disbursement endpoint at /api/loans/[id]/disburse. Per the v53
+        // gap matrix Table D row 3 (audit #11): having two paths that can
+        // set loan.status='running' + loan.disbursedAt means the 4-eyes
+        // control can be bypassed by an admin calling transition?action=disburse.
+        //
+        // Callers must use the controlled disbursement workflow:
+        //   POST /api/loans/[id]/disburse
+        // which enforces maker/checker segregation of duties.
+        return NextResponse.json(
+          {
+            error: 'Direct disbursement via transition is no longer supported. Use the controlled 4-eyes disbursement workflow at POST /api/loans/[id]/disburse.',
+            see: '/api/loans/[id]/disburse',
           },
-        });
-        newStatus = 'running';
-        newStep = 'ACTIVE_MONITORING';
-        approvalAction = 'DISBURSED';
-        break;
+          { status: 409 },
+        );
       }
 
       default:
@@ -523,12 +581,19 @@ export async function POST(
       if (currentStep === 'MD_APPROVAL' && mccDecision) {
         const approvedAmount = Number(mccDecision.recommendedAmount) || Number(loan.amount);
         const tenor = Number(mccDecision.duration) || Number(loan.duration);
-        const rate = Number(mccDecision.interestRatePercentage) || 24;
-        const monthlyRate = rate / 100 / 12;
-        const monthlyPayment = monthlyRate === 0
-          ? approvedAmount / tenor
-          : (approvedAmount * monthlyRate * Math.pow(1 + monthlyRate, tenor)) / (Math.pow(1 + monthlyRate, tenor) - 1);
-        void notifyLoanApproved(loan, approvedAmount, monthlyPayment, tenor);
+        // v54 (audit #7): fail-closed — never silently default rate to 24%.
+        const rate = Number(mccDecision.interestRatePercentage) || Number(loan.percent) || Number(loan.finalInterestRate);
+        if (!approvedAmount || !tenor || !rate) {
+          // Skip the email rather than fabricate numbers; the actual loan
+          // record still has the correct values from the MD_APPROVAL update.
+          console.error('[transition] MD_APPROVAL email skipped — missing rate/amount/tenor', { approvedAmount, tenor, rate });
+        } else {
+          const monthlyRate = rate / 100 / 12;
+          const monthlyPayment = monthlyRate === 0
+            ? approvedAmount / tenor
+            : (approvedAmount * monthlyRate * Math.pow(1 + monthlyRate, tenor)) / (Math.pow(1 + monthlyRate, tenor) - 1);
+          void notifyLoanApproved(loan, approvedAmount, monthlyPayment, tenor);
+        }
       }
       // Send disbursement email when CFO disburses
       if (currentStep === 'CFO_DISBURSEMENT') {

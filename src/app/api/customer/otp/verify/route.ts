@@ -1,22 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requireCustomerAuth } from '@/lib/auth';
+import crypto from 'crypto';
 
 // ============================================================================
 // POST /api/customer/otp/verify
-// Body: { userId, otp }
-// Verifies the OTP against user.verificationCode. Codes expire 5 minutes after
-// issuance. On success sets user.otpRequired = 'off'.
+// Authorization: Bearer <customer-jwt>
+// Body: { otp }
+//
+// v50 FIX (Issue #12):
+//   - Customer identity comes from the JWT, NOT from `body.userId`.
+//     Previously any caller could supply another user's userId and
+//     attempt OTPs against that user's record — letting an attacker
+//     brute-force OTPs for arbitrary accounts.
+//   - Code comparison is now constant-time (timingSafeEqual).
 // ============================================================================
 
 const OTP_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, otp } = await req.json();
+    // --- Auth gate: customer JWT mandatory -------------------------------
+    const authResult = await requireCustomerAuth(req);
+    if (authResult instanceof NextResponse) return authResult;
+    const authPayload = authResult as { id: string; type: string };
+    const userId = authPayload.id;
 
-    if (!userId) {
-      return NextResponse.json({ error: 'userId is required' }, { status: 400 });
-    }
+    const body = await req.json().catch(() => ({}));
+    const { otp } = body || {};
+
     if (!otp) {
       return NextResponse.json({ error: 'otp is required' }, { status: 400 });
     }
@@ -33,7 +45,21 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    if (!user.verificationCode || user.verificationCode !== String(otp).trim()) {
+    if (!user.verificationCode) {
+      return NextResponse.json(
+        { error: 'No OTP on file. Please request a new OTP.' },
+        { status: 400 },
+      );
+    }
+
+    // v50 — constant-time comparison of the SHA-256 hash.
+    const otpHash = crypto
+      .createHash('sha256')
+      .update(String(otp).trim() + userId)
+      .digest('hex');
+    const a = Buffer.from(user.verificationCode);
+    const b = Buffer.from(otpHash);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
       return NextResponse.json({ error: 'Invalid OTP.' }, { status: 400 });
     }
 

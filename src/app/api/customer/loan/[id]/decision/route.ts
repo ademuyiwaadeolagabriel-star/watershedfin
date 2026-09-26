@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireCustomerAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { MCC_ROLES } from '@/lib/constants';
 
@@ -8,10 +9,15 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // v51 — customer auth gate: identity derived from JWT, NOT body.userId.
+  const authResult_v51 = await requireCustomerAuth(req);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+  const authPayload_v51 = authResult_v51 as { id: string; type: string };
+
   try {
     const { id } = await params;
     const url = new URL(req.url);
-    const userId = url.searchParams.get('userId');
+    const userId = authPayload_v51.id; // v53 - derived from JWT
 
     const loan = await db.loanApplicants.findUnique({
       where: { id },

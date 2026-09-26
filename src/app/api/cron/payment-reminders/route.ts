@@ -10,6 +10,7 @@ import {
   recordReminderSent,
 } from '@/lib/loan-overdue';
 import { classifyNPL } from '@/lib/constants';
+import { requireCronAuth } from '@/lib/cron-auth';
 
 // ============================================================================
 // CRON — PAYMENT REMINDERS
@@ -46,7 +47,13 @@ function fmtDate(d: Date): string {
   });
 }
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
+  // v50 — fail-closed cron auth. Previously this endpoint had NO
+  // authentication at all, meaning anyone on the internet could trigger
+  // SMS / email reminders to all customers with running loans — annoying
+  // customers and costing the platform real money in SMS charges.
+  const cronAuth = requireCronAuth(req);
+  if (cronAuth instanceof NextResponse) return cronAuth;
   const startedAt = new Date();
   const stats = {
     loansScanned: 0,
@@ -85,16 +92,21 @@ export async function GET(_req: NextRequest) {
         if (repayments.length === 0) {
           const { calculateLoanSchedule } = await import('@/lib/loan-calc');
           const principal =
-            loan.finalAmount ||
-            loan.vettedAmount ||
-            loan.approvedAmount ||
-            loan.amount;
+            Number(loan.finalAmount) ||
+            Number(loan.vettedAmount) ||
+            Number(loan.approvedAmount) ||
+            Number(loan.amount);
           const tenorMonths =
             loan.finalTenure ||
             loan.vettedDuration ||
             loan.approvedTenor ||
             loan.duration;
-          const annualRate = loan.finalInterestRate || loan.percent || 24;
+          // v53 — P3 fail-closed
+      const annualRate = loan.finalInterestRate || loan.percent;
+      if (annualRate == null) {
+        console.warn("[cron payment-reminders] loan " + loan.id + " missing finalInterestRate — skipping");
+        continue;
+      }
           const repaymentMethod =
             (loan.repaymentPlan as 'REDUCING' | 'FLAT') || 'REDUCING';
           const startDate = loan.disbursedAt || loan.disbursementDate || new Date();
@@ -129,7 +141,8 @@ export async function GET(_req: NextRequest) {
         // Pick the first instalment that isn't fully paid — this is the
         // "active" reminder anchor.
         const activeRepayment = repayments.find(
-          (r) => (r.amountDue || 0) - (r.amountPaid || 0) > 0.5,
+          // v50 — Decimal arithmetic: wrap amountDue/amountPaid with Number().
+          (r) => Number(r.amountDue || 0) - Number(r.amountPaid || 0) > 0.5,
         );
         if (!activeRepayment) continue;
 
@@ -137,7 +150,8 @@ export async function GET(_req: NextRequest) {
         const days = daysUntilDue(dueDate);
         const customerName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
         const applicationRef = loan.applicationRef || '—';
-        const amount = activeRepayment.amountDue;
+        // v50 — wrap with Number() since LoanRepayment.amountDue is now Decimal.
+        const amount = Number(activeRepayment.amountDue);
         const repaymentId = activeRepayment.id;
 
         // Bucket detection — only one bucket fires per instalment per day

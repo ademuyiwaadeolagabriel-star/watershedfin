@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { classifyNPL, NPL_CLASSIFICATIONS } from '@/lib/constants';
 import { assessLoanOverdue } from '@/lib/loan-overdue';
+import { requireCronAuth } from '@/lib/cron-auth';
 
 // ============================================================================
 // CRON — AUTO NPL CLASSIFICATION
@@ -27,7 +28,11 @@ import { assessLoanOverdue } from '@/lib/loan-overdue';
 //      risk team has a clean trail of stage transitions.
 // ============================================================================
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
+  // v50 — fail-closed cron auth (no more hardcoded fallback secret).
+  const cronAuth = requireCronAuth(req);
+  if (cronAuth instanceof NextResponse) return cronAuth;
+
   const startedAt = new Date();
   const stats = {
     loansScanned: 0,
@@ -75,11 +80,20 @@ export async function GET(_req: NextRequest) {
 
         const classificationChanged = priorNpl !== newNpl;
         const daysChanged = priorDays !== assessment.daysOverdue;
-        const shouldFlagDefaulter =
-          assessment.daysOverdue > 30 && !loan.defaulter;
+
+        // v50 — Issue #14 fix: properly compute target defaulter state and
+        // detect when it differs from the persisted state. The previous
+        // implementation did `shouldFlagDefaulter = daysOverdue > 30 && !loan.defaulter`
+        // — that expression is FALSE whenever the loan is already flagged
+        // (even if daysOverdue has fallen back to 0), so the cron job could
+        // never UN-flag a cured loan. Worse, the surrounding `if` condition
+        // would short-circuit, skipping the update entirely, leaving a
+        // stale `defaulter=true` on a now-current loan.
+        const targetDefaulter = assessment.daysOverdue > 30;
+        const defaulterChanged = loan.defaulter !== targetDefaulter;
 
         // Update the loan in a single write when anything relevant moved.
-        if (classificationChanged || daysChanged || shouldFlagDefaulter) {
+        if (classificationChanged || daysChanged || defaulterChanged) {
           const updatedMeta = {
             ...priorMeta,
             nplClassification: newNpl,
@@ -92,13 +106,15 @@ export async function GET(_req: NextRequest) {
           await db.loanApplicants.update({
             where: { id: loan.id },
             data: {
-              ...(shouldFlagDefaulter ? { defaulter: true } : {}),
+              // v50 — write the TARGET defaulter state directly (not the
+              // delta-gated `shouldFlag` flag), so cures AND flags both land.
+              defaulter: targetDefaulter,
               bmRiskFlags: JSON.stringify(updatedMeta),
             },
           });
 
           stats.classificationsUpdated++;
-          if (shouldFlagDefaulter) stats.defaultersFlagged++;
+          if (targetDefaulter && defaulterChanged) stats.defaultersFlagged++;
 
           if (classificationChanged) {
             stats.transitions.push({
@@ -129,7 +145,7 @@ export async function GET(_req: NextRequest) {
                   toLabel: newNplLabel,
                   daysOverdue: assessment.daysOverdue,
                   totalOverdueAmount: assessment.totalOverdueAmount,
-                  defaulterFlagged: shouldFlagDefaulter,
+                  defaulterFlagged: targetDefaulter && defaulterChanged,
                 }),
               },
             });

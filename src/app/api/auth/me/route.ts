@@ -8,7 +8,7 @@ import { getAuthFromRequest } from '@/lib/auth';
  */
 export async function GET(req: NextRequest) {
   try {
-    const payload = getAuthFromRequest(req);
+    const payload = await getAuthFromRequest(req);
     if (!payload) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }

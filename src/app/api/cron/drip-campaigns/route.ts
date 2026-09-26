@@ -5,6 +5,7 @@ import {
   DRIP_CAMPAIGNS,
   getDripCampaign,
 } from '@/lib/email-campaigns';
+import { requireCronAuth } from '@/lib/cron-auth';
 
 // ============================================================================
 // CRON — DRIP CAMPAIGNS
@@ -128,7 +129,12 @@ async function sendDripStep(
   return true;
 }
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
+  // v50 — fail-closed cron auth. Previously this endpoint had NO
+  // authentication at all, meaning anyone on the internet could trigger
+  // drip-campaign sends by hitting the URL.
+  const cronAuth = requireCronAuth(req);
+  if (cronAuth instanceof NextResponse) return cronAuth;
   const startedAt = new Date();
   const stats = {
     dueStepsFound: 0,

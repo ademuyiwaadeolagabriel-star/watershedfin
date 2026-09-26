@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await requireRole(req, ['super']);
   if (auth instanceof NextResponse) return auth;
-  const payload = getAuthFromRequest(req);
+  const payload = await getAuthFromRequest(req);
 
   try {
     const body = await req.json();
@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const auth = await requireRole(req, ['super']);
   if (auth instanceof NextResponse) return auth;
-  const payload = getAuthFromRequest(req);
+  const payload = await getAuthFromRequest(req);
 
   try {
     const body = await req.json();

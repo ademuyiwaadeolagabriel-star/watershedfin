@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireCustomerAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 
 // ============================================================================
@@ -12,9 +13,15 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  // v51 — customer auth gate: identity derived from JWT, NOT body.userId.
+  const authResult_v51 = await requireCustomerAuth(req);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+  const authPayload_v51 = authResult_v51 as { id: string; type: string };
+
   try {
     const { id } = await params;
-    const { userId, message } = await req.json();
+    const { message } = await req.json(); // v53-IDOR-fix: userId removed from body
+      const userId = authPayload_v51.id; // v53 - derived from JWT;
 
     if (!userId) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 });

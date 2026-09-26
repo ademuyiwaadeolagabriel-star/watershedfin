@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import { ROLE_PERMISSIONS } from '@/lib/constants';
 
 export async function GET(req: NextRequest) {
+  // v53 — auth gate: least-privilege role check.
+  const authResult_v53 = await requireRole(req, ['super', 'md', 'hoc', 'hr']);
+  if (authResult_v53 instanceof NextResponse) return authResult_v53;
+
   try {
     const url = new URL(req.url);
     const role = url.searchParams.get('role');
@@ -59,6 +64,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // v53 — auth gate: least-privilege role check.
+  const authResult_v53 = await requireRole(req, ['super', 'md', 'hoc', 'hr']);
+  if (authResult_v53 instanceof NextResponse) return authResult_v53;
+
   try {
     const body = await req.json();
     if (!body.firstName || !body.lastName || !body.username || !body.email || !body.password) {

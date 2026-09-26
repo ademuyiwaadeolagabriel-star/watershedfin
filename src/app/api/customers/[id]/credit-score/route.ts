@@ -16,7 +16,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authPayload = getAuthFromRequest(req);
+    const authPayload = await getAuthFromRequest(req);
     if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
 
     const { id: userId } = await params;

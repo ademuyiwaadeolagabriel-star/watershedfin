@@ -912,9 +912,26 @@ export function lookupSectorMargin(sectorName: string): number {
   for (const [key, val] of Object.entries(SECTOR_BENCHMARK_MARGINS)) {
     if (key.toLowerCase() === lower) return val;
   }
-  // Partial match
+  // v46: Improved fuzzy matching — try keyword-based matching
+  // Extract key words from the search term and match against sector names
+  const searchWords = lower.split(/[\s\/\-&]+/).filter((w: string) => w.length > 2);
+  for (const [key, val] of Object.entries(SECTOR_BENCHMARK_MARGINS)) {
+    const keyLower = key.toLowerCase();
+    // Check if ALL search words appear in the sector name
+    if (searchWords.length > 0 && searchWords.every((w: string) => keyLower.includes(w))) {
+      return val;
+    }
+  }
+  // Partial match (original logic)
   for (const [key, val] of Object.entries(SECTOR_BENCHMARK_MARGINS)) {
     if (key.toLowerCase().includes(lower) || lower.includes(key.toLowerCase())) return val;
+  }
+  // v46: Try matching on the first significant word only
+  if (searchWords.length > 0) {
+    const firstWord = searchWords[0];
+    for (const [key, val] of Object.entries(SECTOR_BENCHMARK_MARGINS)) {
+      if (key.toLowerCase().includes(firstWord)) return val;
+    }
   }
   return 0;
 }

@@ -599,6 +599,15 @@ function WorkflowActions({ loan, adminId, onDone }: { loan: any; adminId?: strin
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      // v46: Handle 401 — session expired, redirect to login
+      if (res.status === 401) {
+        setError('Your session has expired. Please log in again.');
+        setTimeout(() => {
+          useAppStore.getState().logout();
+          useAppStore.getState().setView('login');
+        }, 2000);
+        return;
+      }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Action failed');
       alert(`✅ ${data.action} — loan moved to ${data.newStep}`);
@@ -666,7 +675,10 @@ function WorkflowActions({ loan, adminId, onDone }: { loan: any; adminId?: strin
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                     <div>
                       <Label className="text-[10px] uppercase">Recommended Amount (₦)</Label>
-                      <Input type="number" value={recommendedAmount} onChange={(e) => setRecommendedAmount(Number(e.target.value))} className="h-8" />
+                      <Input type="text" inputMode="decimal" value={recommendedAmount ? recommendedAmount.toLocaleString('en-NG', { maximumFractionDigits: 2 }) : ''} onChange={(e) => {
+                        const raw = e.target.value.replace(/[^0-9.]/g, '');
+                        setRecommendedAmount(raw ? Number(raw) : 0);
+                      }} onFocus={(e) => e.target.select()} placeholder="0" className="h-8 text-right" />
                     </div>
                     <div>
                       <Label className="text-[10px] uppercase">Duration (months)</Label>

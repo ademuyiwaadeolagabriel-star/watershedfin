@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 
 export async function GET(req: NextRequest) {
+  // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
+  const authResult_v51 = await requireRole(req, ['super', 'md', 'cfo', 'hoc', 'cro', 'treasury']);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+
   try {
     const url = new URL(req.url);
     const from = url.searchParams.get('from');
@@ -22,7 +27,8 @@ export async function GET(req: NextRequest) {
       where: invWhere,
       select: { accruedInterest: true, principal: true, createdAt: true },
     });
-    let totalTreasuryIncome = investments.reduce((s, i) => s + i.accruedInterest, 0);
+    // v51 — Decimal arithmetic: accruedInterest is Decimal | null.
+    let totalTreasuryIncome = investments.reduce((s, i) => s + Number(i.accruedInterest || 0), 0);
 
     // Add bank asset accrued income
     const assetWhere: any = {};
@@ -50,10 +56,12 @@ export async function GET(req: NextRequest) {
         const sub = (it.account.subType || '').toLowerCase();
         if (it.account.type === 'revenue') {
           const isLoan = name.includes('loan') || sub.includes('loan_interest');
-          if (isLoan) totalLoanIncome += it.credit - it.debit;
+          // v51 — Decimal arithmetic: it.credit/it.debit are Decimal.
+          if (isLoan) totalLoanIncome += Number(it.credit) - Number(it.debit);
         } else if (it.account.type === 'expense') {
           const isInterest = name.includes('interest') || sub.includes('interest_expense');
-          if (isInterest) totalInterestExpense += it.debit - it.credit;
+          // v51 — Decimal arithmetic.
+          if (isInterest) totalInterestExpense += Number(it.debit) - Number(it.credit);
         }
       }
     }

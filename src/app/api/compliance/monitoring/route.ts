@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { KYC_STATUSES } from '@/lib/constants';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // v53 — auth gate: least-privilege role check.
+  // Handler had no req param; inject one so requireRole can read the JWT.
+  const authResult_v53 = await requireRole(req as NextRequest, ['super', 'md', 'compliance', 'internal_audit']);
+  if (authResult_v53 instanceof NextResponse) return authResult_v53;
+
   try {
     // KYC stats by kycStatus on User
     const kycStats: Record<string, number> = {};

@@ -2,10 +2,20 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // v50 — Issue #32: We are now strict on TypeScript errors. The build will
+  // fail if there are any type errors. This is the correct posture for a
+  // financial application: errors that previously were silently swallowed
+  // (and could mask real bugs in money calculations, IDOR fixes, etc.) now
+  // block the build. The previous `ignoreBuildErrors: true` was a
+  // development-time shortcut that should never have shipped.
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
-  reactStrictMode: false,
+  // v50 — Issue #33: reactStrictMode back on. This catches side-effect
+  // double-invocations and lifecycle issues at dev time, which is
+  // especially important for the payment / KYC mutation flows we just
+  // hardened. Strict mode is a no-op in production.
+  reactStrictMode: true,
   serverExternalPackages: ["jsonwebtoken"],
   // v43: Rewrite /uploads/kyc/* to serve from /tmp in local dev
   // (Vercel Blob handles this in production — no rewrite needed)
@@ -23,3 +33,4 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+

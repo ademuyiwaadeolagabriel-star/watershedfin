@@ -10,7 +10,7 @@ import { getAuthFromRequest } from '@/lib/auth';
  */
 export async function POST(req: NextRequest) {
   try {
-    const authPayload = getAuthFromRequest(req);
+    const authPayload = await getAuthFromRequest(req);
     if (!authPayload) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
@@ -44,6 +44,13 @@ export async function POST(req: NextRequest) {
         mustChangePassword: false,
       },
     });
+
+    // v54 (audit #13): Revoke all active sessions for this admin after a password change,
+    // forcing re-authentication on every device.
+    await db.activeSession.updateMany({
+      where: { adminId: admin.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    }).catch(() => {});
 
     await db.auditLog.create({
       data: {

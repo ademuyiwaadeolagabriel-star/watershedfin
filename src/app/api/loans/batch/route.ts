@@ -11,7 +11,7 @@ import { getAuthFromRequest } from '@/lib/auth';
  */
 export async function POST(req: NextRequest) {
   try {
-    const authPayload = getAuthFromRequest(req);
+    const authPayload = await getAuthFromRequest(req);
     if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
 
     const allowedRoles = ['super', 'md', 'hoc'];

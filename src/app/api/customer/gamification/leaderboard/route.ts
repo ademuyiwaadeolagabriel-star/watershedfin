@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireCustomerAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { TIER_THRESHOLDS } from '@/lib/gamification';
 
@@ -7,7 +8,12 @@ import { TIER_THRESHOLDS } from '@/lib/gamification';
 // GET — admin view: top 20 customers by total loyalty points
 // ============================================================================
 
-export async function GET(_req: NextRequest) {
+export async function GET(req : NextRequest) {
+  // v51 — customer auth gate: identity derived from JWT, NOT body.userId.
+  const authResult_v51 = await requireCustomerAuth(req);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+  const authPayload_v51 = authResult_v51 as { id: string; type: string };
+
   try {
     // Pull top 20 customers by total points
     const topTiers = await db.creditTier.findMany({
@@ -28,7 +34,8 @@ export async function GET(_req: NextRequest) {
         business: { select: { name: true } },
       },
     });
-    const userMap = new Map(users.map((u) => [u.id, u]));
+    const userMap = new Map<string, (typeof users)[number]>();
+users.forEach((u) => userMap.set(u.id, u));
 
     const badgeCounts = await db.achievementBadge.groupBy({
       by: ['userId'],

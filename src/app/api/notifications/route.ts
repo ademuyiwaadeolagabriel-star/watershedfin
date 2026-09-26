@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { createNotification } from '@/lib/notifications';
 
@@ -12,10 +13,16 @@ import { createNotification } from '@/lib/notifications';
  * Persists a notification, broadcasts via WebSocket.
  */
 export async function GET(req: NextRequest) {
+  // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
+  const authResult_v51 = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'credit', 'loan', 'bm', 'lo']);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+  const authPayload = authResult_v51 as { id: string; role: string };
+
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId') || undefined;
-    const adminId = searchParams.get('adminId') || undefined;
+    // v54-Blocker1: adminId from JWT, not query string.
+    const adminId = authPayload.id;
     const unreadOnly = searchParams.get('unreadOnly') === 'true' || searchParams.get('unreadOnly') === '1';
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20));
@@ -55,6 +62,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
+  const authResult_v51 = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'credit', 'loan', 'bm', 'lo']);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+  const authPayload = authResult_v51 as { id: string; role: string };
+
   try {
     const body = await req.json();
     const {

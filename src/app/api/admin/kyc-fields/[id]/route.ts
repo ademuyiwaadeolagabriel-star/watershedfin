@@ -12,7 +12,7 @@ export async function PATCH(
 ) {
   const auth = await requireRole(req, ['super', 'md', 'hoc']);
   if (auth instanceof NextResponse) return auth;
-  const payload = getAuthFromRequest(req);
+  const payload = await getAuthFromRequest(req);
 
   try {
     const { id } = await params;
@@ -81,7 +81,7 @@ export async function DELETE(
 ) {
   const auth = await requireRole(req, ['super']);
   if (auth instanceof NextResponse) return auth;
-  const payload = getAuthFromRequest(req);
+  const payload = await getAuthFromRequest(req);
 
   try {
     const { id } = await params;

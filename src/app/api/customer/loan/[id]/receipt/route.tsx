@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireCustomerAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { PaymentReceiptPDF } from '@/components/pdf/payment-receipt';
@@ -18,10 +19,15 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  // v51 — customer auth gate: identity derived from JWT, NOT body.userId.
+  const authResult_v51 = await requireCustomerAuth(req);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+  const authPayload_v51 = authResult_v51 as { id: string; type: string };
+
   try {
     const { id } = await params;
     const url = new URL(req.url);
-    const userId = url.searchParams.get('userId');
+    const userId = authPayload_v51.id; // v53 - derived from JWT
     const paymentId = url.searchParams.get('paymentId');
     const download = url.searchParams.get('download') === '1';
 
@@ -61,19 +67,24 @@ export async function GET(
       where: { loanApplicantId: id, type: 'repayment' },
       orderBy: { transactionDate: 'asc' },
     });
-    const totalPaid = allRepayments.reduce((s, t) => s + t.amount, 0);
+    const totalPaid = allRepayments.reduce((s, t) => s + Number(t.amount), 0);
 
+    // v51 — Decimal arithmetic: wrap each Decimal field with Number()
+    // so the resulting values are plain numbers (not number | Decimal).
     const principal =
-      loan.finalAmount ||
-      loan.vettedAmount ||
-      loan.approvedAmount ||
-      loan.amount;
+      Number(loan.finalAmount) ||
+      Number(loan.vettedAmount) ||
+      Number(loan.approvedAmount) ||
+      Number(loan.amount);
     const tenorMonths =
-      loan.finalTenure ||
-      loan.vettedDuration ||
-      loan.approvedTenor ||
-      loan.duration;
-    const annualRate = loan.finalInterestRate || loan.percent || 24;
+      Number(loan.finalTenure) ||
+      Number(loan.vettedDuration) ||
+      Number(loan.approvedTenor) ||
+      Number(loan.duration);
+    const annualRate = Number(loan.finalInterestRate) || Number(loan.percent); // v53-P3: removed || 24 fallback
+      if (annualRate == null || isNaN(Number(annualRate))) {
+        return NextResponse.json({ error: "Loan is missing finalInterestRate. MD approval must record the rate before this operation can proceed." }, { status: 400 });
+      }
     const repaymentMethod =
       (loan.repaymentPlan as 'REDUCING' | 'FLAT') || 'REDUCING';
     const startDate = loan.disbursedAt || loan.disbursementDate || new Date();
@@ -121,7 +132,7 @@ export async function GET(
         loanRef={loan.applicationRef || id}
         customerName={customerName}
         accountNumber={loan.user?.accountNumber || ''}
-        amount={payment.amount}
+        amount={Number(payment.amount)}
         paymentMethod={paymentMethod}
         paymentDate={payment.transactionDate}
         reference={payment.reference || receiptNumber}

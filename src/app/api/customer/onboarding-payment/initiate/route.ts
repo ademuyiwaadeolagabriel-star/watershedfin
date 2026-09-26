@@ -1,21 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requireCustomerAuth } from '@/lib/auth';
+import crypto from 'crypto';
 
 /**
  * POST /api/customer/onboarding-payment/initiate
- * Initiates a Paystack payment for the CAC search fee.
- * Body: { userId }
+ * Authorization: Bearer <customer-jwt>
  *
- * Returns: { reference, amount, email, publicKey }
+ * Initiates a Paystack payment for the CAC search fee.
+ *
+ * v50 FIX (Issue #7): Customer identity comes from the JWT, NOT from
+ * `body.userId`. The previous implementation accepted any userId,
+ * allowing a customer authenticated as themselves to initiate
+ * Paystack payment flows on behalf of another customer — polluting
+ * that customer's onboarding stage.
+ *
+ * v50: Payment reference generation moved to crypto.randomBytes for
+ * non-guessable refs.
  */
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { userId } = body;
-
-    if (!userId) {
-      return NextResponse.json({ error: 'userId is required' }, { status: 400 });
-    }
+    // --- Auth gate: customer JWT mandatory -------------------------------
+    const authResult = await requireCustomerAuth(req);
+    if (authResult instanceof NextResponse) return authResult;
+    const authPayload = authResult as { id: string; type: string };
+    const userId = authPayload.id;
 
     const user = await db.user.findUnique({
       where: { id: userId },
@@ -40,8 +49,8 @@ export async function POST(req: NextRequest) {
       ? Number(feeSetting.value)
       : 5000;
 
-    // Generate a unique reference
-    const reference = `WAT-CAC-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    // v50 — cryptographically secure reference.
+    const reference = `WAT-CAC-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
 
     // Create a pending OnboardingPayment record
     const payment = await db.onboardingPayment.create({

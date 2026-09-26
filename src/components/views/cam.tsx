@@ -460,12 +460,16 @@ export function CamView() {
           };
 
           // Only override with saved appraisal data if the appraisal has actually been saved before
-          const hasSavedData = ap.salesClientEstimate !== null || ap.engineDump !== null;
+          const hasSavedData = ap.salesClientEstimate !== null || ap.engineDump !== null || ap.camFormData !== null;
 
           if (hasSavedData) {
+            // v47: Parse camFormData JSON blob — this restores ALL structured fields
+            const savedFormData = safeParse(ap.camFormData, null);
             setData((prev: CamData) => ({
               ...prev,
-              // Override with saved CAM data (LO may have adjusted these)
+              // v47: Restore ALL fields from camFormData JSON blob
+              ...(savedFormData || {}),
+              // Override with individual saved CAM columns (these take precedence)
               loanPrincipal: ap.loanPrincipal || prev.loanPrincipal,
               loanInterestRate: ap.loanInterestRate || prev.loanInterestRate,
               loanTenorMonths: ap.loanTenorMonths || prev.loanTenorMonths,
@@ -550,7 +554,13 @@ export function CamView() {
           cost: Number(i.cost) || 0,
           sell: Number(i.sell) || 0,
         })),
-        sectorBenchmarkMargin: Number(data.sectorBenchmarkMargin) || 20,
+        // v53 — P3 #35: REMOVE the || 20 fallback. If the admin-configured
+        // sector benchmark is missing/zero, the engine will return
+        // marginUsed=0 + sourceUsed='none', and downstream verifyPurchases
+        // will fall back to the least valid sales source. The CAM
+        // submission must NOT silently substitute 20% for the missing
+        // admin policy value.
+        sectorBenchmarkMargin: Number(data.sectorBenchmarkMargin) || 0,
         loan: {
           principal: Number(data.loanPrincipal) || 0,
           annualInterestRate: Number(data.loanInterestRate) || 0,
@@ -638,22 +648,23 @@ export function CamView() {
   const isLocked = appraisal?.isSnapshotLocked;
   const currentStep = loan?.currentStep || '';
 
-  // Edit permission checks BOTH role AND current workflow step.
-  // Each role can only edit the CAM when the loan is at their designated step.
+  // v47: Edit permission checks — updated to use CURRENT workflow steps
   const canEdit = (() => {
     if (!currentAdmin) return false;
-    if (currentAdmin.role === 'super') return !isLocked; // super can edit anytime (if not locked)
+    if (currentAdmin.role === 'super') return !isLocked || true; // v47: super can always edit (even locked, with override)
 
-    // G2: LO GUARD — LO can only edit if the client is assigned to them
+    // LO GUARD — LO can only edit if assigned AND at LO step OR query response
     if (currentAdmin.role === 'loan' || currentAdmin.loanOrigination) {
       const isAssignedToMe = loan?.staffId === currentAdmin.id || loan?.user?.staffId === currentAdmin.id;
-      if (!isAssignedToMe) return false; // Not assigned to this LO — read-only
+      if (!isAssignedToMe) return false;
+      // v47: Allow editing on QUERY_RESPONSE even if locked (so LO can respond to queries)
+      if (currentStep === 'QUERY_RESPONSE') return true;
       return !isLocked && ['LO_ENTRY', 'LO_ASSESSMENT', 'DRAFT', 'QUERY_RESPONSE'].includes(currentStep);
     }
 
-    // HOC can edit during HOC_STRUCTURING and HOC_APPROVAL
+    // v47: HOC can edit during HOC_ASSIGNMENT, HOC_REVIEW, and legacy steps
     if (currentAdmin.role === 'hoc' || currentAdmin.loanStructuring) {
-      return ['HOC_STRUCTURING', 'HOC_APPROVAL', 'HOC_AGGREGATION', 'HOC_FINALIZATION'].includes(currentStep);
+      return ['HOC_ASSIGNMENT', 'HOC_REVIEW', 'HOC_STRUCTURING', 'HOC_APPROVAL', 'HOC_AGGREGATION', 'HOC_FINALIZATION'].includes(currentStep);
     }
 
     // Analyst can edit during ANALYST_STRUCTURING
@@ -661,7 +672,7 @@ export function CamView() {
       return currentStep === 'ANALYST_STRUCTURING';
     }
 
-    // BM, CRO, CFO, Legal, MD — can NEVER edit the LO data (read-only + create own snapshot)
+    // v47: BM, CRO, CFO, Legal, MD — can NEVER edit LO data (read-only + create own snapshot)
     return false;
   })();
 
@@ -709,6 +720,22 @@ export function CamView() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [canEdit, isLocked, saved]);
 
+  // v47: AUTOSAVE — automatically save draft every 30 seconds if there are unsaved changes
+  useEffect(() => {
+    if (!canEdit || loading) return;
+    if (saved) return; // No unsaved changes
+
+    const autosaveTimer = setTimeout(() => {
+      // Only autosave if the user has entered meaningful data
+      const hasData = data.loanPrincipal || data.salesClientEstimate || data.cashAtHand || (data.inventory && data.inventory.length > 0);
+      if (hasData) {
+        handleSave();
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearTimeout(autosaveTimer);
+  }, [data, canEdit, saved, loading]);
+
   const updateField = (key: string, value: any) => {
     setData(prev => ({ ...prev, [key]: value }));
     setSaved(false);
@@ -721,12 +748,103 @@ export function CamView() {
       const result = engineResult || recalcEngine();
       if (!result) throw new Error('Engine failed');
 
+      // v47: Save ALL form data in a single camFormData JSON blob
+      // This ensures every field is persisted and restorable — fixes the
+      // "~70% of fields not persisted" bug from the audit.
+      const camFormData = JSON.stringify({
+        // All structured data
+        businessExpenses: data.businessExpenses,
+        familyExpensesRegular: data.familyExpensesRegular,
+        familyExpensesIrregular: data.familyExpensesIrregular,
+        weeklySales: data.weeklySales,
+        weeklyGrid: data.weeklyGrid,
+        bankStatementGrid: data.bankStatementGrid,
+        spotCheckDays: data.spotCheckDays,
+        salesRecordsGrid: data.salesRecordsGrid,
+        purchaseRecordsGrid: data.purchaseRecordsGrid,
+        previousBalanceSheetFull: data.previousBalanceSheetFull,
+        extendedCollaterals: data.extendedCollaterals,
+        extendedGuarantors: data.extendedGuarantors,
+        movableDepreciationRate: data.movableDepreciationRate,
+        immovableDepreciationRate: data.immovableDepreciationRate,
+        loanProduct: data.loanProduct,
+        loanCycleGrade: data.loanCycleGrade,
+        rateTierAutoApplied: data.rateTierAutoApplied,
+        stressSalesHaircut: data.stressSalesHaircut,
+        stressMarginCompression: data.stressMarginCompression,
+        stressOpexIncrease: data.stressOpexIncrease,
+        openingCash: data.openingCash,
+        familyIncome: data.familyIncome,
+        familyLoanInstallment: data.familyLoanInstallment,
+        physicalStockMatches: data.physicalStockMatches,
+        guarantorIncome: data.guarantorIncome,
+        guarantorCogs: data.guarantorCogs,
+        guarantorOperationExpenses: data.guarantorOperationExpenses,
+        guarantorExistingInstallment: data.guarantorExistingInstallment,
+        sectorRiskScore: data.sectorRiskScore,
+        sectorBenchmarkMargin: data.sectorBenchmarkMargin,
+        selectedSectorName: data.selectedSectorName,
+        businessLocation: data.businessLocation,
+        yearsInOperation: data.yearsInOperation,
+        loVisitation: data.loVisitation,
+        bmVisitation: data.bmVisitation,
+        photoEvidence: data.photoEvidence,
+        references: data.references,
+        runningWflLoan: data.runningWflLoan,
+        otherLenderLoans: data.otherLenderLoans,
+        salesBankMonths: data.salesBankMonths,
+        purchaseBankMonths: data.purchaseBankMonths,
+        salesInvoiceMonths: data.salesInvoiceMonths,
+        purchaseInvoiceMonths: data.purchaseInvoiceMonths,
+        purchaseSuppliers: data.purchaseSuppliers,
+        threeDaySales: data.threeDaySales,
+        supportDocuments: data.supportDocuments,
+        visitationCoordinates: data.visitationCoordinates,
+        committeeSignatures: data.committeeSignatures,
+        crcBureauLoans: data.crcBureauLoans,
+        // All numeric/text fields
+        loanPrincipal: data.loanPrincipal,
+        loanInterestRate: data.loanInterestRate,
+        loanTenorMonths: data.loanTenorMonths,
+        repaymentMethod: data.repaymentMethod,
+        ccdPercent: data.ccdPercent,
+        upfrontFeePercent: data.upfrontFeePercent,
+        loanPurpose: data.loanPurpose,
+        loanBaseAmount: data.loanBaseAmount,
+        bufferRate: data.bufferRate,
+        otherLoanInstallments: data.otherLoanInstallments,
+        cashAtHand: data.cashAtHand,
+        cashInBanks: data.cashInBanks,
+        receivables: data.receivables,
+        fixedBusinessAssets: data.fixedBusinessAssets,
+        fixedFamilyAssets: data.fixedFamilyAssets,
+        shortTermLiabilities: data.shortTermLiabilities,
+        longTermLiabilities: data.longTermLiabilities,
+        payables: data.payables,
+        applicantAge: data.applicantAge,
+        managementExperience: data.managementExperience,
+        successionPlanVerified: data.successionPlanVerified,
+        bankAccountVerified: data.bankAccountVerified,
+        previousDefault: data.previousDefault,
+        competitionIntensity: data.competitionIntensity,
+        marketRiskCommentary: data.marketRiskCommentary,
+        appraisalGpsLat: data.appraisalGpsLat,
+        appraisalGpsLong: data.appraisalGpsLong,
+        businessWorth: data.businessWorth,
+        stockValue: data.stockValue,
+        monthlySales: data.monthlySales,
+        yearsAtAddress: data.yearsAtAddress,
+        businessVerified: data.businessVerified,
+        stockMatchesDeclared: data.stockMatchesDeclared,
+        activityMatchesSector: data.activityMatchesSector,
+      });
+
       const res = await authFetch(`/api/appraisals/${loanId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...data,
-          _adminId: currentAdmin?.id, // D3 FIX: send adminId for audit log
+          _adminId: currentAdmin?.id,
+          camFormData, // v47: ALL form data in one JSON blob
           engineDump: JSON.stringify(result),
           engineSnapshot: JSON.stringify(result),
           riskScore: result.finalScore,
@@ -744,7 +862,6 @@ export function CamView() {
           verifiedMonthlyNetProfit: result.pnl.netProfit,
           monthlyGrossProfit: result.pnl.grossProfit,
           monthlyNetSurplus: result.pnl.netCashflowAvailable,
-          // D1 FIX: Map structured arrays to JSON columns
           inventorySnapshot: JSON.stringify(data.inventory || []),
           assetsRegister: JSON.stringify({ business: data.businessAssets, family: data.familyAssets }),
           balanceSheet: JSON.stringify({
@@ -753,10 +870,20 @@ export function CamView() {
           }),
           collateralRegister: JSON.stringify(data.collaterals || []),
           guarantorRegister: JSON.stringify(data.guarantors || []),
-          guarantorBizVerification: JSON.stringify(data.guarantorBizVerifications || []),
           bankBalancesRegister: JSON.stringify(data.bankBalances || []),
           marginAnalysis: JSON.stringify(result.weightedMargin),
           gpsData: JSON.stringify({ lat: data.appraisalGpsLat, lng: data.appraisalGpsLong }),
+          // v47: Include loan terms (HOC may have adjusted)
+          loanPrincipal: data.loanPrincipal,
+          loanInterestRate: data.loanInterestRate,
+          loanTenorMonths: data.loanTenorMonths,
+          ccdPercent: data.ccdPercent,
+          upfrontFeePercent: data.upfrontFeePercent,
+          // Override flag for locked snapshots (super/MD)
+          ...(isLocked && (currentAdmin?.role === 'super' || currentAdmin?.role === 'md') ? {
+            adminOverride: true,
+            overrideReason: `Draft save by ${currentAdmin?.role} while locked`,
+          } : {}),
         }),
       });
       if (!res.ok) {
@@ -1066,22 +1193,23 @@ export function CamView() {
   // G2: Show warning if LO is not assigned to this client
   const isLONotAssigned = currentAdmin?.role === 'loan' && loan && loan.staffId !== currentAdmin.id && loan.user?.staffId !== currentAdmin.id;
 
-  // ── L4: Role-specific snapshot creation ──
-  // Each approver role can create their own frozen snapshot
+  // v47: Role-specific snapshot creation — fixed step names + allow when locked
   const canCreateSnapshot = (() => {
-    if (!currentAdmin || isLocked) return false;
+    if (!currentAdmin) return false;
     const role = currentAdmin.role;
-    const stepMatch: Record<string, string> = {
-      bm: 'BM_QC',
-      hoc: 'HOC_STRUCTURING',
-      analyst: 'ANALYST_STRUCTURING',
-      cro: 'CRO_RISK',
-      cfo: 'CFO_REVIEW',
-      legal: 'LEGAL_REVIEW',
-      md: 'MD_APPROVAL',
+    // v47: Updated to use CURRENT workflow steps (was using legacy names)
+    const stepMatch: Record<string, string[]> = {
+      bm: ['BM_QC', 'BM_VETTING'],
+      hoc: ['HOC_ASSIGNMENT', 'HOC_REVIEW', 'HOC_STRUCTURING', 'HOC_APPROVAL'],
+      analyst: ['ANALYST_STRUCTURING'],
+      cro: ['CRO_RISK', 'CRO_VERIFICATION'],
+      cfo: ['CFO_REVIEW'],
+      legal: ['LEGAL_MCC', 'LEGAL_REVIEW', 'LEGAL_FINAL_REVIEW', 'LEGAL_AGGREGATION'],
+      md: ['MD_APPROVAL'],
     };
-    const targetStep = stepMatch[role];
-    return targetStep ? currentStep === targetStep : false;
+    const targetSteps = stepMatch[role];
+    // v47: Allow snapshot creation even when isLocked=true (the LO lock shouldn't block downstream snapshots)
+    return targetSteps ? targetSteps.includes(currentStep) : false;
   })();
 
   const fmtNaira = (n: number) => '₦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
@@ -1950,19 +2078,26 @@ function ProfileTab({ data, update, loan }: any) {
         )}
       </div>
 
-      {/* Loan Terms — from onboarding (read-only during LO phase) */}
+      {/* v46: Loan Terms — LOCKED for non-HOC roles. Only HOC/super can adjust. */}
       <div>
         <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Loan Terms (Requested)</h3>
-        <p className="text-xs text-slate-400 mb-3">Auto-populated from customer application — HOC may adjust during structuring</p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Field label="Loan Principal (₦)" type="number" value={data.loanPrincipal} onChange={(v: any) => update('loanPrincipal', Number(v))} />
-          <Field label="Interest Rate (% p.a.)" type="number" value={data.loanInterestRate} onChange={(v: any) => update('loanInterestRate', Number(v))} />
-          <Field label="Tenor (months)" type="number" value={data.loanTenorMonths} onChange={(v: any) => update('loanTenorMonths', Number(v))} />
-          <SelectField label="Repayment Method" value={data.repaymentMethod} onChange={(v: any) => update('repaymentMethod', v)} options={['REDUCING', 'FLAT']} />
-          <Field label="CCD (%)" type="number" value={data.ccdPercent} onChange={(v: any) => update('ccdPercent', Number(v))} />
-          <Field label="Upfront Fee (%)" type="number" value={data.upfrontFeePercent} onChange={(v: any) => update('upfrontFeePercent', Number(v))} />
-          <Field label="Loan Purpose" value={data.loanPurpose || '—'} readOnly />
-          <div>
+        <p className="text-xs text-slate-400 mb-3">
+          Auto-populated from customer application — {useAppStore.getState().currentAdmin?.role === 'hoc' || useAppStore.getState().currentAdmin?.role === 'super'
+            ? 'you can adjust as HOC/Super Admin'
+            : 'LOCKED — only HOC can adjust during structuring'}
+        </p>
+        {(() => {
+          const canAdjust = useAppStore.getState().currentAdmin?.role === 'hoc' || useAppStore.getState().currentAdmin?.role === 'super';
+          return (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <Field label="Loan Principal (₦)" type="number" value={data.loanPrincipal} onChange={canAdjust ? (v: any) => update('loanPrincipal', Number(v)) : undefined} readOnly={!canAdjust} />
+              <Field label="Interest Rate (% p.a.)" type="number" value={data.loanInterestRate} onChange={canAdjust ? (v: any) => update('loanInterestRate', Number(v)) : undefined} readOnly={!canAdjust} />
+              <Field label="Tenor (months)" type="number" value={data.loanTenorMonths} onChange={canAdjust ? (v: any) => update('loanTenorMonths', Number(v)) : undefined} readOnly={!canAdjust} />
+              <SelectField label="Repayment Method" value={data.repaymentMethod} onChange={canAdjust ? (v: any) => update('repaymentMethod', v) : undefined} options={['REDUCING', 'FLAT']} />
+              <Field label="CCD (%)" type="number" value={data.ccdPercent} onChange={canAdjust ? (v: any) => update('ccdPercent', Number(v)) : undefined} readOnly={!canAdjust} />
+              <Field label="Upfront Fee (%)" type="number" value={data.upfrontFeePercent} onChange={canAdjust ? (v: any) => update('upfrontFeePercent', Number(v)) : undefined} readOnly={!canAdjust} />
+              <Field label="Loan Purpose" value={data.loanPurpose || '—'} readOnly />
+              <div>
             <Label className="text-xs font-semibold">Sector Benchmark Margin</Label>
             <div className="mt-1 flex items-center gap-2">
               <Input
@@ -1976,22 +2111,37 @@ function ProfileTab({ data, update, loan }: any) {
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  const margin = lookupSectorMargin(data.selectedSectorName || data.businessSector || '');
-                  if (margin > 0) {
-                    update('sectorBenchmarkMargin', margin);
+                onClick={async () => {
+                  // v50 — fetch the AUTHORITATIVE benchmarked margin from the
+                  // DB via the sectors API. The static lookupSectorMargin()
+                  // in constants.ts is no longer used as a runtime source.
+                  const sectorName = data.selectedSectorName || data.businessSector || '';
+                  if (!sectorName) return;
+                  try {
+                    const res = await fetch('/api/sectors');
+                    const json = await res.json();
+                    const match = (json.sectors || []).find(
+                      (s: any) => (s.name || '').toLowerCase() === sectorName.toLowerCase(),
+                    );
+                    if (match && typeof match.benchmarkedMargin === 'number') {
+                      update('sectorBenchmarkMargin', match.benchmarkedMargin);
+                    }
+                  } catch (err) {
+                    console.error('[cam] failed to fetch sector benchmark:', err);
                   }
                 }}
-                title="Auto-lookup from sector name"
+                title="Fetch admin-configured sector benchmark from DB"
               >
-                Auto
+                Fetch from DB
               </Button>
             </div>
             {data.selectedSectorName && (
               <p className="text-[10px] text-slate-400 mt-1">Sector: {data.selectedSectorName}</p>
             )}
           </div>
-        </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* CAM-Specific Risk Assessment Fields */}
@@ -2158,17 +2308,17 @@ function OtherLenderLoansSection({ data, update }: any) {
               <tr key={i}>
                 <td className="px-2 py-1 font-mono">{i + 1}</td>
                 <td className="px-2 py-1"><Input value={r.institution} onChange={(e) => updateRow(i, 'institution', e.target.value)} className="h-7 text-xs" /></td>
-                <td className="px-2 py-1"><Input type="number" value={r.amount} onChange={(e) => updateRow(i, 'amount', Number(e.target.value))} className="h-7 w-24 text-right text-xs" /></td>
-                <td className="px-2 py-1"><Input type="number" value={r.installment} onChange={(e) => updateRow(i, 'installment', Number(e.target.value))} className="h-7 w-24 text-right text-xs" /></td>
-                <td className="px-2 py-1"><Input type="number" value={r.balance} onChange={(e) => updateRow(i, 'balance', Number(e.target.value))} className="h-7 w-24 text-right text-xs" /></td>
-                <td className="px-2 py-1"><Input type="number" value={r.tenure} onChange={(e) => updateRow(i, 'tenure', Number(e.target.value))} className="h-7 w-16 text-right text-xs" /></td>
+                <td className="px-2 py-1"><InlineFormattedNumber value={r.amount} onChange={(v) => updateRow(i, 'amount', v)} className="h-7 w-24 text-xs" /></td>
+                <td className="px-2 py-1"><InlineFormattedNumber value={r.installment} onChange={(v) => updateRow(i, 'installment', v)} className="h-7 w-24 text-xs" /></td>
+                <td className="px-2 py-1"><InlineFormattedNumber value={r.balance} onChange={(v) => updateRow(i, 'balance', v)} className="h-7 w-24 text-xs" /></td>
+                <td className="px-2 py-1"><InlineFormattedNumber value={r.tenure} onChange={(v) => updateRow(i, 'tenure', v)} className="h-7 w-16 text-xs" /></td>
                 <td className="px-2 py-1">
                   <select value={r.status} onChange={(e) => updateRow(i, 'status', e.target.value)} className="rounded border border-slate-300 px-1 py-1 text-xs w-full">
                     {statuses.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </td>
                 <td className="px-2 py-1"><Input type="date" value={r.lastPaymentDate} onChange={(e) => updateRow(i, 'lastPaymentDate', e.target.value)} className="h-7 text-xs" /></td>
-                <td className="px-2 py-1"><Input type="number" value={r.daysInDefault} onChange={(e) => updateRow(i, 'daysInDefault', Number(e.target.value))} className="h-7 w-16 text-right text-xs" /></td>
+                <td className="px-2 py-1"><InlineFormattedNumber value={r.daysInDefault} onChange={(v) => updateRow(i, 'daysInDefault', v)} className="h-7 w-16 text-xs" /></td>
                 <td className="px-2 py-1"><Button size="sm" variant="ghost" onClick={() => removeRow(i)} className="h-6 w-6 p-0"><Trash2 className="h-3 w-3" /></Button></td>
               </tr>
             ))}
@@ -2327,7 +2477,8 @@ function SalesTab({ data, update, engineResult }: any) {
   const monthly3Day = threeDayTotal * 8; // × 8 extrapolation factor per Excel
 
   // ── SECTION 3: Account Statement Credit Side (Excel rows 110-119) ──
-  const bankMonths = data.salesBankMonths || [139093269.85, 223380551.52, 191141268.09, 188976318.09, 187200083.09, 155582768.09, 202571068.09, 158475573.09, 164774168.09, 192605668.09, 233865168.09, 168292268.09];
+  // v46: REMOVED preloaded figures — start with empty array, user enters real data
+  const bankMonths = data.salesBankMonths || [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   const updBankMonth = (idx: number, val: number) => {
     const newArr = [...bankMonths];
     newArr[idx] = val;
@@ -2379,7 +2530,8 @@ function SalesTab({ data, update, engineResult }: any) {
   const purchaseClientTotal = purchaseSuppliers.reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
 
   // P2: Purchase from Account Statement (debit side, 12 months)
-  const purchaseBankMonths = data.purchaseBankMonths || [133097294.82, 225656523.95, 202234107.85, 213151975.04, 182906396.84, 144114533.64, 203313609.72, 164909296.98, 181142943.04, 193124335.29, 233211003.54, 167135007.54];
+  // v46: REMOVED preloaded figures — start with empty array, user enters real data
+  const purchaseBankMonths = data.purchaseBankMonths || [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   const updPurchBankMonth = (idx: number, val: number) => {
     const newArr = [...purchaseBankMonths];
     newArr[idx] = val;
@@ -2397,19 +2549,73 @@ function SalesTab({ data, update, engineResult }: any) {
   };
   const purchaseInvoiceAvg = purchaseInvoiceMonths.reduce((s: number, v: number) => s + (Number(v) || 0), 0) / 6;
 
-  // P4: Purchase verification from margin (P = S × (1 - gwm))
-  const gwm = data.weightedMargin || 0.20;
-  const purchaseFromMargin = consideredSales * (1 - gwm);
+  // v48 FIX (Calc-4): CORRECT margin calculation per Excel spec
+  // Calculate three candidate margins, take the LOWEST NON-ZERO value
+  // This replaces the v46 "always use margin-derived" fix which was incorrect.
+  
+  // 1. Average Margin from inventory items
+  const inventoryMargins = (data.inventory || []).map((i: any) => {
+    const sell = Number(i.sell) || 0;
+    const cost = Number(i.cost) || 0;
+    return sell > 0 ? (sell - cost) / sell : 0;
+  }).filter((m: number) => m > 0);
+  const averageMargin = inventoryMargins.length > 0 
+    ? inventoryMargins.reduce((s: number, m: number) => s + m, 0) / inventoryMargins.length 
+    : 0;
 
-  // Purchase Summary Base
+  // 2. Weighted Margin (weighted by cost value share)
+  const totalStockCost = (data.inventory || []).reduce((s: number, i: any) => s + (Number(i.qty) || 0) * (Number(i.cost) || 0), 0);
+  const weightedMargin = totalStockCost > 0
+    ? (data.inventory || []).reduce((s: number, i: any) => {
+        const sell = Number(i.sell) || 0;
+        const cost = Number(i.cost) || 0;
+        const qty = Number(i.qty) || 0;
+        const itemMargin = sell > 0 ? (sell - cost) / sell : 0;
+        const weight = (qty * cost) / totalStockCost;
+        return s + (itemMargin * weight);
+      }, 0)
+    : 0;
+
+  // 3. Sector Benchmark Margin (from admin-configured sector, NOT hardcoded)
+  // v50 — DB Sector.benchmarkedMargin is the SOLE LIVE source. The static
+  // lookupSectorMargin() in constants.ts is ONLY for seed/default data and
+  // is no longer used as a runtime fallback. If the admin sets Electronics
+  // to 25%, CAM must use 25% — not a hard-coded 20.13% or whatever the
+  // static table has.
+  const sectorBenchmark = Number(data.sectorBenchmarkMargin) || 0;
+  const sectorBenchmarkMargin = sectorBenchmark / 100; // Convert % to decimal
+
+  // 4. Inventory margin used = MIN(average, weighted) — this is Excel's G21
+  const inventoryMarginUsed = (() => {
+    const candidates = [averageMargin, weightedMargin].filter(v => v > 0);
+    return candidates.length > 0 ? Math.min(...candidates) : 0;
+  })();
+
+  // 5. FINAL Margin Used = LOWEST NON-ZERO of all three (Excel's D32)
+  const marginCandidates = [averageMargin, weightedMargin, sectorBenchmarkMargin].filter(v => v > 0);
+  const marginUsed = marginCandidates.length > 0 ? Math.min(...marginCandidates) : 0;
+
+  // 6. Track which margin source won (for audit trail)
+  const marginSource = 
+    marginUsed === 0 ? 'NONE' :
+    marginUsed === averageMargin ? 'AVERAGE_MARGIN' :
+    marginUsed === weightedMargin ? 'WEIGHTED_MARGIN' :
+    marginUsed === sectorBenchmarkMargin ? 'SECTOR_BENCHMARK' : 'NONE';
+
+  // 7. Purchase from margin uses the WINNING margin (not always weighted)
+  const purchaseFromMargin = consideredSales * (1 - marginUsed);
+  const gwm = marginUsed; // The winning margin IS the gross weighted margin used for all calculations
+
+  // Purchase Summary Base — uses the margin-derived purchase
   const purchaseSources = [
     { label: 'On Client Estimation', value: purchaseClientTotal },
     { label: 'Debit side of Bank Statement (Avg)', value: purchaseBankAvg },
     { label: 'On Purchases Invoice (Avg)', value: purchaseInvoiceAvg },
-    { label: 'Purchases from margin (P=S×(1-gwm))', value: purchaseFromMargin },
+    { label: `Purchases from margin (P=S×(1-${(marginUsed * 100).toFixed(2)}%))`, value: purchaseFromMargin },
   ];
   const validPurchSources = purchaseSources.filter((s) => s.value > 0);
-  const consideredPurchases = validPurchSources.length > 0 ? Math.min(...validPurchSources.map((s) => s.value)) : 0;
+  // v48: Use margin-derived purchase (this is the correct rule per Excel spec)
+  const consideredPurchases = purchaseFromMargin;
 
   useEffect(() => {
     update('purchasesClientEstimate', purchaseClientTotal);
@@ -2454,11 +2660,10 @@ function SalesTab({ data, update, engineResult }: any) {
                   <td className="px-2 py-1 border font-semibold text-slate-700">{row.label}</td>
                   {days.map((day) => (
                     <td key={day} className="px-1 py-1 border">
-                      <Input
-                        type="number"
+                      <InlineFormattedNumber
                         value={weeklyGrid[row.key][day]}
-                        onChange={(e) => updGrid(row.key, day, Number(e.target.value))}
-                        className="h-7 w-full text-right text-xs border-0 bg-transparent"
+                        onChange={(v) => updGrid(row.key, day, v)}
+                        className="h-7 w-full text-xs border-0 bg-transparent"
                       />
                     </td>
                   ))}
@@ -2504,7 +2709,7 @@ function SalesTab({ data, update, engineResult }: any) {
                 <tr key={r.key}>
                   <td className="px-2 py-1 border font-medium text-slate-700">{r.label}</td>
                   <td className="px-1 py-1 border">
-                    <Input type="number" value={threeDaySales[r.key]} onChange={(e) => upd3Day(r.key, Number(e.target.value))} className="h-7 w-full text-right text-xs border-0" />
+                    <InlineFormattedNumber value={threeDaySales[r.key]} onChange={(v) => upd3Day(r.key, v)} className="h-7 w-full text-xs border-0" />
                   </td>
                   <td className="px-2 py-1 border text-right font-mono">{fmtNaira(Number(threeDaySales[r.key]) || 0)}</td>
                 </tr>
@@ -2543,7 +2748,7 @@ function SalesTab({ data, update, engineResult }: any) {
                 <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50 dark:bg-slate-900'}>
                   <td className="px-2 py-1 border font-medium text-slate-700">Month {i + 1}</td>
                   <td className="px-1 py-1 border">
-                    <Input type="number" value={val} onChange={(e) => updBankMonth(i, Number(e.target.value))} className="h-7 w-full text-right text-xs border-0" />
+                    <InlineFormattedNumber value={val} onChange={(v) => updBankMonth(i, v)} className="h-7 w-full text-xs border-0" />
                   </td>
                 </tr>
               ))}
@@ -2573,7 +2778,7 @@ function SalesTab({ data, update, engineResult }: any) {
           {invoiceMonths.map((val: number, i: number) => (
             <div key={i}>
               <Label className="text-[10px] text-slate-600">Month {i + 1}</Label>
-              <Input type="number" value={val} onChange={(e) => updInvMonth(i, Number(e.target.value))} className="h-8 text-right text-xs" />
+              <InlineFormattedNumber value={val} onChange={(v) => updInvMonth(i, v)} className="h-8 text-xs" />
             </div>
           ))}
         </div>
@@ -2645,7 +2850,7 @@ function SalesTab({ data, update, engineResult }: any) {
                   <td className="px-2 py-1"><Input value={s.name} onChange={(e) => updSupplier(i, 'name', e.target.value)} className="h-7 text-xs" placeholder="Supplier name" /></td>
                   <td className="px-2 py-1"><Input value={s.location} onChange={(e) => updSupplier(i, 'location', e.target.value)} className="h-7 text-xs" placeholder="City" /></td>
                   <td className="px-2 py-1"><Input type="number" value={s.frequency} onChange={(e) => updSupplier(i, 'frequency', Number(e.target.value))} className="h-7 w-16 text-center text-xs" /></td>
-                  <td className="px-2 py-1"><Input type="number" value={s.amount} onChange={(e) => updSupplier(i, 'amount', Number(e.target.value))} className="h-7 w-32 text-right text-xs" /></td>
+                  <td className="px-2 py-1"><InlineFormattedNumber value={s.amount} onChange={(v) => updSupplier(i, 'amount', v)} className="h-7 w-32 text-xs" /></td>
                   <td className="px-2 py-1"><Button size="sm" variant="ghost" onClick={() => removeSupplier(i)} className="h-6 w-6 p-0"><Trash2 className="h-3 w-3" /></Button></td>
                 </tr>
               ))}
@@ -2673,7 +2878,7 @@ function SalesTab({ data, update, engineResult }: any) {
           {purchaseBankMonths.map((val: number, i: number) => (
             <div key={i}>
               <Label className="text-[10px] text-slate-600">Month {i + 1}</Label>
-              <Input type="number" value={val} onChange={(e) => updPurchBankMonth(i, Number(e.target.value))} className="h-8 text-right text-xs" />
+              <InlineFormattedNumber value={val} onChange={(v) => updPurchBankMonth(i, v)} className="h-8 text-xs" />
             </div>
           ))}
         </div>
@@ -2700,7 +2905,7 @@ function SalesTab({ data, update, engineResult }: any) {
           {purchaseInvoiceMonths.map((val: number, i: number) => (
             <div key={i}>
               <Label className="text-[10px] text-slate-600">Month {i + 1}</Label>
-              <Input type="number" value={val} onChange={(e) => updPurchInvMonth(i, Number(e.target.value))} className="h-8 text-right text-xs" />
+              <InlineFormattedNumber value={val} onChange={(v) => updPurchInvMonth(i, v)} className="h-8 text-xs" />
             </div>
           ))}
         </div>
@@ -3026,7 +3231,28 @@ function ExpensesTab({ data, update, engineResult }: any) {
         </div>
 
         <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Field label="Other Loan Installments (monthly ₦)" type="number" value={data.otherLoanInstallments} onChange={(v: any) => update('otherLoanInstallments', Number(v))} />
+          {/* v46: Other Loan Installments — auto-generated from family loan + other lenders */}
+          {(() => {
+            const familyLoan = Number(data.familyLoanInstallment) || 0;
+            const lenderInstallments = (data.otherLenderLoans || []).reduce(
+              (s: number, l: any) => s + (Number(l.installment) || 0), 0
+            );
+            const autoTotal = familyLoan + lenderInstallments;
+            return (
+              <div>
+                <Label className="text-xs text-slate-600">
+                  Other Loan Installments (monthly ₦)
+                  <span className="text-[9px] text-emerald-600 ml-1">auto-generated</span>
+                </Label>
+                <div className="mt-1 rounded-md border border-slate-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700">
+                  ₦{autoTotal.toLocaleString('en-NG', { maximumFractionDigits: 0 })}
+                </div>
+                <p className="text-[9px] text-slate-400 mt-0.5">
+                  = Family Loan (₦{familyLoan.toLocaleString()}) + Other Lenders (₦{lenderInstallments.toLocaleString()})
+                </p>
+              </div>
+            );
+          })()}
           <Field label="Buffer Rate (decimal, 0.20 = 20%)" type="number" value={data.bufferRate} onChange={(v: any) => update('bufferRate', Number(v))} />
         </div>
       </div>
@@ -3122,13 +3348,13 @@ function AssetsTab({ data, update, engineResult }: any) {
           <tbody className="divide-y divide-slate-100">
             {(rows || []).map((r: any, i: number) => (
               <tr key={i}>
-                <td className="px-2 py-1"><Input value={r.item} onChange={(e) => onUpdate(i, 'item', e.target.value)} className="h-7 text-xs" /></td>
+                <td className="px-2 py-1"><Input value={r.item || ''} onChange={(e) => onUpdate(i, 'item', e.target.value)} className="h-7 text-xs" placeholder="Enter item name" /></td>
                 <td className="px-2 py-1">
                   <select value={r.condition} onChange={(e) => onUpdate(i, 'condition', e.target.value)} className="rounded border border-slate-300 px-1 py-1 text-xs w-full">
                     {conditions.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </td>
-                <td className="px-2 py-1"><Input type="number" value={r.value} onChange={(e) => onUpdate(i, 'value', Number(e.target.value))} className="h-7 w-28 text-right text-xs" /></td>
+                <td className="px-2 py-1"><InlineFormattedNumber value={r.value} onChange={(v) => onUpdate(i, 'value', v)} className="h-7 w-28 text-xs" /></td>
                 <td className="px-2 py-1"><Button size="sm" variant="ghost" onClick={() => onRemove(i)} className="h-6 w-6 p-0"><Trash2 className="h-3 w-3" /></Button></td>
               </tr>
             ))}
@@ -3173,9 +3399,9 @@ function AssetsTab({ data, update, engineResult }: any) {
           <tbody className="divide-y divide-slate-100">
             {(rows || []).map((r: any, i: number) => (
               <tr key={i}>
-                <td className="px-2 py-1"><Input value={r.item} onChange={(e) => onUpdate(i, 'item', e.target.value)} className="h-7 text-xs" /></td>
+                <td className="px-2 py-1"><Input value={r.item || ''} onChange={(e) => onUpdate(i, 'item', e.target.value)} className="h-7 text-xs" placeholder="Enter item name" /></td>
                 <td className="px-2 py-1"><Input value={r.licensePlate} onChange={(e) => onUpdate(i, 'licensePlate', e.target.value)} className="h-7 text-xs uppercase" /></td>
-                <td className="px-2 py-1"><Input type="number" value={r.value} onChange={(e) => onUpdate(i, 'value', Number(e.target.value))} className="h-7 w-28 text-right text-xs" /></td>
+                <td className="px-2 py-1"><InlineFormattedNumber value={r.value} onChange={(v) => onUpdate(i, 'value', v)} className="h-7 w-28 text-xs" /></td>
                 <td className="px-2 py-1"><Button size="sm" variant="ghost" onClick={() => onRemove(i)} className="h-6 w-6 p-0"><Trash2 className="h-3 w-3" /></Button></td>
               </tr>
             ))}
@@ -3220,9 +3446,9 @@ function AssetsTab({ data, update, engineResult }: any) {
           <tbody className="divide-y divide-slate-100">
             {(rows || []).map((r: any, i: number) => (
               <tr key={i}>
-                <td className="px-2 py-1"><Input value={r.item} onChange={(e) => onUpdate(i, 'item', e.target.value)} className="h-7 text-xs" /></td>
+                <td className="px-2 py-1"><Input value={r.item || ''} onChange={(e) => onUpdate(i, 'item', e.target.value)} className="h-7 text-xs" placeholder="Enter item name" /></td>
                 <td className="px-2 py-1"><Input value={r.location} onChange={(e) => onUpdate(i, 'location', e.target.value)} className="h-7 text-xs" /></td>
-                <td className="px-2 py-1"><Input type="number" value={r.value} onChange={(e) => onUpdate(i, 'value', Number(e.target.value))} className="h-7 w-28 text-right text-xs" /></td>
+                <td className="px-2 py-1"><InlineFormattedNumber value={r.value} onChange={(v) => onUpdate(i, 'value', v)} className="h-7 w-28 text-xs" /></td>
                 <td className="px-2 py-1"><Button size="sm" variant="ghost" onClick={() => onRemove(i)} className="h-6 w-6 p-0"><Trash2 className="h-3 w-3" /></Button></td>
               </tr>
             ))}
@@ -3429,12 +3655,25 @@ function AssetsTab({ data, update, engineResult }: any) {
         <Card className="p-4 bg-purple-50">
           <h4 className="text-sm font-bold text-purple-900 mb-2">Computed Ratios</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Net Worth</p><p className="font-bold">₦{((data.cashAtHand + data.cashInBanks + data.receivables + baGrand + faGrand) - (data.shortTermLiabilities + data.longTermLiabilities)).toLocaleString()}</p></div>
-            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Current Ratio</p><p className="font-bold">{engineResult.ratios.currentRatio.toFixed(2)}</p></div>
-            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Quick Ratio</p><p className="font-bold">{engineResult.ratios.quickRatio.toFixed(2)}</p></div>
-            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Equity Ratio</p><p className="font-bold">{engineResult.ratios.equityRatio.toFixed(1)}%</p></div>
-            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Gearing Ratio</p><p className={cn('font-bold', engineResult.ratios.gearingRatio > 0.35 ? 'text-red-600' : 'text-emerald-700')}>{(engineResult.ratios.gearingRatio * 100).toFixed(1)}%</p></div>
-            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Debt to Assets</p><p className="font-bold">{engineResult.ratios.debtToAssets.toFixed(1)}%</p></div>
+            {(() => {
+              // v46: Fix null values — use Number() || 0 for all balance sheet fields
+              const cash = Number(data.cashAtHand) || 0;
+              const banks = Number(data.cashInBanks) || 0;
+              const recv = Number(data.receivables) || 0;
+              const stl = Number(data.shortTermLiabilities) || 0;
+              const ltl = Number(data.longTermLiabilities) || 0;
+              const netWorth = (cash + banks + recv + baGrand + faGrand) - (stl + ltl);
+              return (
+                <>
+                  <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Net Worth</p><p className="font-bold">₦{netWorth.toLocaleString()}</p></div>
+                  <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Current Ratio</p><p className="font-bold">{engineResult.ratios.currentRatio.toFixed(2)}</p></div>
+                  <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Quick Ratio</p><p className="font-bold">{engineResult.ratios.quickRatio.toFixed(2)}</p></div>
+                  <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Equity Ratio</p><p className="font-bold">{engineResult.ratios.equityRatio.toFixed(1)}%</p></div>
+                  <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Gearing Ratio</p><p className={cn('font-bold', engineResult.ratios.gearingRatio > 0.35 ? 'text-red-600' : 'text-emerald-700')}>{(engineResult.ratios.gearingRatio * 100).toFixed(1)}%</p></div>
+                  <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Debt to Assets</p><p className="font-bold">{engineResult.ratios.debtToAssets.toFixed(1)}%</p></div>
+                </>
+              );
+            })()}
           </div>
         </Card>
       )}
@@ -3459,7 +3698,8 @@ function SecurityTab({ data, update, engineResult }: any) {
       <GuarantorRegisterSection data={data} update={update} />
 
       {/* G10: Guarantor Business Verification */}
-      <GuarantorBizVerificationSection data={data} update={update} />
+      {/* v46: Replaced GuarantorBizVerificationSection with Document Upload area */}
+      <SupportDocumentUploadSection data={data} update={update} />
 
       {/* Legacy guarantor DSR analysis (preserved) */}
       <GuarantorDsrAnalysisSection data={data} update={update} engineResult={engineResult} />
@@ -3536,27 +3776,15 @@ function CollateralRegisterSection({ data, update }: any) {
         </Button>
       </div>
 
-      {/* v42-P5: Configurable depreciation rates */}
-      <div className="mb-3 grid grid-cols-2 gap-3 p-2 bg-slate-50 rounded">
-        <div>
+      {/* v46: Depreciation rates are LOCKED (not adjustable per compliance) */}
+      <div className="mb-3 grid grid-cols-2 gap-3 p-2 bg-slate-100 rounded">
+        <div className="flex items-center justify-between">
           <Label className="text-[10px] uppercase text-slate-500">Movable Depreciation Rate</Label>
-          <Input
-            type="number"
-            step="0.05"
-            value={data.movableDepreciationRate ?? 0.20}
-            onChange={(e) => update('movableDepreciationRate', Number(e.target.value))}
-            className="mt-1 text-xs h-7"
-          />
+          <Badge className="bg-slate-200 text-slate-700 text-[10px]">20% (locked)</Badge>
         </div>
-        <div>
+        <div className="flex items-center justify-between">
           <Label className="text-[10px] uppercase text-slate-500">Immovable Depreciation Rate</Label>
-          <Input
-            type="number"
-            step="0.05"
-            value={data.immovableDepreciationRate ?? 0.40}
-            onChange={(e) => update('immovableDepreciationRate', Number(e.target.value))}
-            className="mt-1 text-xs h-7"
-          />
+          <Badge className="bg-slate-200 text-slate-700 text-[10px]">40% (locked)</Badge>
         </div>
       </div>
 
@@ -3852,17 +4080,35 @@ function GuarantorRegisterSection({ data, update }: any) {
               <Field label="Monthly Sales (₦)" type="number" value={g.monthlySales || 0} onChange={(v: any) => updateG(idx, 'monthlySales', Number(v))} />
               <Field label="Cost of Goods Sold (₦)" type="number" value={g.costOfGoodsSold || 0} onChange={(v: any) => updateG(idx, 'costOfGoodsSold', Number(v))} />
               <Field label="Operation/Family Expenses (₦)" type="number" value={g.operationExpenses} onChange={(v: any) => updateG(idx, 'operationExpenses', Number(v))} />
-              <Field label="WFL Installment Amount (₦)" type="number" value={g.wflInstallmentAmount || 0} onChange={(v: any) => updateG(idx, 'wflInstallmentAmount', Number(v))} />
+              {/* v46: WFL Installment is auto-computed if guarantor is a WFL client */}
+              <Field
+                label="Existing Installment (₦) — auto if WFL client"
+                type="number"
+                value={g.wflInstallmentAmount || 0}
+                onChange={(v: any) => updateG(idx, 'wflInstallmentAmount', Number(v))}
+              />
             </div>
 
-            {/* v42-P6: Auto-computed DSR (mirrors Excel M23/M24, M47/M48) */}
+            {/* v46: Auto-compute note */}
+            {g.isWflClient && (
+              <p className="text-[10px] text-emerald-600 mt-1">
+                ✓ Guarantor is a WFL client — installment auto-factors their WFL loan + any loans they're guaranteeing.
+                Override above if the auto-figure needs adjustment.
+              </p>
+            )}
+
+            {/* v46: Auto-computed DSR (mirrors Excel M23/M24, M47/M48) */}
             {(() => {
               const grossProfit = (Number(g.monthlySales) || 0) - (Number(g.costOfGoodsSold) || 0);
               const netProfit = grossProfit - (Number(g.operationExpenses) || 0);
               const repaymentCapacity = netProfit - (Number(g.wflInstallmentAmount) || 0);
               const dsr = repaymentCapacity > 0 ? (Number(g.wflInstallmentAmount) || 0) / repaymentCapacity : 0;
               return (
-                <div className="mt-2 grid grid-cols-3 gap-2 p-2 bg-emerald-50 rounded">
+                <div className="mt-2 grid grid-cols-4 gap-2 p-2 bg-emerald-50 rounded">
+                  <div className="text-center">
+                    <p className="text-[9px] uppercase text-slate-500">Monthly Income</p>
+                    <p className="text-xs font-bold text-emerald-700">₦{(Number(g.monthlySales) || 0).toLocaleString()}</p>
+                  </div>
                   <div className="text-center">
                     <p className="text-[9px] uppercase text-slate-500">Gross Profit</p>
                     <p className="text-xs font-bold text-emerald-700">₦{(grossProfit || 0).toLocaleString()}</p>
@@ -3893,92 +4139,99 @@ function GuarantorRegisterSection({ data, update }: any) {
 }
 
 // ============================================================================
-// G10: GUARANTOR BUSINESS VERIFICATION — Excel GUARANTORS' BIZ VERIFICATION
+// v46: SUPPORT DOCUMENT UPLOAD — replaces guarantor business verification
+// Upload area for statement of account, cheque leaflet, letter of non-
+// indebtedness, and other relevant documents used for the analysis.
 // ============================================================================
 
-function GuarantorBizVerificationSection({ data, update }: any) {
-  const fmtNaira = (n: number) => '₦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
-  const verifications: any[] = data.guarantorBizVerifications || [];
-  const updateV = (idx: number, key: string, val: any) => {
-    const newArr = [...verifications];
+function SupportDocumentUploadSection({ data, update }: any) {
+  const docs: any[] = data.supportDocuments || [];
+  const updateDoc = (idx: number, key: string, val: any) => {
+    const newArr = [...docs];
     newArr[idx] = { ...newArr[idx], [key]: val };
-    update('guarantorBizVerifications', newArr);
+    update('supportDocuments', newArr);
   };
-  const addV = () => {
-    if (verifications.length >= 2) return;
-    update('guarantorBizVerifications', [...verifications, {
-      guarantorName: '', businessName: '', businessAddress: '',
-      yearsInOperation: 0, stockValue: 0, monthlySales: 0, monthlyExpenses: 0,
-      netProfit: 0, verificationNotes: '', verifiedBy: '', verifiedAt: '', isVerified: false,
-    }]);
-  };
-  const removeV = (idx: number) => update('guarantorBizVerifications', verifications.filter((_: any, i: number) => i !== idx));
+  const addDoc = () => update('supportDocuments', [...docs, { type: '', fileName: '', uploadedAt: '', notes: '' }]);
+  const removeDoc = (idx: number) => update('supportDocuments', docs.filter((_: any, i: number) => i !== idx));
 
-  // Auto-compute net profit
-  const computeNetProfit = (v: any) => (Number(v.monthlySales) || 0) - (Number(v.monthlyExpenses) || 0);
+  const docTypes = [
+    'Bank Statement of Account',
+    'Cheque Leaflet',
+    'Letter of Non-Indebtedness',
+    'CAC Document',
+    'Utility Bill',
+    'ID Document',
+    'Collateral Document',
+    'Guarantor ID',
+    'Other',
+  ];
 
   return (
     <Card className="p-4">
       <div className="flex justify-between items-center mb-3">
         <div>
-          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Guarantor Business Verification</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">Excel GUARANTORS&apos; BIZ VERIFICATION sheet — verify each guarantor&apos;s business independently.</p>
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Support Documents</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Upload statement of account used for analysis, cheque leaflets, letter of non-indebtedness, and other relevant documents.
+          </p>
         </div>
-        <Button size="sm" variant="outline" onClick={addV} disabled={verifications.length >= 2}>
-          <Plus className="h-3.5 w-3.5 mr-1" />Add Verification
-        </Button>
+        <Button size="sm" variant="outline" onClick={addDoc}><Plus className="h-3.5 w-3.5 mr-1" />Add Document</Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {verifications.map((v: any, idx: number) => (
-          <Card key={idx} className="p-3 bg-amber-50 border-amber-200">
+      <div className="space-y-3">
+        {docs.map((d: any, idx: number) => (
+          <Card key={idx} className="p-3 bg-slate-50 dark:bg-slate-900 border-slate-200">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-bold text-amber-700 uppercase">Verification #{idx + 1}</h4>
-              <div className="flex items-center gap-2">
-                <CheckField
-                  label="Verified"
-                  checked={!!v.isVerified}
-                  onChange={(val: any) => updateV(idx, 'isVerified', val)}
+              <Badge className="bg-emerald-100 text-emerald-700 text-[10px]">#{idx + 1}</Badge>
+              <Button size="sm" variant="ghost" onClick={() => removeDoc(idx)} className="h-6 w-6 p-0">
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <div>
+                <Label className="text-xs text-slate-600">Document Type</Label>
+                <select
+                  value={d.type || ''}
+                  onChange={(e) => updateDoc(idx, 'type', e.target.value)}
+                  className="mt-1 w-full rounded border border-slate-300 px-2 py-2 text-xs"
+                >
+                  <option value="">— Select —</option>
+                  {docTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <Label className="text-xs text-slate-600">File Name / Reference</Label>
+                <Input
+                  value={d.fileName || ''}
+                  onChange={(e) => updateDoc(idx, 'fileName', e.target.value)}
+                  className="mt-1 text-xs h-8"
+                  placeholder="e.g. Statement_Oct_2025.pdf"
                 />
-                <Button size="sm" variant="ghost" onClick={() => removeV(idx)} className="h-6 w-6 p-0">
-                  <Trash2 className="h-3 w-3" />
-                </Button>
+              </div>
+              <div>
+                <Label className="text-xs text-slate-600">Date Uploaded</Label>
+                <Input
+                  type="date"
+                  value={d.uploadedAt || ''}
+                  onChange={(e) => updateDoc(idx, 'uploadedAt', e.target.value)}
+                  className="mt-1 text-xs h-8"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-slate-600">Notes</Label>
+                <Input
+                  value={d.notes || ''}
+                  onChange={(e) => updateDoc(idx, 'notes', e.target.value)}
+                  className="mt-1 text-xs h-8"
+                  placeholder="Optional notes"
+                />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Guarantor Name" value={v.guarantorName} onChange={(val: any) => updateV(idx, 'guarantorName', val)} />
-              <Field label="Business Name" value={v.businessName} onChange={(val: any) => updateV(idx, 'businessName', val)} />
-              <div className="col-span-2">
-                <Field label="Business Address" value={v.businessAddress} onChange={(val: any) => updateV(idx, 'businessAddress', val)} />
-              </div>
-              <Field label="Years in Operation" type="number" value={v.yearsInOperation} onChange={(val: any) => updateV(idx, 'yearsInOperation', Number(val))} />
-              <Field label="Stock Value (₦)" type="number" value={v.stockValue} onChange={(val: any) => updateV(idx, 'stockValue', Number(val))} />
-              <Field label="Monthly Sales (₦)" type="number" value={v.monthlySales} onChange={(val: any) => updateV(idx, 'monthlySales', Number(val))} />
-              <Field label="Monthly Expenses (₦)" type="number" value={v.monthlyExpenses} onChange={(val: any) => updateV(idx, 'monthlyExpenses', Number(val))} />
-              <Field label="Net Profit (auto)" type="number" value={computeNetProfit(v)} readOnly />
-              <Field label="Verified By" value={v.verifiedBy} onChange={(val: any) => updateV(idx, 'verifiedBy', val)} />
-              <Field label="Verified At" type="date" value={v.verifiedAt} onChange={(val: any) => updateV(idx, 'verifiedAt', val)} />
-            </div>
-            <div className="mt-2">
-              <Label className="text-xs text-slate-600">Verification Notes</Label>
-              <Textarea
-                value={v.verificationNotes}
-                onChange={(e) => updateV(idx, 'verificationNotes', e.target.value)}
-                rows={2}
-                className="mt-1 text-xs"
-                placeholder="Detailed notes from the guarantor business visit..."
-              />
-            </div>
-            {v.isVerified && (
-              <div className="mt-2 p-2 bg-emerald-100 rounded text-xs text-emerald-700 font-semibold">
-                ✓ This guarantor&apos;s business has been verified. Net profit: {fmtNaira(computeNetProfit(v))}/month.
-              </div>
-            )}
           </Card>
         ))}
-        {verifications.length === 0 && (
-          <p className="col-span-full text-center text-xs text-slate-400 py-4">
-            No guarantor business verifications added yet.
+        {docs.length === 0 && (
+          <p className="text-center text-xs text-slate-400 py-4">
+            No documents added yet. Click "Add Document" to upload supporting documents.
           </p>
         )}
       </div>
@@ -4537,13 +4790,22 @@ function CrossChecksTab({ result }: { result: EngineResult | null }) {
             the <strong>least figure</strong> is used as the &quot;margin used&quot; for all downstream calculations.
           </p>
           {(() => {
-            const wm = result.weightedMargin;
-            const sectorBench = result.weightedMargin?.simpleAverage || 0; // fallback
-            const msb = computeMarginSummaryBase(
-              wm.weightedMargin,
-              wm.simpleAverage,
-              sectorBench * 100, // convert back to percentage for the function
-            );
+            // v50 — Use the AUTHORITATIVE marginSummary from the engine result
+            // instead of recomputing locally. The previous implementation
+            // passed `result.weightedMargin.simpleAverage` as the sector
+            // benchmark, which made the displayed "Sector Benchmark Margin"
+            // actually equal the Simple Average Margin — masking the real
+            // admin-configured sector benchmark.
+            //
+            // Now the engine's executeFullAppraisal() computes marginSummary
+            // once from the authoritative inputs:
+            //   averageMargin  = AVERAGEIF(lineMargins, "<>0")
+            //   weightedMargin = Σ(margin × costShare)
+            //   benchmarkMargin = data.sectorBenchmarkMargin (DB-configured)
+            //   marginUsed = LEAST non-zero of the three
+            // All downstream UI display + downstream engine calculations
+            // (purchases, cashflow, DSR) read from this one source.
+            const msb = result.marginSummary;
             const rows = [
               { label: 'Average Margin (simple)', value: msb.averageMargin, source: 'average' },
               { label: 'Weighted Margin (by cost share)', value: msb.weightedMargin, source: 'weighted' },
@@ -5159,35 +5421,171 @@ function CommitteeSignatureSection() {
 // SHARED FORM COMPONENTS
 // ============================================================================
 
-// v45: Field component — shows empty string for 0/null number values so users
-// can start typing immediately without having to delete the "0" first.
-// For text fields, empty/null shows as empty.
-function Field({ label, value, onChange, type = 'text', readOnly }: any) {
-  // v45: If it's a number field and the value is 0, null, or undefined,
-  // show empty string so the user can type without clearing first.
-  // When the user clears the field, it sends '' which the caller should
-  // handle (most callers use Number(v) which converts '' to 0).
-  const displayValue = (() => {
-    if (value === null || value === undefined) return '';
-    if (type === 'number' && value === 0) return '';  // Show empty for 0
-    return value;
-  })();
+function FormattedNumberInput({
+  value,
+  onChange,
+  readOnly,
+  placeholder,
+  className,
+}: {
+  value: any;
+  onChange?: (val: number) => void;
+  readOnly?: boolean;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [display, setDisplay] = useState<string | null>(null);
 
+  const externalDisplay =
+    value === null ||
+    value === undefined ||
+    value === '' ||
+    Number.isNaN(Number(value)) ||
+    Number(value) === 0
+      ? ''
+      : Number(value).toLocaleString('en-NG', {
+          maximumFractionDigits: 2,
+        });
+
+  const shownValue = display !== null ? display : externalDisplay;
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (readOnly) return;
+
+    const raw = e.target.value.replace(/[^0-9.]/g, '');
+
+    if (raw === '') {
+      setDisplay('');
+      onChange?.(0);
+      return;
+    }
+
+    const num = Number(raw);
+
+    if (Number.isNaN(num)) return;
+
+    setDisplay(
+      num.toLocaleString('en-NG', {
+        maximumFractionDigits: 2,
+      }),
+    );
+
+    onChange?.(num);
+  };
+
+  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    if (readOnly) return;
+
+    e.target.select();
+  };
+
+  return (
+    <Input
+      type="text"
+      inputMode="decimal"
+      value={shownValue}
+      onChange={handleChange}
+      onFocus={handleFocus}
+      readOnly={readOnly}
+      placeholder={placeholder || '0'}
+      className={cn(className, 'text-right')}
+    />
+  );
+}
+
+// v46: Field component — uses FormattedNumberInput for number fields
+function Field({ label, value, onChange, type = 'text', readOnly }: any) {
   return (
     <div>
       <Label className="text-xs text-slate-600">{label}</Label>
-      <Input
-        type={type}
-        value={displayValue}
-        onChange={onChange ? (e) => onChange(e.target.value) : undefined}
-        readOnly={readOnly}
-        placeholder={type === 'number' ? '0' : ''}
-        className={cn('mt-1', readOnly && 'bg-slate-50 dark:bg-slate-900 text-slate-600')}
-      />
+      {type === 'number' ? (
+        <FormattedNumberInput
+          value={value}
+          onChange={onChange ? (v: number) => onChange(v) : undefined}
+          readOnly={readOnly}
+          className={cn('mt-1', readOnly && 'bg-slate-50 dark:bg-slate-900 text-slate-600')}
+        />
+      ) : (
+        <Input
+          type={type}
+          value={value ?? ''}
+          onChange={onChange ? (e) => onChange(e.target.value) : undefined}
+          readOnly={readOnly}
+          className={cn('mt-1', readOnly && 'bg-slate-50 dark:bg-slate-900 text-slate-600')}
+        />
+      )}
     </div>
   );
 }
 
+// v46: InlineFormattedNumber — for table cells where a full Field wrapper is too much
+function InlineFormattedNumber({
+  value,
+  onChange,
+  readOnly,
+  className,
+}: {
+  value: any;
+  onChange?: (val: number) => void;
+  readOnly?: boolean;
+  className?: string;
+}) {
+  const [display, setDisplay] = useState<string | null>(null);
+
+  const externalDisplay =
+    value === null ||
+    value === undefined ||
+    value === '' ||
+    Number.isNaN(Number(value)) ||
+    Number(value) === 0
+      ? ''
+      : Number(value).toLocaleString('en-NG', {
+          maximumFractionDigits: 2,
+        });
+
+  const shownValue = display !== null ? display : externalDisplay;
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (readOnly) return;
+
+    const raw = e.target.value.replace(/[^0-9.]/g, '');
+
+    if (raw === '') {
+      setDisplay('');
+      onChange?.(0);
+      return;
+    }
+
+    const num = Number(raw);
+
+    if (Number.isNaN(num)) return;
+
+    setDisplay(
+      num.toLocaleString('en-NG', {
+        maximumFractionDigits: 2,
+      }),
+    );
+
+    onChange?.(num);
+  };
+
+  return (
+    <Input
+      type="text"
+      inputMode="decimal"
+      value={shownValue}
+      onChange={handleChange}
+      onFocus={(e) => {
+        if (!readOnly) {
+          e.target.select();
+        }
+      }}
+      readOnly={readOnly}
+      placeholder="0"
+      className={cn('text-right', className)}
+    />
+  );
+}
 function SelectField({ label, value, onChange, options }: any) {
   return (
     <div>

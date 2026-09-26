@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireCustomerAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 
 // GET /api/customer/loan/[id]/agreement?userId=
@@ -7,10 +8,15 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // v51 — customer auth gate: identity derived from JWT, NOT body.userId.
+  const authResult_v51 = await requireCustomerAuth(req);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+  const authPayload_v51 = authResult_v51 as { id: string; type: string };
+
   try {
     const { id } = await params;
     const url = new URL(req.url);
-    const userId = url.searchParams.get('userId');
+    const userId = authPayload_v51.id; // v53 - derived from JWT
 
     const loan = await db.loanApplicants.findUnique({
       where: { id },
@@ -39,11 +45,22 @@ export async function GET(
       }, { status: 403 });
     }
 
-    const principal = loan.finalAmount || loan.vettedAmount || loan.approvedAmount || loan.amount;
+    // v51 — Decimal arithmetic: wrap each Decimal field with Number()
+    // so the resulting principal is a plain number (not number | Decimal).
+    const principal = Number(loan.finalAmount) || Number(loan.vettedAmount) || Number(loan.approvedAmount) || Number(loan.amount);
     const tenorMonths = loan.finalTenure || loan.vettedDuration || loan.approvedTenor || loan.duration;
-    const annualRate = loan.finalInterestRate || loan.percent || 24;
-    const ccdPercent = loan.finalCcdFeePercent || 10;
-    const upfrontFeePercent = loan.finalUpfrontFeePercent || 1;
+    const annualRate = Number(loan.finalInterestRate) || Number(loan.percent); // v53-P3: removed || 24 fallback
+      if (annualRate == null || isNaN(Number(annualRate))) {
+        return NextResponse.json({ error: "Loan is missing finalInterestRate. MD approval must record the rate before this operation can proceed." }, { status: 400 });
+      }
+    const ccdPercent = Number(loan.finalCcdFeePercent); // v53-P3: removed || 10 fallback
+      if (ccdPercent == null || isNaN(Number(ccdPercent))) {
+        return NextResponse.json({ error: "Loan is missing finalCcdFeePercent." }, { status: 400 });
+      }
+    const upfrontFeePercent = Number(loan.finalUpfrontFeePercent); // v53-P3: removed || 1 fallback
+      if (upfrontFeePercent == null || isNaN(Number(upfrontFeePercent))) {
+        return NextResponse.json({ error: "Loan is missing finalUpfrontFeePercent." }, { status: 400 });
+      }
     const repaymentMethod = loan.repaymentPlan || 'REDUCING';
 
     // Build agreement data matching the DOCX structure

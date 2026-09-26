@@ -84,11 +84,12 @@ export async function POST(req: NextRequest) {
     // Update lastLogin timestamp
     await db.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } }).catch(() => {});
 
-    // Issue JWT token
+    // Issue JWT token — v48: Explicitly set type: 'customer' (was defaulting to 'admin')
     const token = signAuthToken({
       id: user.id,
       role: 'customer',
       branchId: user.branchId,
+      type: 'customer',  // P0-5 FIX: Customer tokens must NOT be admin type
     });
 
     // Strip password before returning

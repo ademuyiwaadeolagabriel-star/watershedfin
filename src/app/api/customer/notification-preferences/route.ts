@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireCustomerAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 
 /**
@@ -50,10 +51,14 @@ function parsePreferences(raw: string | null | undefined): NotificationPreferenc
  * GET /api/customer/notification-preferences?userId=
  */
 export async function GET(req: NextRequest) {
+  // v51 — customer auth gate: identity derived from JWT, NOT body.userId.
+  const authResult_v51 = await requireCustomerAuth(req);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+  const authPayload_v51 = authResult_v51 as { id: string; type: string };
+
   try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get('userId');
-    if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 });
+    // v53-IDOR-fix: userId from JWT, not query string.
+    const userId = authPayload_v51.id;
 
     const user = await db.user.findUnique({
       where: { id: userId },
@@ -75,14 +80,17 @@ export async function GET(req: NextRequest) {
  * Body: { userId, preferences: NotificationPreferences }
  */
 export async function PUT(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const { userId, preferences } = body as {
-      userId: string;
-      preferences: Partial<NotificationPreferences>;
-    };
+  // v51 — customer auth gate: identity derived from JWT, NOT body.userId.
+  const authResult_v51 = await requireCustomerAuth(req);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+  const authPayload_v51 = authResult_v51 as { id: string; type: string };
 
-    if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 });
+  try {
+    const body = await req.json().catch(() => ({}));
+    // v53-IDOR-fix: userId from JWT, not body.
+    const { preferences } = body as { preferences?: Partial<NotificationPreferences> } || {};
+    const userId = authPayload_v51.id;
+
     if (!preferences || typeof preferences !== 'object') {
       return NextResponse.json({ error: 'preferences object required' }, { status: 400 });
     }

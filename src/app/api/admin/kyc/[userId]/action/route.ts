@@ -25,7 +25,7 @@ export async function POST(
     const { userId } = await params;
     const body = await req.json();
     // A1 FIX: Get adminId from JWT
-    const authPayload = getAuthFromRequest(req);
+    const authPayload = await getAuthFromRequest(req);
     if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     const adminId = authPayload.id;
     const { action, reason } = body as {

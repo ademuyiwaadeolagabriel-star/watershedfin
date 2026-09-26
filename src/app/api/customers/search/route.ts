@@ -9,7 +9,7 @@ import { getAuthFromRequest } from '@/lib/auth';
  */
 export async function GET(req: NextRequest) {
   try {
-    const authPayload = getAuthFromRequest(req);
+    const authPayload = await getAuthFromRequest(req);
     if (!authPayload) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }

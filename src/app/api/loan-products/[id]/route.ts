@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // v53 — auth gate: least-privilege role check.
+  const authResult_v53 = await requireRole(req, ['super', 'md', 'hoc', 'cro']);
+  if (authResult_v53 instanceof NextResponse) return authResult_v53;
+
   try {
     const { id } = await params;
     const body = await req.json();
@@ -23,10 +28,13 @@ export async function PUT(
   }
 }
 
-export async function DELETE(
-  _req: NextRequest,
+export async function DELETE(req : NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // v53 — auth gate: least-privilege role check.
+  const authResult_v53 = await requireRole(req, ['super', 'md', 'hoc', 'cro']);
+  if (authResult_v53 instanceof NextResponse) return authResult_v53;
+
   try {
     const { id } = await params;
     await db.loanPlan.delete({ where: { id } });

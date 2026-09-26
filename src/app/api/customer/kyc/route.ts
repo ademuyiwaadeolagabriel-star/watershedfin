@@ -1,21 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireCustomerAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { KYC_STATUSES } from '@/lib/constants';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { randomUUID } from 'crypto';
+import { put } from '@vercel/blob';
 
-/**
- * GET /api/customer/kyc?userId=
- * Returns the current KYC status + which step the customer is on
- * (personal / physical / selfie) plus any decline reason.
- */
+// ============================================================================
+// /api/customer/kyc
+//   GET  — fetch own KYC status + current step
+//   POST — submit a KYC step (personal | physical | selfie)
+//
+// v53 — P1 IDOR fix + P0 #26 (public KYC storage):
+//   - userId is now derived from the JWT, not from ?userId= / body.userId
+//   - selfie is no longer written to /public/kyc/{userId}_selfie.png
+//     (public static file is unsuitable for biometric data). Now uses
+//     private blob storage (Vercel Blob access: 'private') + the
+//     authenticated proxy path /api/customer/kyc-file/{userId}/{filename}
+//     (introduced in v50) for reads. Dev mode falls back to /tmp.
+// ============================================================================
+
 export async function GET(req: NextRequest) {
+  // v51 — customer auth gate.
+  const authResult_v51 = await requireCustomerAuth(req);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+  const authPayload_v51 = authResult_v51 as { id: string; type: string };
+
   try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get('userId');
-    if (!userId) {
-      return NextResponse.json({ error: 'userId is required' }, { status: 400 });
-    }
+    // v53 — IDOR fix: userId from JWT, not query string.
+    const userId = authPayload_v51.id;
 
     const user = await db.user.findUnique({
       where: { id: userId },
@@ -73,35 +87,27 @@ export async function GET(req: NextRequest) {
     });
   } catch (e: any) {
     console.error('Customer KYC GET error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-/**
- * POST /api/customer/kyc
- * Body: { userId, step: 'personal'|'physical'|'selfie', data }
- *
- * - personal: validates & saves b_day/b_month/b_year, source_of_funds, doc_type,
- *   doc_number, city, state, country, line_1, postal_code on Business.
- *   Returns next step = 'physical'.
- * - physical: validates & saves business_type, doc_front, doc_back,
- *   proof_of_address, doc_shop_photo, doc_cac (if registered). Returns 'selfie'.
- * - selfie: accepts base64 PNG selfie, stores at /public/kyc/{userId}_selfie.png,
- *   sets kycStatus='PROCESSING', dispatches notification. Returns completed.
- */
 export async function POST(req: NextRequest) {
+  // v51 — customer auth gate.
+  const authResult_v51 = await requireCustomerAuth(req);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+  const authPayload_v51 = authResult_v51 as { id: string; type: string };
+
   try {
-    const body = await req.json();
-    const { userId, step, data } = body as {
-      userId: string;
+    const body = await req.json().catch(() => ({}));
+    const { step, data } = body as {
       step: 'personal' | 'physical' | 'selfie';
       data: Record<string, any>;
-    };
+    } || {};
 
-    if (!userId) {
-      return NextResponse.json({ error: 'userId is required' }, { status: 400 });
-    }
-    if (!['personal', 'physical', 'selfie'].includes(step)) {
+    // v53 — IDOR fix: userId from JWT, not body.
+    const userId = authPayload_v51.id;
+
+    if (!step || !['personal', 'physical', 'selfie'].includes(step)) {
       return NextResponse.json({ error: 'Invalid step' }, { status: 400 });
     }
 
@@ -197,43 +203,70 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // step === 'selfie' — store base64 PNG selfie
-    const selfieData: string = data.selfie;
+    // step === 'selfie' — store base64 PNG selfie PRIVATELY.
+    // v53 — P0 #26: previously wrote to /public/kyc/{userId}_selfie.png.
+    // Biometric data must not be in /public. Now uses the v50 kyc-upload
+    // pattern: private blob + authenticated proxy path.
+    const selfieData: string = data?.selfie;
     if (!selfieData || typeof selfieData !== 'string') {
       return NextResponse.json({ error: 'Missing selfie image' }, { status: 400 });
     }
 
     // Strip data: URL prefix if present
     const base64 = selfieData.replace(/^data:image\/\w+;base64,/, '');
-    const kycDir = path.join(process.cwd(), 'public', 'kyc');
-    await fs.mkdir(kycDir, { recursive: true });
-    const fileName = `${userId}_selfie.png`;
-    await fs.writeFile(path.join(kycDir, fileName), Buffer.from(base64, 'base64'));
-    const selfiePath = `/kyc/${fileName}`;
+    const buf = Buffer.from(base64, 'base64');
 
-    // Update Business + User kycStatus
-    await db.business.update({
-      where: { id: businessId },
-      data: { selfie: selfiePath, kycStatus: KYC_STATUSES.PROCESSING },
-    });
-    await db.user.update({
-      where: { id: userId },
-      data: { kycStatus: KYC_STATUSES.PROCESSING },
+    // v53 — private storage. Use random filename + userId-prefixed path
+    // for ownership-check convenience at read time.
+    const safeName = `${userId}/${randomUUID()}-selfie.png`;
+    let selfiePath: string;
+
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+      // Production: Vercel Blob private access. Blob URL is never exposed
+      // to the client; only the proxy path is stored on the Business row.
+      try {
+        await put(`kyc-private/${safeName}`, buf, {
+          access: 'private',
+          addRandomSuffix: false,
+          contentType: 'image/png',
+        });
+        selfiePath = `/api/customer/kyc-file/${safeName}`;
+      } catch (blobErr: any) {
+        console.error('[KYC] blob upload failed:', blobErr?.message);
+        return NextResponse.json({ error: 'Failed to upload selfie' }, { status: 502 });
+      }
+    } else {
+      // Dev: write to /tmp/uploads/kyc-private/{userId}/{filename}
+      const tmpDir = path.join('/tmp', 'uploads', 'kyc-private', userId);
+      await fs.mkdir(tmpDir, { recursive: true });
+      const tmpName = `${randomUUID()}-selfie.png`;
+      await fs.writeFile(path.join(tmpDir, tmpName), buf);
+      selfiePath = `/api/customer/kyc-file/${userId}/${tmpName}`;
+    }
+
+    // Update Business + User kycStatus atomically
+    await db.$transaction(async (tx) => {
+      await tx.business.update({
+        where: { id: businessId },
+        data: { selfie: selfiePath, kycStatus: KYC_STATUSES.PROCESSING },
+      });
+      await tx.user.update({
+        where: { id: userId },
+        data: { kycStatus: KYC_STATUSES.PROCESSING },
+      });
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'created',
+          module: 'kyc',
+          description: `${user.firstName} ${user.lastName} submitted KYC for review`,
+          severity: 'info',
+          metadata: JSON.stringify({ step: 'selfie', selfiePath, authSource: 'jwt' }),
+        },
+      });
     });
 
-    // Audit log
-    await db.auditLog.create({
-      data: {
-        userId,
-        action: 'created',
-        module: 'kyc',
-        description: `${user.firstName} ${user.lastName} submitted KYC for review`,
-        severity: 'info',
-        metadata: JSON.stringify({ step: 'selfie', selfiePath }),
-      },
-    });
-
-    // Dispatch in-app notification email (best-effort)
+    // Dispatch in-app notification email (best-effort, post-commit)
     if (user.email) {
       await db.sentEmail.create({
         data: {
@@ -254,6 +287,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (e: any) {
     console.error('Customer KYC POST error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

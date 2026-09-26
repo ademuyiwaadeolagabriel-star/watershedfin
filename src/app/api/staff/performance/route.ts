@@ -13,7 +13,7 @@ import { getAuthFromRequest } from '@/lib/auth';
  */
 export async function GET(req: NextRequest) {
   try {
-    const authPayload = getAuthFromRequest(req);
+    const authPayload = await getAuthFromRequest(req);
     if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
 
     const { searchParams } = new URL(req.url);
@@ -59,8 +59,9 @@ export async function GET(req: NextRequest) {
       const approved = loans.filter(l => l.status === 'running' || l.status === 'paid').length;
       const declined = loans.filter(l => l.status === 'declined').length;
       const disbursed = loans.filter(l => l.disbursedAt);
-      const totalDisbursed = disbursed.reduce((sum, l) => sum + (l.finalAmount || l.amount), 0);
-      const avgAmount = loans.length > 0 ? loans.reduce((s, l) => s + (l.amount || 0), 0) / loans.length : 0;
+      const totalDisbursed = disbursed.reduce((sum, l) => sum + Number(l.finalAmount || l.amount), 0);
+      // v51 — Decimal arithmetic: l.amount is Decimal, wrap with Number().
+      const avgAmount = loans.length > 0 ? loans.reduce((s, l) => s + Number(l.amount || 0), 0) / loans.length : 0;
 
       // Processing time: submitted to approved
       const processingTimes = loans

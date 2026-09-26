@@ -1,71 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
-import { requireRole, getAuthFromRequest, extractToken, verifyAuthToken } from '@/lib/auth';
+import { requireRole } from '@/lib/auth';
 import { PERMISSION_FLAGS } from '@/lib/constants';
 
 /**
  * POST /api/admin/staff
- * Create a new staff account (super admin only)
- * Body: { firstName, lastName, username, email, phone?, password, role, branchId?, permissions: { flag: bool }, adminId? }
+ * Authorization: Bearer <admin-jwt (role=super)>
+ * Body: { firstName, lastName, username, email, phone?, password, role, branchId?, permissions: { flag: bool } }
  *
- * v34.1: Added fallback — if no Bearer token, accept adminId in body and verify
- * the admin is a super admin by looking them up in the DB. This handles the case
- * where the browser has an old session without a JWT token.
+ * v50 FIX (Issue #27): Removed the `body.adminId` fallback entirely.
+ * Identity MUST come from a verified JWT — never from caller-supplied data.
+ * The previous fallback allowed any unauthenticated caller to create
+ * admin accounts simply by passing `adminId: <known super admin id>`
+ * in the request body, because the code looked up the admin by ID
+ * without any token verification at all.
  *
- * v40.1: Rewrote auth flow — body is now parsed ONCE and reused for both
- * fallback auth and createStaff. Fixes the read-only `req.body` assignment
- * and the double-parse issue that caused 500s.
+ * v50 also removes the `authPayload?.id || body.adminId` pattern from
+ * audit logging — actor identity is always the JWT subject.
  */
 export async function POST(req: NextRequest) {
-  // Parse body ONCE up-front so it can be used by both auth fallback and createStaff
+  // v50 — auth gate mandatory, no fallback. Only 'super' role allowed.
+  const authResult = await requireRole(req, ['super']);
+  if (authResult instanceof NextResponse) return authResult;
+  const authPayload = authResult as { id: string; role: string };
+
+  // Parse body once and reuse.
   let body: any = {};
   try {
     body = await req.json();
   } catch {
     return NextResponse.json(
       { error: 'Invalid JSON body' },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
-  // Try standard token-based auth first
-  let authPayload = getAuthFromRequest(req);
-
-  // If no valid token, try adminId fallback (for old sessions without JWT)
-  if (!authPayload || authPayload.role === 'unknown') {
-    try {
-      const fallbackAdminId = body.adminId;
-
-      if (fallbackAdminId) {
-        const admin = await db.admin.findUnique({
-          where: { id: fallbackAdminId },
-          select: { id: true, role: true, status: true },
-        });
-        if (admin && admin.role === 'super' && admin.status === 1) {
-          authPayload = { id: admin.id, role: admin.role, type: 'admin' as const };
-        } else {
-          return NextResponse.json({ error: 'Super admin access required' }, { status: 403 });
-        }
-      } else {
-        return NextResponse.json(
-          { error: 'Authentication required. Provide a valid Bearer token or adminId.' },
-          { status: 401 }
-        );
-      }
-    } catch (e: any) {
-      return NextResponse.json(
-        { error: 'Authentication failed: ' + (e.message || 'Unknown error') },
-        { status: 401 }
-      );
-    }
-  }
-
-  return await createStaff(body, authPayload!, req);
+  return await createStaff(body, authPayload, req);
 }
 
 async function createStaff(body: any, authPayload: { id: string; role: string }, req: NextRequest) {
-  // Verify super admin role
+  // Verify super admin role (defensive — requireRole already checked).
   if (authPayload.role !== 'super') {
     return NextResponse.json({ error: 'Super admin access required' }, { status: 403 });
   }
@@ -109,8 +84,7 @@ async function createStaff(body: any, authPayload: { id: string; role: string },
       ? String(branchId)
       : null;
 
-    // Build create data — use type any to allow v26 fields that may not be in Prisma client yet
-    // (if prisma generate hasn't been run after the v26 schema update)
+    // Build create data
     const createData: any = {
       firstName: String(firstName).trim(),
       lastName: String(lastName).trim(),

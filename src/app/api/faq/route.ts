@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requireRole } from '@/lib/auth';
 
 const DEFAULT_FAQS = [
   { question: 'How do I apply for a loan?', answer: 'Log in to your customer portal, click "Apply for Loan", select a loan product, enter the amount and tenor, and submit. Your Loan Officer will review and verify your BVN externally.', category: 'Loans' },
@@ -46,15 +47,22 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // v54 — Blocker 1: admin auth gate + adminId from JWT.
+  const authResult_v54 = await requireRole(req, ['super', 'md', 'comms', 'communications']);
+  if (authResult_v54 instanceof NextResponse) return authResult_v54;
+  const authPayload = authResult_v54 as { id: string; role: string };
+  const adminId = authPayload.id;
+
   try {
-    const { adminId, question, answer, category } = await req.json();
-    if (!adminId || !question || !answer) return NextResponse.json({ error: 'adminId, question, answer required' }, { status: 400 });
+    const body = await req.json().catch(() => ({}));
+    const { question, answer, category } = body || {};
+    if (!question || !answer) return NextResponse.json({ error: 'question, answer required' }, { status: 400 });
     const admin = await db.admin.findUnique({ where: { id: adminId } });
     if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
 
     const faq = await db.faqArticle.create({ data: { question, answer, category: category || 'General' } });
     return NextResponse.json({ faq });
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

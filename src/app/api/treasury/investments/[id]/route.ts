@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole, requireMakerChecker } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { computeMaturity, generateSubscriptionCode, refreshAccrual } from '@/lib/treasury';
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req : NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
+  const authResult_v51 = await requireRole(req, ['super', 'md', 'cfo', 'hoc', 'cro', 'treasury']);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+
   try {
     const { id } = await params;
     await refreshAccrual(id);
@@ -24,6 +29,28 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
+  const authResult_v51 = await requireRole(req, ['super', 'md', 'cfo', 'hoc', 'cro', 'treasury']);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+
+  // v53-P4 (audit #43/#44) — maker-checker gate (graceful rollout).
+  // Only enforced when the caller passes `?stage=propose|review|authorize|execute`.
+  // Without a stage query param the route falls back to its existing behavior.
+  // Applies to both `redeem` and `rollover` actions.
+  const url_v53 = new URL(req.url);
+  if (url_v53.searchParams.get('stage')) {
+    const mc_v53 = await requireMakerChecker(req, {
+      operation: 'treasury_investment_redeem_rollover',
+      stages: ['propose', 'review', 'authorize', 'execute'],
+      enforceSegregation: true,
+      makerRoles: ['treasury', 'cfo', 'finance'],
+      checkerRoles: ['treasury', 'cfo', 'finance'],
+      authorizerRoles: ['cfo', 'super'],
+      executorRoles: ['treasury', 'cfo', 'finance'],
+    });
+    if (mc_v53 instanceof NextResponse) return mc_v53;
+  }
+
   try {
     const { id } = await params;
     const body = await req.json();
@@ -39,10 +66,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     if (action === 'redeem') {
       // Liquidate: compute net payout (principal + accrued - penalty if early - wht)
+      // v51 — Decimal arithmetic: inv.accruedInterest is Decimal | null,
+      // inv.principal is Decimal, inv.whtDeducted is Decimal | null. Wrap
+      // each with Number() before arithmetic.
       const isEarly = new Date() < new Date(inv.maturityDate);
       const penaltyRate = isEarly ? (product?.earlyLiquidationPenalty ?? 0) : 0;
-      const penalty = (inv.accruedInterest * penaltyRate) / 100;
-      const netPayout = inv.principal + inv.accruedInterest - penalty - inv.whtDeducted;
+      const penalty = (Number(inv.accruedInterest || 0) * penaltyRate) / 100;
+      const netPayout = Number(inv.principal) + Number(inv.accruedInterest || 0) - penalty - Number(inv.whtDeducted || 0);
 
       await db.treasuryTransaction.create({
         data: {
@@ -67,9 +97,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     if (action === 'rollover') {
       const rolloverType = body.rolloverType || inv.rolloverType || 'principal_only';
-      let newPrincipal = inv.principal;
+      // v51 — Decimal arithmetic: inv.principal is Decimal, accruedInterest
+      // is Decimal | null. Wrap with Number().
+      let newPrincipal = Number(inv.principal);
       if (rolloverType === 'principal_plus_interest') {
-        newPrincipal = inv.principal + inv.accruedInterest;
+        newPrincipal = Number(inv.principal) + Number(inv.accruedInterest || 0);
       }
       const newTenor = Number(body.tenorDays) || inv.tenorDays;
       const newRate = body.rate ? Number(body.rate) : inv.interestRate;
@@ -86,7 +118,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         data: {
           investmentId: id,
           type: 'full_redemption',
-          amount: inv.principal + inv.accruedInterest,
+          // v51 — Decimal arithmetic: wrap inv.principal + accruedInterest.
+          amount: Number(inv.principal) + Number(inv.accruedInterest || 0),
           direction: 'credit',
           reference: `ROLLOUT-${inv.subscriptionCode}`,
         },

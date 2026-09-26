@@ -1,19 +1,71 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { hasPermission } from '@/lib/constants';
+import { hasPermission, ROLE_TO_MCC } from '@/lib/constants';
 
+// ============================================================================
 // POST /api/loans/[id]/snapshot
-// Body: { adminId, gate: 'lo'|'bm'|'analyst'|'hoc'|'cro'|'cfo'|'legal'|'md', data: {...}, lock?: boolean }
+// Authorization: Bearer <admin-jwt>
+// Body: { gate: 'lo'|'bm'|'analyst'|'hoc'|'cro'|'cfo'|'legal'|'md', data: {...}, lock?: boolean }
+//
+// v54 — Blocker 1 + audit #23 fix:
+//   - adminId removed from body; derived from JWT.
+//   - gate → role enforcement matrix: the caller's JWT role must match the
+//     gate they're writing. A LO cannot write the MD snapshot. This closes
+//     the "client chooses authority level" bypass.
+//   - The route still accepts `data` for backward compat, but the
+//     authoritative engine result is recomputed server-side in the
+//     appraisals route. The snapshot here is the role's signed-off view
+//     of the existing appraisal, not a client-supplied financial payload.
+// ============================================================================
+const GATE_TO_ROLE: Record<string, string[]> = {
+  lo: ['loan', 'super'],
+  bm: ['bm', 'super'],
+  analyst: ['analyst', 'credit', 'super'],
+  hoc: ['hoc', 'super'],
+  cro: ['cro', 'super'],
+  cfo: ['cfo', 'super'],
+  legal: ['legal', 'super'],
+  md: ['md', 'super'],
+};
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // v51 — auth gate.
+  const authResult_v51 = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'credit', 'loan', 'bm', 'legal', 'analyst', 'cfo']);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+  const authPayload = authResult_v51 as { id: string; role: string };
+
   try {
     const { id } = await params;
-    const { adminId, gate, data, lock } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    // v54 — Blocker 1: adminId from JWT, not body.
+    const adminId = authPayload.id;
+    const { gate, data, lock } = body || {};
 
-    if (!adminId || !gate || !data) {
-      return NextResponse.json({ error: 'adminId, gate, data required' }, { status: 400 });
+    if (!gate || !data) {
+      return NextResponse.json({ error: 'gate, data required' }, { status: 400 });
+    }
+
+    // v54 — gate → role enforcement. The caller's JWT role must be allowed
+    // for the gate they're writing. Closes the "client chooses authority
+    // level" bypass.
+    const allowedRoles = GATE_TO_ROLE[gate];
+    if (!allowedRoles) {
+      return NextResponse.json({ error: `Invalid gate: ${gate}` }, { status: 400 });
+    }
+    if (!allowedRoles.includes(authPayload.role)) {
+      return NextResponse.json(
+        {
+          error: `Gate '${gate}' requires role ${allowedRoles.join(' or ')}. Your role '${authPayload.role}' is not authorized to write this snapshot.`,
+          gate,
+          yourRole: authPayload.role,
+          requiredRoles: allowedRoles,
+        },
+        { status: 403 },
+      );
     }
 
     const admin = await db.admin.findUnique({ where: { id: adminId } });

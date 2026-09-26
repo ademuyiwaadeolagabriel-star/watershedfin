@@ -1,26 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthFromRequest } from '@/lib/auth';
+import { requireAuth } from '@/lib/auth';
 
 /**
  * POST /api/admin/blog/[id]/publish
+ * Authorization: Bearer <admin-jwt>
  *
- * Body: { adminId }
- * - Sets status = 'published'
- * - Creates an audit log entry
- * - Returns the updated post (sanitised — Blog has no secrets).
+ * v50 FIX (Issue #27): Removed the `body.adminId` fallback. Identity
+ * MUST come from the JWT — never from caller-supplied data. The
+ * previous `authPayload?.id || body.adminId` pattern allowed any
+ * authenticated admin to impersonate any other admin in audit logs
+ * simply by passing the other admin's ID in the request body.
  */
-
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // v50 — auth gate mandatory, no fallback.
+    const authResult = await requireAuth(req);
+    if (authResult instanceof NextResponse) return authResult;
+    const authPayload = authResult as { id: string; role: string };
+    const adminId = authPayload.id;
+
     const { id } = await params;
-    const body = await req.json().catch(() => ({}));
-    // Prefer JWT auth, fall back to body.adminId for legacy clients
-    const authPayload = getAuthFromRequest(req);
-    const adminId = authPayload?.id || body.adminId;
 
     const existing = await db.blog.findUnique({
       where: { id },
@@ -48,14 +51,11 @@ export async function POST(
       },
     });
 
-    // Audit log
-    let actor: any = null;
-    if (adminId) {
-      actor = await db.admin.findUnique({
-        where: { id: adminId },
-        select: { id: true, firstName: true, lastName: true, role: true },
-      });
-    }
+    // Audit log — actor always derived from the JWT.
+    const actor = await db.admin.findUnique({
+      where: { id: adminId },
+      select: { id: true, firstName: true, lastName: true, role: true },
+    });
     if (actor) {
       await db.auditLog.create({
         data: {
@@ -79,3 +79,4 @@ export async function POST(
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
+

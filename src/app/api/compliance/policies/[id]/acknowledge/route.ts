@@ -9,7 +9,7 @@ export async function POST(
   try {
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
-    const authPayload = getAuthFromRequest(req);
+    const authPayload = await getAuthFromRequest(req);
     if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     const adminId = authPayload.id;
     const metadata = body.metadata ? JSON.stringify(body.metadata) : null;

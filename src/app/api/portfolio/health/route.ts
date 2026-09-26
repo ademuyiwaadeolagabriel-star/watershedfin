@@ -12,7 +12,7 @@ import { getAuthFromRequest } from '@/lib/auth';
  */
 export async function GET(req: NextRequest) {
   try {
-    const authPayload = getAuthFromRequest(req);
+    const authPayload = await getAuthFromRequest(req);
     if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
 
     // Get all running loans
@@ -29,7 +29,8 @@ export async function GET(req: NextRequest) {
     });
 
     // Calculate portfolio totals
-    const totalPortfolio = loans.reduce((s, l) => s + (l.finalAmount || l.amount), 0);
+    // v51 — Decimal arithmetic: finalAmount/amount are Decimal, wrap with Number().
+    const totalPortfolio = loans.reduce((s, l) => s + Number(l.finalAmount || l.amount), 0);
     const defaultedLoans = loans.filter(l => l.defaulter);
     const nplRatio = loans.length > 0 ? (defaultedLoans.length / loans.length) * 100 : 0;
 

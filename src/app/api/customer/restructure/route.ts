@@ -1,34 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireCustomerAuth, requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { createNotification } from '@/lib/notifications';
 
 // ============================================================================
 // /api/customer/restructure
-// POST { userId, loanId, requestType, requestedTenor, reason }
-//      — customer creates a loan restructuring request
-// GET  ?userId=      — customer's restructuring requests
-// GET  ?adminId=     — admin view of all restructuring requests
-// PUT  { id, adminId, status, adminNotes }
-//      — admin approve/reject
+//   GET  — customer fetches their OWN restructuring requests
+//   POST — customer creates a restructuring request (cannot self-approve)
+//
+// v53 — P1 #6 fix: this route is now customer-only. The previous
+// implementation exposed a PUT endpoint with requireCustomerAuth that
+// accepted body.adminId and could approve/reject restructuring + mutate
+// loan tenor/maturity. That was a customer-impersonating-admin bypass.
+// The admin PUT path has been moved to /api/admin/restructure/[id]/route.ts
+// (new route, see that file) with requireRole(['super','md','hoc','cro']).
 // ============================================================================
 
 export async function GET(req: NextRequest) {
+  // v51 — customer auth gate.
+  const authResult_v51 = await requireCustomerAuth(req);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+  const authPayload_v51 = authResult_v51 as { id: string; type: string };
+  // v53 — IDOR fix: userId from JWT.
+  const userId = authPayload_v51.id;
+
   try {
     const url = new URL(req.url);
-    const userId = url.searchParams.get('userId');
-    const adminId = url.searchParams.get('adminId');
     const status = url.searchParams.get('status');
 
-    if (!userId && !adminId) {
-      return NextResponse.json(
-        { error: 'Either userId or adminId is required' },
-        { status: 400 },
-      );
-    }
-
-    const where: any = {};
-    if (userId) where.userId = userId;
-    if (adminId) where.adminId = adminId;
+    const where: any = { userId };
     if (status && status !== 'all') where.status = status;
 
     const requests = await db.loanRestructuring.findMany({
@@ -36,66 +36,50 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Enrich with loan + user details (LoanRestructuring has no FK relations)
+    // Enrich with loan + user details
     const loanIds = Array.from(new Set(requests.map((r) => r.loanApplicantId).filter(Boolean))) as string[];
-    const userIds = Array.from(new Set(requests.map((r) => r.userId).filter(Boolean))) as string[];
+    const loans = loanIds.length > 0
+      ? await db.loanApplicants.findMany({
+          where: { id: { in: loanIds } },
+          select: {
+            id: true,
+            applicationRef: true,
+            amount: true,
+            approvedAmount: true,
+            duration: true,
+            status: true,
+          },
+        }).catch(() => [])
+      : [];
 
-    const [loans, users] = await Promise.all([
-      loanIds.length > 0
-        ? db.loanApplicants
-            .findMany({
-              where: { id: { in: loanIds } },
-              select: {
-                id: true,
-                applicationRef: true,
-                amount: true,
-                approvedAmount: true,
-                duration: true,
-                status: true,
-              },
-            })
-            .catch(() => [])
-        : Promise.resolve([]),
-      userIds.length > 0
-        ? db.user
-            .findMany({
-              where: { id: { in: userIds } },
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                accountNumber: true,
-                phone: true,
-              },
-            })
-            .catch(() => [])
-        : Promise.resolve([]),
-    ]);
     const loanMap = new Map<string, any>(loans.map((l: any) => [l.id, l] as [string, any]));
-    const userMap = new Map<string, any>(users.map((u: any) => [u.id, u] as [string, any]));
 
     const enriched = requests.map((r) => ({
       ...r,
       loanApplicant: loanMap.get(r.loanApplicantId) || null,
-      user: userMap.get(r.userId) || null,
     }));
 
     return NextResponse.json({ requests: enriched });
   } catch (e: any) {
-    console.error('Restructure GET error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    console.error('Customer restructure GET error:', e);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest) {
-  try {
-    const { userId, loanId, requestType, requestedTenor, reason } = await req.json();
+  // v51 — customer auth gate.
+  const authResult_v51 = await requireCustomerAuth(req);
+  if (authResult_v51 instanceof NextResponse) return authResult_v51;
+  const authPayload_v51 = authResult_v51 as { id: string; type: string };
+  // v53 — IDOR fix: userId from JWT.
+  const userId = authPayload_v51.id;
 
-    if (!userId || !loanId) {
-      return NextResponse.json(
-        { error: 'userId and loanId are required' },
-        { status: 400 },
-      );
+  try {
+    const body = await req.json().catch(() => ({}));
+    const { loanId, requestType, requestedTenor, reason } = body || {};
+
+    if (!loanId) {
+      return NextResponse.json({ error: 'loanId is required' }, { status: 400 });
     }
     if (!requestType || !['extend_tenor', 'reduce_payment', 'grace_period'].includes(requestType)) {
       return NextResponse.json(
@@ -123,8 +107,12 @@ export async function POST(req: NextRequest) {
     if (!loan) {
       return NextResponse.json({ error: 'Loan not found' }, { status: 404 });
     }
+    // v53 — IDOR fix: ownership check uses JWT-derived userId.
     if (loan.userId !== userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+      return NextResponse.json(
+        { error: 'Forbidden: loan does not belong to authenticated customer.' },
+        { status: 403 },
+      );
     }
     if (loan.status !== 'running') {
       return NextResponse.json(
@@ -145,25 +133,38 @@ export async function POST(req: NextRequest) {
     }
 
     const currentTenor = loan.finalTenure || loan.approvedTenor || loan.duration;
-    const currentPayment = (loan.finalAmount || loan.approvedAmount || loan.amount) /
+    const currentPayment = (Number(loan.finalAmount) || Number(loan.approvedAmount) || Number(loan.amount)) /
       Math.max(1, currentTenor);
 
-    const restructuring = await db.loanRestructuring.create({
-      data: {
-        loanApplicantId: loanId,
-        userId,
-        requestType,
-        currentTenor,
-        requestedTenor: Number(requestedTenor),
-        currentPayment,
-        reason: reason.trim(),
-        status: 'pending',
-      },
+    // v53 — atomic: create restructure record + audit log in one transaction.
+    const restructuring = await db.$transaction(async (tx) => {
+      const r = await tx.loanRestructuring.create({
+        data: {
+          loanApplicantId: loanId,
+          userId,
+          requestType,
+          currentTenor,
+          requestedTenor: Number(requestedTenor),
+          currentPayment,
+          reason: reason.trim(),
+          status: 'pending',
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          action: 'created',
+          module: 'restructure',
+          description: `Customer ${userId} requested ${requestType} for loan ${loan.applicationRef}`,
+          severity: 'info',
+          metadata: JSON.stringify({ userId, loanId, restructuringId: r.id, authSource: 'jwt' }),
+        },
+      });
+      return r;
     });
 
-    // Notify the assigned Loan Officer (if any)
+    // Notify the assigned Loan Officer (if any) — fire-and-forget post-commit.
     if (loan.loanOfficer) {
-      await createNotification({
+      void createNotification({
         adminId: loan.loanOfficer.id,
         type: 'restructure_requested',
         title: 'Loan Restructuring Request',
@@ -175,7 +176,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Also notify HOC (Head of Credit) for restructuring approvals
+    // Also notify HOC for restructuring approvals
     const hocStaff = await db.admin
       .findMany({ where: { roleType: 'hoc', status: 1 }, select: { id: true } })
       .catch(() => []);
@@ -196,120 +197,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Audit
-    await db.auditLog
-      .create({
-        data: {
-          action: 'created',
-          module: 'restructure',
-          description: `Customer ${userId} requested ${requestType} for loan ${loan.applicationRef}`,
-          severity: 'info',
-          metadata: JSON.stringify({ userId, loanId, restructuringId: restructuring.id }),
-        },
-      })
-      .catch(() => {});
-
     return NextResponse.json({
       restructuring,
       message: 'Your restructuring request has been submitted. Your Loan Officer will review it within 48 hours.',
     });
   } catch (e: any) {
-    console.error('Restructure POST error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    console.error('Customer restructure POST error:', e);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-export async function PUT(req: NextRequest) {
-  try {
-    const { id, adminId, status, adminNotes } = await req.json();
-
-    if (!id || !adminId) {
-      return NextResponse.json({ error: 'id and adminId are required' }, { status: 400 });
-    }
-    if (!status || !['approved', 'rejected'].includes(status)) {
-      return NextResponse.json(
-        { error: 'status must be either "approved" or "rejected"' },
-        { status: 400 },
-      );
-    }
-
-    const existing = await db.loanRestructuring.findUnique({ where: { id } });
-    if (!existing) {
-      return NextResponse.json({ error: 'Restructuring request not found' }, { status: 404 });
-    }
-    if (existing.status !== 'pending') {
-      return NextResponse.json(
-        { error: `Request already ${existing.status}` },
-        { status: 400 },
-      );
-    }
-
-    const updated = await db.loanRestructuring.update({
-      where: { id },
-      data: {
-        status,
-        adminId,
-        adminNotes: adminNotes?.trim() || null,
-      },
-    });
-
-    // If approved, apply the new tenor on the loan
-    if (status === 'approved') {
-      try {
-        const newTenor = existing.requestedTenor;
-        // Recompute maturity from the disbursement/start date if available;
-        // otherwise fall back to "now + newTenor months".
-        const loan = await db.loanApplicants.findUnique({
-          where: { id: existing.loanApplicantId },
-          select: { startDate: true, disbursedAt: true },
-        });
-        const baseDate = loan?.startDate || loan?.disbursedAt || new Date();
-        const newMaturity = new Date(baseDate);
-        newMaturity.setMonth(newMaturity.getMonth() + newTenor);
-
-        await db.loanApplicants.update({
-          where: { id: existing.loanApplicantId },
-          data: {
-            finalTenure: newTenor,
-            maturityDate: newMaturity,
-          },
-        });
-      } catch (e: any) {
-        console.error('Failed to apply restructure to loan:', e);
-      }
-    }
-
-    // Notify the customer
-    await createNotification({
-      userId: existing.userId,
-      type: 'restructure_decision',
-      title: `Restructuring ${status === 'approved' ? 'Approved' : 'Rejected'}`,
-      message:
-        status === 'approved'
-          ? `Your loan restructuring request has been approved. New tenor: ${existing.requestedTenor} months. ${adminNotes ? `Notes: ${adminNotes}` : ''}`
-          : `Your loan restructuring request was rejected. ${adminNotes ? `Reason: ${adminNotes}` : 'Please contact your Loan Officer for more details.'}`,
-      category: 'loan',
-      actionLabel: 'View Loan',
-      actionView: 'customer-loan-breakdown',
-      actionParams: { loanId: existing.loanApplicantId },
-    });
-
-    // Audit
-    await db.auditLog
-      .create({
-        data: {
-          action: status === 'approved' ? 'approved' : 'rejected',
-          module: 'restructure',
-          description: `Admin ${adminId} ${status} restructuring request ${id}`,
-          severity: status === 'approved' ? 'info' : 'warning',
-          metadata: JSON.stringify({ adminId, restructuringId: id, status }),
-        },
-      })
-      .catch(() => {});
-
-    return NextResponse.json({ restructuring: updated });
-  } catch (e: any) {
-    console.error('Restructure PUT error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
-  }
-}
+// v53 — PUT removed from customer route. Admin approve/reject is now at
+// /api/admin/restructure/[id] with requireRole(['super','md','hoc','cro']).
