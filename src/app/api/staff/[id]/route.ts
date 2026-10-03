@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
 const PERM_FLAGS = [
   'loanOrigination', 'loanVetting', 'loanStructuring', 'loanAnalyst',
@@ -55,11 +56,24 @@ export async function PUT(
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const data: any = {};
+    const actor = authResult_v53 as { id: string; role: string; branchId?: string | null };
+    if (body.role !== undefined) {
+      const allowedRoles = ['admin', 'cs', 'compliance', 'credit', 'loan', 'lo', 'bm', 'frontdesk', 'treasury', 'analyst', 'cfo', 'legal', 'hoc', 'cro', 'md'];
+      if (!allowedRoles.includes(String(body.role)) || (String(body.role) === 'super' && actor.role !== 'super')) {
+        return NextResponse.json({ error: 'Invalid or unauthorized staff role.' }, { status: 403 });
+      }
+    }
     for (const k of ['firstName', 'lastName', 'username', 'email', 'phone', 'role', 'roleType', 'status', 'branchId', 'avatar']) {
       if (k in body) data[k] = body[k];
     }
-    for (const f of PERM_FLAGS) {
-      if (f in body) data[f] = !!body[f];
+    if (actor.role === 'super') {
+      for (const f of PERM_FLAGS) {
+        if (f in body) data[f] = !!body[f];
+      }
+    } else if (body.role !== undefined) {
+      // HR cannot grant arbitrary permissions; role defaults are authoritative.
+      const rolePerms = (await import('@/lib/constants')).ROLE_PERMISSIONS[String(body.role)] || [];
+      for (const f of PERM_FLAGS) data[f] = rolePerms.includes('*') || rolePerms.includes(f);
     }
 
     const admin = await db.admin.update({ where: { id }, data });
@@ -82,9 +96,18 @@ export async function POST(
   try {
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
-    const newPwd = body.password || 'Password@123';
+    const newPwd = typeof body.password === 'string' && body.password.length >= 8
+      ? body.password
+      : crypto.randomBytes(9).toString('base64url').slice(0, 12);
     const hashed = await bcrypt.hash(newPwd, 10);
-    await db.admin.update({ where: { id }, data: { password: hashed } });
+    await db.admin.update({
+      where: { id },
+      data: { password: hashed, passwordChangedAt: new Date(), mustChangePassword: true },
+    });
+    await db.activeSession.updateMany({
+      where: { adminId: id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
     return NextResponse.json({ ok: true, tempPassword: newPwd });
   } catch (e: any) {
     console.error('Reset password API error:', e);

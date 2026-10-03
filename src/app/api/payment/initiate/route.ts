@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireCustomerAuth } from '@/lib/auth';
-import crypto from 'crypto';
+
 // ============================================================================
 // POST /api/payment/initiate
 // Authorization: Bearer <customer-jwt>
@@ -24,7 +24,7 @@ function generatePaymentRef(): string {
   // 1) not uniformly distributed among the 32-char alphabet, and
   // 2) guessable by an attacker. crypto.randomBytes is the correct primitive.
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const bytes = crypto.randomBytes(6);
+  const bytes = require('crypto').randomBytes(6);
   let out = 'PAY-';
   for (let i = 0; i < 6; i++) out += chars[bytes[i] % chars.length];
   // Append a millisecond timestamp + random tail to ensure uniqueness even
@@ -82,7 +82,23 @@ export async function POST(req: NextRequest) {
     const paymentRef = generatePaymentRef();
     const paymentType = type || (loanId ? 'loan_repayment' : 'wallet_funding');
 
-    await db.transactions.create({
+    if (paymentType === 'loan_repayment' && !loanId) {
+      return NextResponse.json({ error: 'loanId is required for loan repayment payments.' }, { status: 400 });
+    }
+    if (paymentType === 'wallet_funding' && loanId) {
+      return NextResponse.json({ error: 'loanId cannot be supplied for wallet funding.' }, { status: 400 });
+    }
+    if (loanId) {
+      const loan = await db.loanApplicants.findUnique({
+        where: { id: loanId },
+        select: { status: true, currentStep: true },
+      });
+      if (!loan || loan.status !== 'running') {
+        return NextResponse.json({ error: 'Loan is not currently accepting repayments.' }, { status: 400 });
+      }
+    }
+
+    const localTransaction = await db.transactions.create({
       data: {
         userId,
         type: paymentType === 'loan_repayment' ? 'loan_repaid' : 'deposit',
@@ -91,7 +107,7 @@ export async function POST(req: NextRequest) {
         status: 'pending',
         reference: paymentRef,
         trxRef: loanId || null,
-        gatewayId: 'mock-gateway',
+        gatewayId: process.env.NODE_ENV === 'production' ? 'paystack' : 'mock-gateway',
         metadata: JSON.stringify({
           method,
           type: paymentType,
@@ -101,13 +117,82 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    if (process.env.NODE_ENV === 'production') {
+      const secret = process.env.PAYSTACK_SECRET_KEY;
+      if (!secret) {
+        await db.transactions.update({ where: { id: localTransaction.id }, data: { status: 'failed' } });
+        return NextResponse.json({ error: 'Paystack is not configured on the server.' }, { status: 503 });
+      }
+      if (!user.email) {
+        await db.transactions.update({ where: { id: localTransaction.id }, data: { status: 'failed' } });
+        return NextResponse.json({ error: 'A valid customer email is required for online payment.' }, { status: 400 });
+      }
+
+      const channels = [method === 'bank_transfer' ? 'bank_transfer' : method];
+      const paystackRes = await fetch('https://api.paystack.co/transaction/initialize', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${secret}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: user.email,
+          amount: String(Math.round(Number(amount) * 100)),
+          currency: 'NGN',
+          reference: paymentRef,
+          channels,
+          callback_url: process.env.PAYSTACK_CALLBACK_URL || `${process.env.NEXT_PUBLIC_BASE_URL || ''}/?view=customer-dashboard`,
+          metadata: JSON.stringify({
+            transactionId: localTransaction.id,
+            type: paymentType,
+            loanId: loanId || null,
+            userId,
+          }),
+        }),
+      });
+
+      const gateway = await paystackRes.json().catch(() => null);
+      if (!paystackRes.ok || !gateway?.status || !gateway?.data?.authorization_url) {
+        await db.transactions.update({
+          where: { id: localTransaction.id },
+          data: { status: 'failed', metadata: JSON.stringify({ method, type: paymentType, loanId: loanId || null, paystackError: gateway?.message || 'Initialization failed' }) },
+        });
+        return NextResponse.json({ error: 'Unable to initialize Paystack payment.' }, { status: 502 });
+      }
+
+      await db.transactions.update({
+        where: { id: localTransaction.id },
+        data: {
+          gatewayId: String(gateway.data.access_code || gateway.data.reference || 'paystack'),
+          metadata: JSON.stringify({
+            method,
+            type: paymentType,
+            loanId: loanId || null,
+            transactionId: localTransaction.id,
+            authorizationUrl: gateway.data.authorization_url,
+            accessCode: gateway.data.access_code,
+          }),
+        },
+      });
+
+      return NextResponse.json({
+        paymentRef,
+        amount: Number(amount),
+        method,
+        status: 'pending',
+        checkoutUrl: gateway.data.authorization_url,
+        accessCode: gateway.data.access_code,
+        message: 'Payment initialized. Redirect the customer to Paystack Checkout.',
+      });
+    }
+
     return NextResponse.json({
       paymentRef,
       amount: Number(amount),
       method,
       status: 'pending',
       checkoutUrl: null,
-      message: 'Payment initiated. In demo mode, all payments auto-succeed.',
+      message: 'Payment initiated in development/mock mode.',
     });
   } catch (e: any) {
     console.error('Payment initiate error:', e);

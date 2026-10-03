@@ -34,8 +34,7 @@ export async function GET(req : NextRequest) {
         business: { select: { name: true } },
       },
     });
-    const userMap = new Map<string, (typeof users)[number]>();
-users.forEach((u) => userMap.set(u.id, u));
+    const userMap = new Map(users.map((u) => [u.id, u]));
 
     const badgeCounts = await db.achievementBadge.groupBy({
       by: ['userId'],

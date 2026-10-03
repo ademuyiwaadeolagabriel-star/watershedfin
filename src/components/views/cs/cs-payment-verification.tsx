@@ -27,6 +27,7 @@ export function CsPaymentVerificationView() {
   const [viewing, setViewing] = useState<any | null>(null);
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [proofUrl, setProofUrl] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -46,6 +47,26 @@ export function CsPaymentVerificationView() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    if (viewing?.proofOfPaymentPath) {
+      void authFetch(viewing.proofOfPaymentPath)
+        .then(async (res) => {
+          if (!res.ok) throw new Error('Unable to load proof');
+          const blob = await res.blob();
+          objectUrl = URL.createObjectURL(blob);
+          setProofUrl(objectUrl);
+        })
+        .catch(() => setProofUrl(null));
+    } else {
+      setProofUrl(null);
+    }
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      setProofUrl(null);
+    };
+  }, [viewing?.proofOfPaymentPath]);
 
   useEffect(() => { load(); }, []);
 
@@ -213,10 +234,14 @@ export function CsPaymentVerificationView() {
               {viewing.proofOfPaymentPath && (
                 <div>
                   <p className="text-[11px] text-slate-400 uppercase mb-1">Proof of Payment</p>
-                  <a href={viewing.proofOfPaymentPath} target="_blank" rel="noopener noreferrer"
-                    className="text-xs text-emerald-700 hover:underline">
-                    View uploaded proof →
-                  </a>
+                  {proofUrl ? (
+                    <a href={proofUrl} target="_blank" rel="noopener noreferrer"
+                      className="text-xs text-emerald-700 hover:underline">
+                      View uploaded proof →
+                    </a>
+                  ) : (
+                    <span className="text-xs text-slate-500">Loading secure proof…</span>
+                  )}
                 </div>
               )}
               <DialogFooter className="mt-4">

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireRole, requireMakerChecker } from '@/lib/auth';
+import { requireRole, requireMakerChecker, completeMakerCheckerExecution } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { postJournal } from '@/lib/accounting';
 
@@ -16,8 +16,9 @@ export async function POST(req: NextRequest) {
   // and existing callers continue to work while the PendingMutation
   // workflow table is being populated.
   const url_v53 = new URL(req.url);
-  if (url_v53.searchParams.get('stage')) {
-    const mc_v53 = await requireMakerChecker(req, {
+  let mc_v53: any;
+  {
+    mc_v53 = await requireMakerChecker(req, {
       operation: 'teller_withdrawal',
       stages: ['propose', 'review', 'authorize', 'execute'],
       enforceSegregation: true,
@@ -31,8 +32,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { tillId, amount, reference, description, contraAccountId, customerId, createdById } = body;
-
+    const { tillId, amount, reference, description, contraAccountId, customerId} = body;
     if (!tillId || !amount) return NextResponse.json({ error: 'tillId and amount required' }, { status: 400 });
     const amt = Number(amount);
     if (amt <= 0) return NextResponse.json({ error: 'Amount must be positive' }, { status: 400 });
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
       if (!till) {
         throw new Error('Till not found');
       }
-      if (till.currentBalance < amt) {
+      if (Number(till.currentBalance ?? 0) < amt) {
         throw new Error('Insufficient till balance');
       }
 
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
           description: description || 'Cash withdrawal',
           contraAccountId: contraAccountId || null,
           customerId: customerId || null,
-          createdById: createdById || null,
+          createdById: authResult_v51.id,
         },
       });
 
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
               { accountId: contraAccountId, debit: amt, credit: 0 },
               { accountId: till.glAccountId, debit: 0, credit: amt },
             ],
-            createdById: createdById || undefined,
+            createdById: authResult_v51.id,
             sourceType: 'teller',
             sourceId: txn.id,
           },
@@ -97,9 +97,9 @@ export async function POST(req: NextRequest) {
         journalEntryId = je.id;
       }
 
-      return { txn, newBalance: till.currentBalance - amt, journalEntryId };
+      return { txn, newBalance: Number(till.currentBalance ?? 0) - amt, journalEntryId };
     });
-
+    if (mc_v53.stage === 'execute' && mc_v53.proposalId) await completeMakerCheckerExecution(mc_v53.proposalId, mc_v53.actorId);
     return NextResponse.json(
       { transaction: result.txn, newBalance: result.newBalance, journalEntryId: result.journalEntryId },
       { status: 201 },

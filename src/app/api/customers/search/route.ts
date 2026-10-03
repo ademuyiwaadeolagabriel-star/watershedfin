@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthFromRequest } from '@/lib/auth';
+import { requireRole } from '@/lib/auth';
 
 /**
  * GET /api/customers/search?q=<query>
@@ -9,10 +9,9 @@ import { getAuthFromRequest } from '@/lib/auth';
  */
 export async function GET(req: NextRequest) {
   try {
-    const authPayload = await getAuthFromRequest(req);
-    if (!authPayload) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
+    const authResult = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'credit', 'loan', 'lo', 'bm', 'analyst', 'cs', 'frontdesk']);
+    if (authResult instanceof NextResponse) return authResult;
+    const authPayload = authResult;
 
     const { searchParams } = new URL(req.url);
     const q = (searchParams.get('q') || '').trim().toLowerCase();
@@ -22,8 +21,10 @@ export async function GET(req: NextRequest) {
     }
 
     // Search across multiple fields
+    const branchScoped = ['bm', 'loan', 'lo', 'frontdesk'].includes(authPayload.role);
     const users = await db.user.findMany({
       where: {
+        ...(branchScoped && authPayload.branchId ? { branchId: authPayload.branchId } : {}),
         OR: [
           { email: { contains: q, mode: 'insensitive' } },
           { phone: { contains: q } },

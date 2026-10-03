@@ -30,6 +30,11 @@ export async function GET(
     if (!loan) {
       return NextResponse.json({ error: 'Loan not found' }, { status: 404 });
     }
+    if (['bm', 'loan', 'lo', 'cs', 'credit', 'analyst'].includes(authResult_v51.role)) {
+      if (!authResult_v51.branchId || loan.branchId !== authResult_v51.branchId) {
+        return NextResponse.json({ error: 'Access denied — loan belongs to another branch.' }, { status: 403 });
+      }
+    }
 
     // Strip password
     const safe: any = {

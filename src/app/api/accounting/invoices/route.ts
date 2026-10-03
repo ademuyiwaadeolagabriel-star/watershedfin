@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireRole, requireMakerChecker } from '@/lib/auth';
+import { requireRole, requireMakerChecker, completeMakerCheckerExecution } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { generateInvoiceNumber } from '@/lib/accounting';
 
@@ -37,8 +37,9 @@ export async function POST(req: NextRequest) {
   // Only enforced when the caller passes `?stage=propose|review|authorize|execute`.
   // Without a stage query param the route falls back to its existing behavior.
   const url_v53 = new URL(req.url);
-  if (url_v53.searchParams.get('stage')) {
-    const mc_v53 = await requireMakerChecker(req, {
+  let mc_v53: any;
+  {
+    mc_v53 = await requireMakerChecker(req, {
       operation: 'invoice_post',
       stages: ['propose', 'review', 'authorize', 'execute'],
       enforceSegregation: true,
@@ -80,7 +81,7 @@ export async function POST(req: NextRequest) {
       },
       include: { payments: true },
     });
-
+    if (mc_v53.stage === 'execute' && mc_v53.proposalId) await completeMakerCheckerExecution(mc_v53.proposalId, mc_v53.actorId);
     return NextResponse.json({ invoice }, { status: 201 });
   } catch (e: any) {
     console.error('Invoice POST error:', e);

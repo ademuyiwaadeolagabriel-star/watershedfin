@@ -34,7 +34,7 @@ export async function refreshAccrual(investmentId: string) {
   const inv = await db.treasuryInvestment.findUnique({ where: { id: investmentId } });
   if (!inv) return null;
   if (inv.status !== 'active' && inv.status !== 'matured') return inv;
-  const accrued = computeAccrued(inv.principal, inv.interestRate, inv.startDate, inv.maturityDate);
+  const accrued = computeAccrued(Number(inv.principal ?? 0), inv.interestRate, inv.startDate, inv.maturityDate);
   const product = await db.treasuryProduct.findUnique({ where: { id: inv.productId } });
   const whtRate = product?.whtRate ?? 0;
   const wht = (accrued * whtRate) / 100;

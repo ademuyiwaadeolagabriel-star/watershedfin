@@ -8,12 +8,15 @@ import { authFetch } from '@/lib/auth-client';
 import {
   Activity, Users, FileText, Building2, ShieldCheck, AlertTriangle,
   TrendingUp, Banknote, Lock, ToggleRight, Clock, Server, RefreshCw,
+  CheckCircle2, XCircle, Eye, Play,
 } from 'lucide-react';
 
 export function SuperAdminDashboard() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [proposals, setProposals] = useState<any[]>([]);
+  const [governanceBusy, setGovernanceBusy] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -33,7 +36,42 @@ export function SuperAdminDashboard() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  const loadProposals = async () => {
+    const r = await authFetch('/api/governance/pending-mutations?status=all');
+    if (r.ok) { const d = await r.json(); setProposals((d.proposals || []).filter((p: any) => ['PENDING','REVIEWED','AUTHORIZED'].includes(p.status))); }
+  };
+
+  const governanceAction = async (proposalId: string, action: 'review' | 'authorize' | 'reject') => {
+    setGovernanceBusy(proposalId + ':' + action);
+    try {
+      const r = await authFetch('/api/governance/pending-mutations', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ proposalId, action }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Governance action failed');
+      await loadProposals();
+      await load();
+    } catch (e: any) { alert(e.message); } finally { setGovernanceBusy(null); }
+  };
+
+  const executeProposal = async (p: any) => {
+    const routes: Record<string, string> = {
+      invoice_post: '/api/accounting/invoices', payroll_post: '/api/accounting/payroll', expense_post: '/api/accounting/expenses',
+      bill_post: '/api/accounting/bills', teller_deposit: '/api/accounting/teller/deposit', teller_withdrawal: '/api/accounting/teller/withdrawal',
+      treasury_investment_book: '/api/treasury/investments',
+    };
+    let endpoint = routes[p.operation];
+    if (p.operation === 'bill_pay' && p.targetId) endpoint = `/api/accounting/bills/${p.targetId}/pay`;
+    if (p.operation === 'treasury_investment_redeem_rollover' && p.targetId) endpoint = `/api/treasury/investments/${p.targetId}`;
+    if (!endpoint) return alert(`No execution route is registered for ${p.operation}.`);
+    setGovernanceBusy(p.id + ':execute');
+    try {
+      const r = await authFetch(`${endpoint}?stage=execute&proposalId=${encodeURIComponent(p.id)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: p.payloadJson });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Execution failed');
+      await loadProposals(); await load();
+    } catch (e: any) { alert(e.message); } finally { setGovernanceBusy(null); }
+  };
+
+  useEffect(() => { load(); loadProposals(); }, []);
 
   if (loading) {
     return (
@@ -110,6 +148,37 @@ export function SuperAdminDashboard() {
           );
         })}
       </div>
+
+
+
+      {/* Maker / checker queue */}
+      <Card className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-emerald-600" /> Financial Governance Queue</h3>
+            <p className="text-[11px] text-slate-500">Protected accounting and treasury mutations require maker → checker → authorizer → execution.</p>
+          </div>
+          <Badge className="bg-amber-100 text-amber-800 border-amber-200">{proposals.length} active</Badge>
+        </div>
+        {proposals.length === 0 ? <p className="text-xs text-slate-400">No pending governance actions.</p> : (
+          <div className="space-y-2">
+            {proposals.slice(0, 12).map((p: any) => (
+              <div key={p.id} className="rounded-md border border-slate-200 p-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2"><Badge className="bg-slate-100 text-slate-700 border-slate-200">{p.status}</Badge><span className="text-xs font-semibold text-slate-800">{p.operation}</span></div>
+                  <p className="text-[11px] text-slate-500 mt-1 font-mono truncate">{p.id} · maker {p.makerId}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {p.status === 'PENDING' && <Button size="sm" variant="outline" disabled={!!governanceBusy} onClick={() => governanceAction(p.id, 'review')}><Eye className="h-3.5 w-3.5 mr-1" /> Review</Button>}
+                  {p.status === 'REVIEWED' && <Button size="sm" variant="outline" disabled={!!governanceBusy} onClick={() => governanceAction(p.id, 'authorize')}><CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Authorize</Button>}
+                  {p.status === 'AUTHORIZED' && <Button size="sm" disabled={!!governanceBusy} onClick={() => executeProposal(p)}><Play className="h-3.5 w-3.5 mr-1" /> Execute</Button>}
+                  {p.status !== 'EXECUTED' && <Button size="sm" variant="ghost" className="text-red-600" disabled={!!governanceBusy} onClick={() => governanceAction(p.id, 'reject')}><XCircle className="h-3.5 w-3.5 mr-1" /> Reject</Button>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
 
       {/* Disbursement this month */}
       <Card className="p-4">

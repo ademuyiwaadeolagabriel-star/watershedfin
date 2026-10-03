@@ -11,6 +11,25 @@ import { getAuthFromRequest } from '@/lib/auth';
 // The POST endpoint accepts a `periodType` field to determine which to update.
 // ============================================================================
 
+function parseTargetPeriod(
+  periodType: unknown,
+  periodKey: unknown,
+): { type: 'monthly' | 'quarterly' | 'annual'; key: string } | null {
+  const type = String(periodType || 'monthly');
+  const key = String(periodKey || '');
+
+  if (!['monthly', 'quarterly', 'annual'].includes(type)) return null;
+
+  if (type === 'monthly' && !/^\d{4}-(0[1-9]|1[0-2])$/.test(key)) return null;
+  if (type === 'quarterly' && !/^\d{4}-Q[1-4]$/.test(key)) return null;
+  if (type === 'annual' && !/^\d{4}$/.test(key)) return null;
+
+  return {
+    type: type as 'monthly' | 'quarterly' | 'annual',
+    key,
+  };
+}
+
 function getQuarterRange(quarterKey: string): { start: Date; end: Date } | null {
   const match = quarterKey.match(/^(\d{4})-Q([1-4])$/);
   if (!match) return null;
@@ -68,6 +87,25 @@ export async function GET(
 
     if (!staff) return NextResponse.json({ error: 'Staff not found' }, { status: 404 });
 
+    const privilegedViewer = ['super', 'md', 'hoc', 'cro', 'cfo', 'hr'].includes(authPayload.role);
+
+    if (!privilegedViewer) {
+      if (authPayload.role === 'bm') {
+        if (!authPayload.branchId || staff.branchId !== authPayload.branchId) {
+          return NextResponse.json(
+            { error: 'You can only view staff targets within your own branch.' },
+            { status: 403 }
+          );
+        }
+      } else if (staff.id !== authPayload.id) {
+        return NextResponse.json(
+          { error: 'You are not authorized to view this staff target.' },
+          { status: 403 }
+        );
+      }
+    }
+
+
     // ── Monthly actuals ──────────────────────────────────────────────────
     const currentMonth = staff.targetMonth || new Date().toISOString().slice(0, 7);
     const monthStart = new Date(`${currentMonth}-01T00:00:00.000Z`);
@@ -96,8 +134,9 @@ export async function GET(
       },
       actual: monthlyActuals,
       progress: {
+        // v51 — Decimal arithmetic: staff.*DisbursementTarget is Decimal, wrap with Number().
         disbursementPct: staff.monthlyDisbursementTarget
-          ? Math.round((monthlyActuals.totalDisbursed / staff.monthlyDisbursementTarget) * 100)
+          ? Math.round((monthlyActuals.totalDisbursed / Number(staff.monthlyDisbursementTarget)) * 100)
           : 0,
         loanCountPct: staff.monthlyLoanCountTarget
           ? Math.round((monthlyActuals.loanCount / staff.monthlyLoanCountTarget) * 100)
@@ -112,8 +151,9 @@ export async function GET(
         },
         actual: quarterlyActuals,
         progress: {
+          // v51 — Decimal arithmetic: staff.*DisbursementTarget is Decimal, wrap with Number().
           disbursementPct: staff.quarterlyDisbursementTarget
-            ? Math.round((quarterlyActuals.totalDisbursed / staff.quarterlyDisbursementTarget) * 100)
+            ? Math.round((quarterlyActuals.totalDisbursed / Number(staff.quarterlyDisbursementTarget)) * 100)
             : 0,
           loanCountPct: staff.quarterlyLoanCountTarget
             ? Math.round((quarterlyActuals.loanCount / staff.quarterlyLoanCountTarget) * 100)
@@ -129,8 +169,9 @@ export async function GET(
         },
         actual: annualActuals,
         progress: {
+          // v51 — Decimal arithmetic: staff.*DisbursementTarget is Decimal, wrap with Number().
           disbursementPct: staff.annualDisbursementTarget
-            ? Math.round((annualActuals.totalDisbursed / staff.annualDisbursementTarget) * 100)
+            ? Math.round((annualActuals.totalDisbursed / Number(staff.annualDisbursementTarget)) * 100)
             : 0,
           loanCountPct: staff.annualLoanCountTarget
             ? Math.round((annualActuals.loanCount / staff.annualLoanCountTarget) * 100)
@@ -182,29 +223,68 @@ export async function POST(
       }
     }
 
-    const body = await req.json();
-    const { disbursementTarget, loanCountTarget, periodType, periodKey } = body;
+    const body = await req.json().catch(() => ({}));
 
-    // v41: Build update data based on period type
+    const rawDisbursement = Number(body.disbursementTarget);
+    const rawLoanCount = Number(body.loanCountTarget);
+
+    if (!Number.isFinite(rawDisbursement) || rawDisbursement < 0) {
+      return NextResponse.json(
+        { error: 'disbursementTarget must be a non-negative number.' },
+        { status: 400 }
+      );
+    }
+
+    if (!Number.isFinite(rawLoanCount) || rawLoanCount < 0 || !Number.isInteger(rawLoanCount)) {
+      return NextResponse.json(
+        { error: 'loanCountTarget must be a non-negative integer.' },
+        { status: 400 }
+      );
+    }
+
+    const requestedPeriodType = body.periodType || 'monthly';
+
+    // Preserve the legacy "month" field for compatibility while making
+    // periodKey the canonical API contract.
+    const requestedPeriodKey =
+      body.periodKey ||
+      body.month ||
+      (requestedPeriodType === 'quarterly'
+        ? `${new Date().getFullYear()}-Q${Math.floor(new Date().getMonth() / 3) + 1}`
+        : requestedPeriodType === 'annual'
+          ? String(new Date().getFullYear())
+          : new Date().toISOString().slice(0, 7));
+
+    const period = parseTargetPeriod(requestedPeriodType, requestedPeriodKey);
+
+    if (!period) {
+      return NextResponse.json(
+        {
+          error:
+            'Invalid target period. Use monthly YYYY-MM, quarterly YYYY-Q1..Q4, or annual YYYY.',
+        },
+        { status: 400 }
+      );
+    }
+
     const updateData: any = {
       targetSetAt: new Date(),
       targetSetBy: authPayload.id,
-      targetPeriodType: periodType || 'monthly',
+      targetPeriodType: period.type,
     };
 
-    if (periodType === 'quarterly') {
-      updateData.quarterlyDisbursementTarget = Number(disbursementTarget) || 0;
-      updateData.quarterlyLoanCountTarget = Number(loanCountTarget) || 0;
-      updateData.targetQuarter = periodKey || `${new Date().getFullYear()}-Q${Math.floor(new Date().getMonth() / 3) + 1}`;
-    } else if (periodType === 'annual') {
-      updateData.annualDisbursementTarget = Number(disbursementTarget) || 0;
-      updateData.annualLoanCountTarget = Number(loanCountTarget) || 0;
-      updateData.targetYear = periodKey || String(new Date().getFullYear());
+    if (period.type === 'quarterly') {
+      updateData.quarterlyDisbursementTarget = rawDisbursement;
+      updateData.quarterlyLoanCountTarget = rawLoanCount;
+      updateData.targetQuarter = period.key;
+    } else if (period.type === 'annual') {
+      updateData.annualDisbursementTarget = rawDisbursement;
+      updateData.annualLoanCountTarget = rawLoanCount;
+      updateData.targetYear = period.key;
     } else {
-      // monthly (default)
-      updateData.monthlyDisbursementTarget = Number(disbursementTarget) || 0;
-      updateData.monthlyLoanCountTarget = Number(loanCountTarget) || 0;
-      updateData.targetMonth = periodKey || new Date().toISOString().slice(0, 7);
+      updateData.monthlyDisbursementTarget = rawDisbursement;
+      updateData.monthlyLoanCountTarget = rawLoanCount;
+      updateData.targetMonth = period.key;
     }
 
     const updated = await db.admin.update({

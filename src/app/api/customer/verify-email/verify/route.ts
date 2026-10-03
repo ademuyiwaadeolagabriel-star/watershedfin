@@ -1,78 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
 import { db } from '@/lib/db';
 import { requireCustomerAuth } from '@/lib/auth';
+import crypto from 'crypto';
 
 // ============================================================================
 // POST /api/customer/verify-email/verify
 // Authorization: Bearer <customer-jwt>
 // Body: { code }
 //
-// Security:
-//   - Customer identity comes from the authenticated JWT.
-//   - Verification codes use crypto.randomInt.
-//   - Code comparison uses crypto.timingSafeEqual.
-//   - Verification codes expire after 10 minutes.
-//   - The verification code is invalidated after successful verification.
+// v50 FIX (Issue #11 + Issue #9):
+//   - Customer identity comes from the JWT, not from `body.userId`. This
+//     closes the IDOR where Customer A could supply another user's ID
+//     and submit codes against it.
+//   - Code comparison is now constant-time (timingSafeEqual) to defeat
+//     timing-side-channel attacks on the verification code.
 // ============================================================================
 
 const CODE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
-function generateCode(): string {
-  return crypto.randomInt(100000, 1000000).toString();
-}
-
 export async function POST(req: NextRequest) {
   try {
-    // -----------------------------------------------------------------------
-    // Authenticate customer
-    // -----------------------------------------------------------------------
+    // --- Auth gate: customer JWT mandatory -------------------------------
     const authResult = await requireCustomerAuth(req);
-
-    if (authResult instanceof NextResponse) {
-      return authResult;
-    }
-
-    const authPayload = authResult as {
-      id: string;
-      type: string;
-    };
-
-    // IMPORTANT:
-    // Never accept userId from the request body.
-    // The authenticated JWT determines the customer identity.
+    if (authResult instanceof NextResponse) return authResult;
+    const authPayload = authResult as { id: string; type: string };
     const userId = authPayload.id;
 
-    // -----------------------------------------------------------------------
-    // Read request body
-    // -----------------------------------------------------------------------
     const body = await req.json().catch(() => ({}));
     const { code } = body || {};
 
     if (!code) {
-      return NextResponse.json(
-        { error: 'code is required' },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: 'code is required' }, { status: 400 });
     }
 
-    // -----------------------------------------------------------------------
-    // Load authenticated customer
-    // -----------------------------------------------------------------------
-    const user = await db.user.findUnique({
-      where: { id: userId },
-    });
-
+    const user = await db.user.findUnique({ where: { id: userId } });
     if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 },
-      );
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // -----------------------------------------------------------------------
-    // Already verified
-    // -----------------------------------------------------------------------
     if (user.emailVerify === 1) {
       return NextResponse.json({
         verified: true,
@@ -80,61 +45,27 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // -----------------------------------------------------------------------
-    // Verification code must exist
-    // -----------------------------------------------------------------------
     if (!user.verificationCode) {
       return NextResponse.json(
-        {
-          error:
-            'No verification code on file. Please request a new code.',
-        },
+        { error: 'No verification code on file. Please request a new code.' },
         { status: 400 },
       );
     }
 
-    // -----------------------------------------------------------------------
-    // Constant-time verification-code comparison
-    // -----------------------------------------------------------------------
-    const expectedCode = Buffer.from(
-      String(user.verificationCode).trim(),
-    );
+    // v50 — constant-time comparison to prevent timing attacks.
+    const a = Buffer.from(String(user.verificationCode).trim());
+    const b = Buffer.from(String(code).trim());
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      return NextResponse.json({ error: 'Invalid verification code.' }, { status: 400 });
+    }
 
-    const suppliedCode = Buffer.from(
-      String(code).trim(),
-    );
-
-    if (
-      expectedCode.length !== suppliedCode.length ||
-      !crypto.timingSafeEqual(expectedCode, suppliedCode)
-    ) {
+    if (!user.emailTime || Date.now() - new Date(user.emailTime).getTime() > CODE_TTL_MS) {
       return NextResponse.json(
-        { error: 'Invalid verification code.' },
+        { error: 'Verification code has expired. Please request a new code.' },
         { status: 400 },
       );
     }
 
-    // -----------------------------------------------------------------------
-    // Check expiration
-    // -----------------------------------------------------------------------
-    if (
-      !user.emailTime ||
-      Date.now() - new Date(user.emailTime).getTime() > CODE_TTL_MS
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            'Verification code has expired. Please request a new code.',
-        },
-        { status: 400 },
-      );
-    }
-
-    // -----------------------------------------------------------------------
-    // Mark email as verified
-    //
-    // Invalidate the verification code immediately so it cannot be reused.
-    // -----------------------------------------------------------------------
     await db.user.update({
       where: { id: userId },
       data: {
@@ -148,14 +79,8 @@ export async function POST(req: NextRequest) {
       verified: true,
       message: 'Email verified successfully.',
     });
-  } catch (e: unknown) {
+  } catch (e: any) {
     console.error('Verify-email verify error:', e);
-
-    return NextResponse.json(
-      {
-        error: 'Unable to verify email at this time.',
-      },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }

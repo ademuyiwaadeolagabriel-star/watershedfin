@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireRole, requireMakerChecker } from '@/lib/auth';
+import { requireRole, requireMakerChecker, completeMakerCheckerExecution } from '@/lib/auth';
 import { db } from '@/lib/db';
 
 export async function GET(req: NextRequest) {
@@ -37,8 +37,9 @@ export async function POST(req: NextRequest) {
   // Only enforced when the caller passes `?stage=propose|review|authorize|execute`.
   // Without a stage query param the route falls back to its existing behavior.
   const url_v53 = new URL(req.url);
-  if (url_v53.searchParams.get('stage')) {
-    const mc_v53 = await requireMakerChecker(req, {
+  let mc_v53: any;
+  {
+    mc_v53 = await requireMakerChecker(req, {
       operation: 'expense_post',
       stages: ['propose', 'review', 'authorize', 'execute'],
       enforceSegregation: true,
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { date, description, amount, expenseAccountId, paymentAccountId, category, reference, receiptNumber, notes, createdById } = body;
+    const { date, description, amount, expenseAccountId, paymentAccountId, category, reference, receiptNumber, notes } = body;
 
     if (!description || !amount || !expenseAccountId) {
       return NextResponse.json({ error: 'description, amount, expenseAccountId required' }, { status: 400 });
@@ -70,10 +71,11 @@ export async function POST(req: NextRequest) {
         receiptNumber: receiptNumber || null,
         notes: notes || null,
         status: 'pending',
-        createdById: createdById || null,
+        createdById: authResult_v51.id,
       },
       include: { expenseAccount: true },
     });
+    if (mc_v53.stage === 'execute' && mc_v53.proposalId) await completeMakerCheckerExecution(mc_v53.proposalId, mc_v53.actorId);
     return NextResponse.json({ expense }, { status: 201 });
   } catch (e: any) {
     console.error('Expense POST error:', e);

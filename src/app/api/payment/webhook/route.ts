@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { createNotification } from '@/lib/notifications';
 import crypto from 'crypto';
+import { Prisma } from '@prisma/client';
 
 // ============================================================================
 // POST /api/payment/webhook
@@ -102,6 +103,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Payment reference not found' }, { status: 404 });
     }
 
+    // A transaction reference must be used only for the intent with which it
+    // was created. Do not let a wallet-funding reference become a loan
+    // repayment merely because its metadata contains a loanId.
+    let transactionMeta: any = {};
+    try { transactionMeta = txn.metadata ? JSON.parse(txn.metadata) : {}; } catch {}
+    const declaredType = transactionMeta.type || (txn.type === 'loan_repaid' ? 'loan_repayment' : 'wallet_funding');
+    if (txn.type === 'loan_repaid' && declaredType !== 'loan_repayment') {
+      return NextResponse.json({ error: 'Payment intent mismatch.' }, { status: 409 });
+    }
+    if (txn.type === 'deposit' && declaredType !== 'wallet_funding') {
+      return NextResponse.json({ error: 'Payment intent mismatch.' }, { status: 409 });
+    }
+
+    // When Paystack supplies an amount, it is expressed in kobo. Verify it
+    // against the amount locked into our pending transaction so a valid
+    // signature cannot be replayed against a mismatched local amount.
+    const gatewayAmount = body?.data?.amount;
+    if (gatewayAmount != null) {
+      const expectedKobo = Math.round(Number(txn.amount) * 100);
+      if (!Number.isFinite(Number(gatewayAmount)) || Math.round(Number(gatewayAmount)) !== expectedKobo) {
+        return NextResponse.json({ error: 'Gateway amount does not match the pending transaction.' }, { status: 409 });
+      }
+    }
+
     // Idempotency — if already successful, just acknowledge
     if (txn.status === 'success') {
       return NextResponse.json({
@@ -139,7 +164,8 @@ export async function POST(req: NextRequest) {
 
       if (loanId) {
         const loan = await tx.loanApplicants.findUnique({ where: { id: loanId } });
-        if (loan) {
+        if (!loan) throw new Error('LOAN_NOT_FOUND');
+        {
           // v50 — guard against duplicate LoanTransaction for the same ref.
           // The @unique constraint on LoanTransaction.reference makes this
           // safe: if a duplicate webhook retries the same ref, the
@@ -185,8 +211,10 @@ export async function POST(req: NextRequest) {
             });
             remaining -= payNow;
           }
+          if (schedule.length === 0) throw new Error('NO_REPAYMENT_SCHEDULE');
+          if (remaining > 0.005) throw new Error('OVERPAYMENT');
 
-          // Auto-close loan if fully paid
+          // Auto-close loan
           const allRows = await tx.loanRepayment.findMany({
             where: { loanApplicantId: loanId },
           });
@@ -225,6 +253,10 @@ export async function POST(req: NextRequest) {
       }
 
       return txUpdate;
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      maxWait: 5000,
+      timeout: 15000,
     });
 
     return NextResponse.json({
@@ -237,6 +269,15 @@ export async function POST(req: NextRequest) {
     // P2002 = unique constraint violation — this is the idempotency path.
     // If the same paymentRef was being processed concurrently, the loser of
     // the race gets P2002 from the unique constraint on LoanTransaction.reference.
+    if (e?.message === 'OVERPAYMENT') {
+      return NextResponse.json({ error: 'Gateway payment exceeds the loan outstanding balance.' }, { status: 409 });
+    }
+    if (e?.message === 'NO_REPAYMENT_SCHEDULE') {
+      return NextResponse.json({ error: 'Loan repayment schedule is missing.' }, { status: 409 });
+    }
+    if (e?.message === 'LOAN_NOT_FOUND') {
+      return NextResponse.json({ error: 'Loan referenced by payment was not found.' }, { status: 404 });
+    }
     if (e?.code === 'P2002') {
       return NextResponse.json(
         { status: 'success', idempotent: true, message: 'Webhook already processed.' },
@@ -270,11 +311,24 @@ async function handleOnboardingPayment(payment: any, body: any) {
     });
   }
 
-  // Determine status from gateway payload
+  // Verify gateway intent and amount before changing onboarding state.
   const gatewayStatus =
     body.status ||
     (body.data && body.data.status) ||
     'success';
+
+  const gatewayAmount = body?.data?.amount;
+  if (gatewayAmount != null) {
+    const expectedKobo = Math.round(Number(payment.amount) * 100);
+    if (!Number.isFinite(Number(gatewayAmount)) || Math.round(Number(gatewayAmount)) !== expectedKobo) {
+      return NextResponse.json({ error: 'Gateway amount does not match the onboarding payment.' }, { status: 409 });
+    }
+  }
+
+  const gatewayCurrency = body?.data?.currency;
+  if (gatewayCurrency && String(gatewayCurrency).toUpperCase() !== 'NGN') {
+    return NextResponse.json({ error: 'Unsupported payment currency.' }, { status: 409 });
+  }
 
   if (gatewayStatus !== 'success' && gatewayStatus !== 'successful') {
     // Payment failed — update status but don't advance
@@ -285,21 +339,22 @@ async function handleOnboardingPayment(payment: any, body: any) {
     return NextResponse.json({ status: 'failed', reference: payment.reference });
   }
 
-  // --- v50 atomic multi-write -------------------------------------------
-  await db.$transaction(async (tx) => {
-    await tx.onboardingPayment.update({
-      where: { id: payment.id },
-      data: {
-        status: 'confirmed',
-        confirmedAt: new Date(),
-        // confirmedById left null for auto-confirmed Paystack payments
-      },
+  // --- v55 atomic/idempotent multi-write -------------------------------
+  const onboardingResult = await db.$transaction(async (tx) => {
+    // Claim the payment exactly once. Concurrent webhook deliveries must not
+    // both create LegalNameSearch cases or advance the onboarding state.
+    const claim = await tx.onboardingPayment.updateMany({
+      where: { id: payment.id, status: { not: 'confirmed' } },
+      data: { status: 'confirmed', confirmedAt: new Date() },
     });
+    if (claim.count !== 1) return { alreadyConfirmed: true };
+
+    // confirmedById remains null for auto-confirmed Paystack payments.
 
     await tx.user.update({
       where: { id: payment.userId },
       data: { onboardingStage: 'legal_cac_search' },
-    }).catch(() => {});
+    });
 
     // v52 — #26 unique-active-case enforcement. Only check for an
     // ACTIVE case (isActive=true). Approved/rejected cases are
@@ -314,7 +369,7 @@ async function handleOnboardingPayment(payment: any, body: any) {
     if (!existingCase) {
       await tx.legalNameSearch.create({
         data: { userId: payment.userId, status: 'pending', isActive: true },
-      }).catch(() => {});
+      });
     }
 
     await tx.auditLog.create({
@@ -326,7 +381,22 @@ async function handleOnboardingPayment(payment: any, body: any) {
         metadata: JSON.stringify({ paymentId: payment.id, reference: payment.reference, method: 'paystack' }),
       },
     });
+    return { alreadyConfirmed: false };
+  }, {
+    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    maxWait: 5000,
+    timeout: 15000,
   });
+
+  if (onboardingResult.alreadyConfirmed) {
+    return NextResponse.json({
+      status: 'success',
+      amount: payment.amount,
+      reference: payment.reference,
+      message: 'Onboarding payment already confirmed.',
+      idempotent: true,
+    });
+  }
 
   // --- Post-transaction side effects (NOT inside the DB transaction) ----
   // Notifications are fire-and-forget.

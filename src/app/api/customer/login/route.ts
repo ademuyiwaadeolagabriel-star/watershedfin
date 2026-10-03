@@ -3,6 +3,10 @@ import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import { signAuthToken } from '@/lib/auth';
 
+const customerLoginAttempts = new Map<string, { count: number; firstAttempt: number }>();
+const CUSTOMER_LOGIN_MAX = 10;
+const CUSTOMER_LOGIN_WINDOW = 15 * 60 * 1000;
+
 // POST /api/customer/login
 // Body: { identifier, password }
 //   identifier = email OR phone
@@ -10,6 +14,18 @@ import { signAuthToken } from '@/lib/auth';
 // Returns: { user: { ...user, password: undefined }, token } on success
 export async function POST(req: NextRequest) {
   try {
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || 'unknown';
+    const now = Date.now();
+    const attempts = customerLoginAttempts.get(clientIp);
+    if (attempts && now - attempts.firstAttempt < CUSTOMER_LOGIN_WINDOW && attempts.count >= CUSTOMER_LOGIN_MAX) {
+      return NextResponse.json({ error: 'Too many login attempts. Please try again later.' }, { status: 429 });
+    }
+    if (attempts && now - attempts.firstAttempt < CUSTOMER_LOGIN_WINDOW) {
+      customerLoginAttempts.set(clientIp, { count: attempts.count + 1, firstAttempt: attempts.firstAttempt });
+    } else {
+      customerLoginAttempts.set(clientIp, { count: 1, firstAttempt: now });
+    }
+
     const body = await req.json();
     const identifier = (body.identifier || '').toString().trim().toLowerCase();
     const password = (body.password || '').toString();
@@ -89,7 +105,8 @@ export async function POST(req: NextRequest) {
       id: user.id,
       role: 'customer',
       branchId: user.branchId,
-      type: 'customer',  // P0-5 FIX: Customer tokens must NOT be admin type
+      type: 'customer',
+      sessionVersion: user.authVersion,
     });
 
     // Strip password before returning

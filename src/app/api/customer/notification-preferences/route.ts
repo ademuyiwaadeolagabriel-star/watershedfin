@@ -16,7 +16,7 @@ import { db } from '@/lib/db';
  * }
  */
 
-export const DEFAULT_PREFERENCES = {
+const DEFAULT_PREFERENCES = {
   loan: { email: true, sms: true, push: true },
   payment: { email: true, sms: true, push: true },
   kyc: { email: true, sms: false, push: true },

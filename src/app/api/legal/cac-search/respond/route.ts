@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireCustomerAuth } from '@/lib/auth';
 import { createNotification } from '@/lib/notifications';
+import { Prisma } from '@prisma/client';
 
 /**
  * POST /api/legal/cac-search/respond
@@ -68,6 +69,9 @@ export async function POST(req: NextRequest) {
         { status: 403 },
       );
     }
+    if (!['rejected', 'customer_responded'].includes(legalCase.status)) {
+      return NextResponse.json({ error: `Case cannot accept a customer response from status '${legalCase.status}'.` }, { status: 409 });
+    }
 
     // --- Atomic multi-write ---------------------------------------------
     // v52 — Wrap the two state-mutating writes in a single Prisma
@@ -81,6 +85,7 @@ export async function POST(req: NextRequest) {
         data: {
           customerResponse: customerResponse.trim(),
           status: 'customer_responded',
+          isActive: true,
         },
       });
 
@@ -89,14 +94,13 @@ export async function POST(req: NextRequest) {
       await tx.user.update({
         where: { id: legalCase.userId },
         data: { onboardingStage: 'legal_cac_search' },
-      }).catch(() => {
-        // The user row may not exist in some seed/edge cases; the case
-        // update still commits. We intentionally swallow this error
-        // inside the transaction so the customer's response is preserved
-        // even if the user-stage sync fails.
       });
 
       return caseUpdate;
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      maxWait: 5000,
+      timeout: 10000,
     });
 
     // v41 — Notify all Legal staff that the customer has responded.

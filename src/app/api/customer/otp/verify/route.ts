@@ -17,6 +17,9 @@ import crypto from 'crypto';
 // ============================================================================
 
 const OTP_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const otpVerifyAttempts = new Map<string, { count: number; windowStart: number }>();
+const MAX_OTP_VERIFY_ATTEMPTS = 5;
+const OTP_VERIFY_WINDOW_MS = 15 * 60 * 1000;
 
 export async function POST(req: NextRequest) {
   try {
@@ -31,6 +34,13 @@ export async function POST(req: NextRequest) {
 
     if (!otp) {
       return NextResponse.json({ error: 'otp is required' }, { status: 400 });
+    }
+
+    const now = Date.now();
+    const attempt = otpVerifyAttempts.get(userId);
+    if (attempt && now - attempt.windowStart < OTP_VERIFY_WINDOW_MS &&
+        attempt.count >= MAX_OTP_VERIFY_ATTEMPTS) {
+      return NextResponse.json({ error: 'Too many OTP verification attempts. Please request a new OTP later.' }, { status: 429 });
     }
 
     const user = await db.user.findUnique({ where: { id: userId } });
@@ -60,6 +70,12 @@ export async function POST(req: NextRequest) {
     const a = Buffer.from(user.verificationCode);
     const b = Buffer.from(otpHash);
     if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      const current = otpVerifyAttempts.get(userId);
+      if (current && now - current.windowStart < OTP_VERIFY_WINDOW_MS) {
+        otpVerifyAttempts.set(userId, { count: current.count + 1, windowStart: current.windowStart });
+      } else {
+        otpVerifyAttempts.set(userId, { count: 1, windowStart: now });
+      }
       return NextResponse.json({ error: 'Invalid OTP.' }, { status: 400 });
     }
 
@@ -70,6 +86,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    otpVerifyAttempts.delete(userId);
     await db.user.update({
       where: { id: userId },
       data: {

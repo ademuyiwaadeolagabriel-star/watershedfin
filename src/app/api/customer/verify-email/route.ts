@@ -1,140 +1,102 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
 import { db } from '@/lib/db';
+import { sendEmail } from '@/lib/email-service';
 import { requireCustomerAuth } from '@/lib/auth';
 
-const CODE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+// ============================================================================
+// POST /api/customer/verify-email
+// Authorization: Bearer <customer-jwt>
+//
+// v50 FIX (Issue #11): Previously this endpoint generated a 6-digit code
+// but never persisted it to `user.verificationCode`, and never actually
+// sent the email. The subsequent /verify check therefore always failed
+// because `user.verificationCode` was null/empty.
+//
+// Now:
+//   1. Customer identity comes from the JWT — `userId` is no longer
+//      accepted from the request body (IDOR fix, Issue #9).
+//   2. The generated code is persisted to `user.verificationCode` with
+//      a fresh `emailTime` timestamp.
+//   3. The email is actually sent via `sendEmail(...)` (fire-and-forget
+//      but we await the call so the response reflects delivery status).
+//   4. The code is NEVER returned in the API response — only `sentTo`
+//      (masked) is returned so the caller knows which inbox to check.
+// ============================================================================
+
+function generateCode(): string {
+  // v50 — use crypto.randomInt for cryptographically secure codes (vs the
+  // previous Math.random() which is not uniform and not secure).
+  // Math.random() returns floats that may be biased toward certain ranges
+  // when truncated; crypto.randomInt is the correct primitive.
+  const { randomInt } = require('crypto');
+  return randomInt(100000, 1000000).toString();
+}
 
 export async function POST(req: NextRequest) {
   try {
-    // -----------------------------------------------------------------------
-    // Authenticate customer
-    // -----------------------------------------------------------------------
+    // --- Auth gate: customer JWT mandatory -------------------------------
     const authResult = await requireCustomerAuth(req);
+    if (authResult instanceof NextResponse) return authResult;
+    const authPayload = authResult as { id: string; type: string };
+    const userId = authPayload.id; // v50 — derived from JWT
 
-    if (authResult instanceof NextResponse) {
-      return authResult;
-    }
-
-    const authPayload = authResult as {
-      id: string;
-      type: string;
-    };
-
-    // Customer identity comes ONLY from the authenticated JWT.
-    const userId = authPayload.id;
-
-    // -----------------------------------------------------------------------
-    // Read request body
-    // -----------------------------------------------------------------------
-    const body = await req.json().catch(() => ({}));
-    const { code } = body || {};
-
-    if (!code) {
-      return NextResponse.json(
-        { error: 'code is required' },
-        { status: 400 },
-      );
-    }
-
-    // -----------------------------------------------------------------------
-    // Load authenticated customer
-    // -----------------------------------------------------------------------
-    const user = await db.user.findUnique({
-      where: { id: userId },
-    });
-
+    const user = await db.user.findUnique({ where: { id: userId } });
     if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 },
-      );
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
-
-    // -----------------------------------------------------------------------
-    // Already verified
-    // -----------------------------------------------------------------------
-    if (user.emailVerify === 1) {
-      return NextResponse.json({
-        verified: true,
-        message: 'Email is already verified.',
-      });
-    }
-
-    // -----------------------------------------------------------------------
-    // Verification code must exist
-    // -----------------------------------------------------------------------
-    if (!user.verificationCode) {
+    if (!user.email) {
       return NextResponse.json(
-        {
-          error:
-            'No verification code on file. Please request a new code.',
-        },
+        { error: 'User has no email address on file. Please add an email to your profile first.' },
         { status: 400 },
       );
     }
 
-    // -----------------------------------------------------------------------
-    // Constant-time comparison
-    // -----------------------------------------------------------------------
-    const expectedCode = Buffer.from(
-      String(user.verificationCode).trim(),
-    );
+    const code = generateCode();
 
-    const suppliedCode = Buffer.from(
-      String(code).trim(),
-    );
-
-    if (
-      expectedCode.length !== suppliedCode.length ||
-      !crypto.timingSafeEqual(expectedCode, suppliedCode)
-    ) {
-      return NextResponse.json(
-        { error: 'Invalid verification code.' },
-        { status: 400 },
-      );
-    }
-
-    // -----------------------------------------------------------------------
-    // Expiration check
-    // -----------------------------------------------------------------------
-    if (
-      !user.emailTime ||
-      Date.now() - new Date(user.emailTime).getTime() > CODE_TTL_MS
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            'Verification code has expired. Please request a new code.',
-        },
-        { status: 400 },
-      );
-    }
-
-    // -----------------------------------------------------------------------
-    // Verify email and invalidate code
-    // -----------------------------------------------------------------------
+    // Persist the code AND timestamp atomically.
     await db.user.update({
       where: { id: userId },
       data: {
-        emailVerify: 1,
-        verificationCode: null,
-        emailTime: null,
+        verificationCode: code,
+        emailTime: new Date(),
       },
     });
+
+    // Actually send the email. We attempt delivery and surface a failure
+    // as a 502 (so the client can retry) — but we do NOT leak the code.
+    const maskedEmail = maskEmail(user.email);
+    try {
+      await sendEmail({
+        to: user.email,
+        subject: 'Your Watershed Capital Verification Code',
+        text: `Hello ${user.firstName || ''},
+
+Your Watershed Capital verification code is: ${code}
+
+This code will expire in 10 minutes. If you did not request a verification code, please ignore this email — no changes will be made to your account.
+
+— Watershed Capital`,
+      });
+    } catch (sendErr: any) {
+      console.error('[verify-email] sendEmail failed:', sendErr?.message);
+      return NextResponse.json(
+        { error: 'Failed to send verification email. Please try again.' },
+        { status: 502 },
+      );
+    }
 
     return NextResponse.json({
-      verified: true,
-      message: 'Email verified successfully.',
+      message: 'Verification code sent to your email.',
+      sentTo: maskedEmail,
     });
-  } catch (e: unknown) {
-    console.error('Verify-email verification error:', e);
-
-    return NextResponse.json(
-      {
-        error: 'Unable to verify email at this time.',
-      },
-      { status: 500 },
-    );
+  } catch (e: any) {
+    console.error('Verify-email send error:', e);
+    return NextResponse.json({ error: e.message }, { status: 500 });
   }
+}
+
+function maskEmail(email: string): string {
+  const [local, domain] = email.split('@');
+  if (!domain || local.length <= 2) return email;
+  return `${local.slice(0, 2)}${'*'.repeat(Math.min(local.length - 2, 4))}@${domain}`;
 }

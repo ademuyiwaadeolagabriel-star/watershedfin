@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthFromRequest } from '@/lib/auth';
+import { requireRole } from '@/lib/auth';
 
 /**
  * GET /api/staff/performance?role=loan&branchId=xxx&month=YYYY-MM
@@ -13,12 +13,17 @@ import { getAuthFromRequest } from '@/lib/auth';
  */
 export async function GET(req: NextRequest) {
   try {
-    const authPayload = await getAuthFromRequest(req);
-    if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    const authResult = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'cfo', 'hr', 'bm']);
+    if (authResult instanceof NextResponse) return authResult;
+    const authPayload = authResult;
 
     const { searchParams } = new URL(req.url);
     const role = searchParams.get('role') || 'loan';
-    const branchId = searchParams.get('branchId');
+    let branchId = searchParams.get('branchId');
+    if (authPayload.role === 'bm') {
+      if (!authPayload.branchId) return NextResponse.json({ error: 'Your Branch Manager account is not assigned to a branch.' }, { status: 403 });
+      branchId = authPayload.branchId;
+    }
     const month = searchParams.get('month') || new Date().toISOString().slice(0, 7);
 
     const monthStart = new Date(`${month}-01T00:00:00.000Z`);
@@ -84,8 +89,9 @@ export async function GET(req: NextRequest) {
         avgProcessingDays: Math.round(avgProcessingDays),
         disbursementTarget: s.monthlyDisbursementTarget || 0,
         loanCountTarget: s.monthlyLoanCountTarget || 0,
+        // v51 — Decimal arithmetic: s.monthlyDisbursementTarget is Decimal, wrap with Number().
         targetProgress: s.monthlyDisbursementTarget
-          ? Math.round((totalDisbursed / s.monthlyDisbursementTarget) * 100)
+          ? Math.round((totalDisbursed / Number(s.monthlyDisbursementTarget)) * 100)
           : 0,
       };
     }));

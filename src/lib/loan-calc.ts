@@ -35,6 +35,17 @@ export interface LoanCalculation {
 /**
  * Calculate full loan schedule (reducing balance or flat)
  */
+/** Add calendar months while clamping day-of-month to the target month's last day. */
+export function addMonthsClamped(startDate: Date, months: number): Date {
+  const result = new Date(startDate);
+  const originalDay = result.getDate();
+  result.setDate(1);
+  result.setMonth(result.getMonth() + months);
+  const lastDay = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
+  result.setDate(Math.min(originalDay, lastDay));
+  return result;
+}
+
 export function calculateLoanSchedule(
   principal: number,
   annualRatePercent: number,
@@ -62,8 +73,7 @@ export function calculateLoanSchedule(
 
     let balance = principal;
     for (let i = 1; i <= tenorMonths; i++) {
-      const dueDate = new Date(startDate);
-      dueDate.setMonth(dueDate.getMonth() + i);
+      const dueDate = addMonthsClamped(startDate, i);
       const newBalance = balance - monthlyPrincipal;
       schedule.push({
         month: i,
@@ -89,8 +99,7 @@ export function calculateLoanSchedule(
 
     let balance = principal;
     for (let i = 1; i <= tenorMonths; i++) {
-      const dueDate = new Date(startDate);
-      dueDate.setMonth(dueDate.getMonth() + i);
+      const dueDate = addMonthsClamped(startDate, i);
       const interest = balance * monthlyRate;
       const principalPart = monthlyInstallment - interest;
       const newBalance = balance - principalPart;
@@ -180,8 +189,7 @@ export function calculateCcdLoanSchedule(
   const schedule: ScheduleRow[] = [];
   let balance = ccdAmount;
   for (let i = 1; i <= tenorMonths; i++) {
-    const dueDate = new Date(startDate);
-    dueDate.setMonth(dueDate.getMonth() + i);
+    const dueDate = addMonthsClamped(startDate, i);
     const principal = monthlyInstallment;  // Entire payment is principal (no interest)
     const newBalance = balance - principal;
     schedule.push({

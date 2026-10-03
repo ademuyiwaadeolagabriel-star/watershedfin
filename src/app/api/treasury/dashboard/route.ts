@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
 
     // Bank assets
     const assets = await db.treasuryBankAsset.findMany({ where: { status: 'active' } });
-    const totalAssetsValue = assets.reduce((s, a) => s + a.purchasePrice + a.accruedIncome, 0);
+    const totalAssetsValue = assets.reduce((s, a) => s + Number(a.purchasePrice ?? 0) + Number(a.accruedIncome ?? 0), 0);
 
     return NextResponse.json({
       totalInvested,

@@ -40,12 +40,30 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}));
     if (!body.name) return NextResponse.json({ error: 'Name is required' }, { status: 400 });
+    const margin = body.benchmarkedMargin !== undefined ? Number(body.benchmarkedMargin) : null;
+    const riskScore = body.riskScore !== undefined ? Number(body.riskScore) : 0.5;
+    if (margin != null && (!Number.isFinite(margin) || margin < 0)) {
+      return NextResponse.json({ error: 'benchmarkedMargin must be a finite non-negative percentage.' }, { status: 400 });
+    }
+    if (!Number.isFinite(riskScore) || riskScore < 0) {
+      return NextResponse.json({ error: 'riskScore must be a finite non-negative number.' }, { status: 400 });
+    }
     const sector = await db.sector.create({
       data: {
-        name: body.name,
-        riskScore: body.riskScore !== undefined ? Number(body.riskScore) : 0.5,
+        name: String(body.name).trim(),
+        riskScore,
         riskScoreInt: body.riskScoreInt !== undefined ? Number(body.riskScoreInt) : null,
-        benchmarkedMargin: body.benchmarkedMargin !== undefined ? Number(body.benchmarkedMargin) : null,
+        benchmarkedMargin: margin,
+      },
+    });
+    await db.auditLog.create({
+      data: {
+        adminId: authResult.id,
+        action: 'sector_created',
+        module: 'settings',
+        description: `Created sector ${sector.name}; benchmark margin=${sector.benchmarkedMargin ?? 'unset'}`,
+        severity: 'info',
+        metadata: JSON.stringify({ sectorId: sector.id, benchmarkedMargin: sector.benchmarkedMargin }),
       },
     });
     return NextResponse.json({ sector });

@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
       where: assetWhere,
       select: { accruedIncome: true },
     });
-    totalTreasuryIncome += assets.reduce((s, a) => s + a.accruedIncome, 0);
+    totalTreasuryIncome += assets.reduce((s, a) => s + Number(a.accruedIncome ?? 0), 0);
 
     // Try to derive loan income and interest expense from journal entries
     let totalLoanIncome = 0;

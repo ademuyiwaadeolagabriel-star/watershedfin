@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthFromRequest } from '@/lib/auth';
+import { requireRole } from '@/lib/auth';
 
 /**
  * GET /api/customers/[id]/credit-score
@@ -16,8 +16,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authPayload = await getAuthFromRequest(req);
-    if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    const authResult = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'credit', 'loan', 'bm', 'analyst', 'cs']);
+    if (authResult instanceof NextResponse) return authResult;
+    const authPayload = authResult;
 
     const { id: userId } = await params;
     const user = await db.user.findUnique({
@@ -29,6 +30,10 @@ export async function GET(
       },
     });
     if (!user) return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+    if (['bm', 'loan', 'lo', 'frontdesk'].includes(authPayload.role) &&
+        authPayload.branchId && user.branchId && authPayload.branchId !== user.branchId) {
+      return NextResponse.json({ error: 'Access denied — customer belongs to a different branch.' }, { status: 403 });
+    }
 
     let score = 0;
     const breakdown: any = {};

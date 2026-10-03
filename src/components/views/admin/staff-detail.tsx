@@ -105,7 +105,8 @@ export function StaffDetailView() {
         body: JSON.stringify({
           disbursementTarget: Number(targetForm.disbursementTarget),
           loanCountTarget: Number(targetForm.loanCountTarget),
-          month: targetForm.month,
+          periodType: 'monthly',
+          periodKey: targetForm.month,
         }),
       });
       if (res.ok) {

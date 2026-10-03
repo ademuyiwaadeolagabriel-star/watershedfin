@@ -31,8 +31,24 @@ export async function PUT(
     if (body.name !== undefined) data.name = body.name;
     if (body.riskScore !== undefined) data.riskScore = Number(body.riskScore);
     if (body.riskScoreInt !== undefined) data.riskScoreInt = Number(body.riskScoreInt);
-    if (body.benchmarkedMargin !== undefined) data.benchmarkedMargin = Number(body.benchmarkedMargin);
+    if (body.benchmarkedMargin !== undefined) {
+      const margin = Number(body.benchmarkedMargin);
+      if (!Number.isFinite(margin) || margin < 0) {
+        return NextResponse.json({ error: 'benchmarkedMargin must be a finite non-negative percentage.' }, { status: 400 });
+      }
+      data.benchmarkedMargin = margin;
+    }
     const sector = await db.sector.update({ where: { id }, data });
+    await db.auditLog.create({
+      data: {
+        adminId: authResult.id,
+        action: 'sector_updated',
+        module: 'settings',
+        description: `Updated sector ${sector.name}; benchmark margin=${sector.benchmarkedMargin}%`,
+        severity: 'info',
+        metadata: JSON.stringify({ sectorId: sector.id, benchmarkedMargin: Number(sector.benchmarkedMargin), riskScore: Number(sector.riskScore) }),
+      },
+    });
     return NextResponse.json({ sector });
   } catch (e: any) {
     console.error('Update sector API error:', e);

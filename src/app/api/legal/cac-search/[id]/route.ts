@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthFromRequest } from '@/lib/auth';
+import { requireRole } from '@/lib/auth';
 
 /**
  * GET /api/legal/cac-search?userId=xxx
@@ -8,10 +8,9 @@ import { getAuthFromRequest } from '@/lib/auth';
  */
 export async function GET(req: NextRequest) {
   try {
-    const authPayload = await getAuthFromRequest(req);
-    if (!authPayload) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
+    const authResult = await requireRole(req, ['super', 'legal']);
+    if (authResult instanceof NextResponse) return authResult;
+    const authPayload = authResult;
 
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');

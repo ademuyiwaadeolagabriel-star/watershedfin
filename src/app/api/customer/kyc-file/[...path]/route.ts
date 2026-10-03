@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { db } from '@/lib/db';
-import { requireCustomerAuth } from '@/lib/auth';
+import { getAuthFromRequest } from '@/lib/auth';
 import { get } from '@vercel/blob';
 
 // ============================================================================
@@ -26,40 +26,41 @@ export async function GET(
   { params }: { params: Promise<{ path: string[] }> },
 ) {
   try {
-    // --- Auth gate: customer JWT mandatory -------------------------------
-    const authResult = await requireCustomerAuth(req);
-    if (authResult instanceof NextResponse) return authResult;
-    const authPayload = authResult as { id: string; type: string };
-    const userId = authPayload.id;
+    // Customers may read only their own files. KYC reviewers may read the
+    // customer's referenced KYC documents through the same private proxy.
+    const authPayload = await getAuthFromRequest(req);
+    if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
 
     const { path } = await params;
     const fullPath = path.join('/');
-
-    // --- Ownership check: first path segment must match the caller -------
-    // (The upload route wrote files under kyc-private/{userId}/... or
-    // proxy path /api/customer/kyc-file/{userId}/...).
     const parts = fullPath.split('/');
     const pathUserId = parts[0];
-    if (!pathUserId || pathUserId !== userId) {
-      return NextResponse.json(
-        { error: 'Forbidden: file does not belong to authenticated customer.' },
-        { status: 403 },
-      );
+    if (!pathUserId) return NextResponse.json({ error: 'Invalid file path' }, { status: 400 });
+
+    const isCustomer = authPayload.type === 'customer';
+    const reviewerRole = ['super', 'cs', 'compliance'].includes(authPayload.role);
+    if (!isCustomer && !reviewerRole) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    if (isCustomer && pathUserId !== authPayload.id) {
+      return NextResponse.json({ error: 'Forbidden: file does not belong to authenticated customer.' }, { status: 403 });
     }
 
-    // Double-check via DB: at least one Business column owned by the user
-    // must reference this proxy path. This prevents a customer from
-    // path-traversing to a file they did upload once but later removed.
     const user = await db.user.findUnique({
-      where: { id: userId },
-      select: { businessId: true },
+      where: { id: pathUserId },
+      select: { id: true, businessId: true, branchId: true },
     });
+    if (!user) return NextResponse.json({ error: 'Customer not found.' }, { status: 404 });
+    if (authPayload.role === 'cs' && authPayload.branchId && user.branchId &&
+        authPayload.branchId !== user.branchId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     if (!user?.businessId) {
       return NextResponse.json({ error: 'No business record on file.' }, { status: 404 });
     }
     const business = await db.business.findUnique({
       where: { id: user.businessId },
-      select: ['selfie', 'docFront', 'proofOfAddress', 'docCac'].reduce((acc: any, c) => {
+      select: ['selfie', 'docFront', 'docBack', 'proofOfAddress', 'docShopPhoto', 'docCac'].reduce((acc: any, c) => {
         acc[c] = true; return acc;
       }, {}),
     });
@@ -89,6 +90,7 @@ export async function GET(
         // Convert the readable stream into a Buffer for the response.
         const reader = result.stream.getReader();
         const chunks: Uint8Array[] = [];
+        // eslint-disable-next-line no-constant-condition
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -111,7 +113,7 @@ export async function GET(
       }
     } else {
       // Dev: read from /tmp.
-      const tmpPath = join('/tmp', 'uploads', 'kyc-private', userId, filename);
+      const tmpPath = join('/tmp', 'uploads', 'kyc-private', pathUserId, filename);
       try {
         const buf = await readFile(tmpPath);
         const ext = filename.split('.').pop()?.toLowerCase();

@@ -1,5 +1,6 @@
 'use client';
 
+import { getAuthToken, clearAuthToken, clearCustomerAuthToken } from '@/lib/auth-client';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
@@ -61,19 +62,17 @@ export type ViewKey =
   | 'loan-products'
   | 'sectors'
   | 'settings'
-  | 'cam'            // Universal CAM
-  | 'loan-detail'    // Single loan view
+  | 'cam'
+  | 'loan-detail'
   | 'customer-detail'
   | 'staff-detail'
   | 'login'
   | 'super-admin-login'
   | 'branding-settings'
-  // Public marketing site
   | 'public-home'
   | 'public-about'
   | 'public-contact'
   | 'public-blog'
-  // Customer portal
   | 'customer-login'
   | 'customer-dashboard'
   | 'customer-loans'
@@ -99,13 +98,9 @@ export type ViewKey =
   | 'customer-kyc'
   | 'customer-faq'
   | 'customer-chat'
-  // Admin: global search results
   | 'search-results'
-  // Admin: blog CMS
   | 'blog-manager'
-  // First-run setup wizard
   | 'setup'
-  // Communication module
   | 'comm-announcements'
   | 'comm-message-center'
   | 'comm-notification-center'
@@ -113,31 +108,26 @@ export type ViewKey =
   | 'comm-sms-broadcast'
   | 'comm-email-campaigns'
   | 'comm-customer-service'
-  // v24 — SuperAdmin System Control
   | 'superadmin-dashboard'
   | 'superadmin-feature-flags'
   | 'superadmin-maintenance'
   | 'superadmin-sessions'
   | 'superadmin-system-health'
   | 'superadmin-audit-retention'
-  // v25 — Performance, Dynamic KYC
   | 'staff-performance'
   | 'kyc-field-manager'
   | 'customer-kyc-dynamic'
-  // v26 — Fee Manager, Staff Create, Change Password, Forgot Password, Legal, CS
   | 'fee-manager'
   | 'staff-create'
   | 'change-password'
   | 'forgot-password'
-  | 'reset-password'  // v41: consumed by email reset link
+  | 'reset-password'
   | 'legal-cac-search'
   | 'legal-mcc'
   | 'cs-kyc-queue'
   | 'cs-payment-verification'
   | 'my-portfolio'
-  // v29 — Branch targets
   | 'branch-targets'
-  // v37 — New workflow step views
   | 'loan-hoc-confirmation'
   | 'loan-compliance-review'
   | 'loan-internal-control'
@@ -159,7 +149,7 @@ interface AppState {
   loginAsCustomer: (userId: string, user: any) => void;
   logoutCustomer: () => void;
 
-  // Portal — which surface the visitor is currently on
+  // Portal
   portal: Portal;
   setPortal: (p: Portal) => void;
 
@@ -183,6 +173,7 @@ export const useAppStore = create<AppState>()(
     (set, get) => ({
       currentAdminId: null,
       currentAdmin: null,
+
       loginAs: (adminId, admin) =>
         set({
           currentAdminId: adminId,
@@ -190,11 +181,22 @@ export const useAppStore = create<AppState>()(
           portal: 'admin',
           currentView: 'dashboard',
         }),
+
       logout: () => {
-        // A1 FIX: Clear JWT token on logout
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('watershed_auth_token');
+        const token = getAuthToken();
+
+        if (token && typeof window !== 'undefined') {
+          void fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }).catch(() => {});
         }
+
+        clearAuthToken();
+        clearCustomerAuthToken();
+
         set({
           currentAdminId: null,
           currentAdmin: null,
@@ -205,6 +207,7 @@ export const useAppStore = create<AppState>()(
 
       currentUserId: null,
       currentUser: null,
+
       loginAsCustomer: (userId, user) =>
         set({
           currentUserId: userId,
@@ -212,10 +215,22 @@ export const useAppStore = create<AppState>()(
           portal: 'customer',
           currentView: 'customer-dashboard',
         }),
+
       logoutCustomer: () => {
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('watershed_auth_token');
+        const token = getAuthToken();
+
+        if (token && typeof window !== 'undefined') {
+          void fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }).catch(() => {});
         }
+
+        clearAuthToken();
+        clearCustomerAuthToken();
+
         set({
           currentUserId: null,
           currentUser: null,
@@ -229,18 +244,33 @@ export const useAppStore = create<AppState>()(
 
       currentView: 'public-home',
       viewParams: {},
-      setView: (view, params = {}) => set({ currentView: view, viewParams: params }),
+
+      setView: (view, params = {}) =>
+        set({
+          currentView: view,
+          viewParams: params,
+        }),
 
       sidebarOpen: true,
-      toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
-      setSidebar: (open) => set({ sidebarOpen: open }),
+      toggleSidebar: () =>
+        set((s) => ({
+          sidebarOpen: !s.sidebarOpen,
+        })),
+
+      setSidebar: (open) =>
+        set({
+          sidebarOpen: open,
+        }),
 
       theme: 'light',
       toggleTheme: () =>
-        set((s) => ({ theme: s.theme === 'light' ? 'dark' : 'light' })),
+        set((s) => ({
+          theme: s.theme === 'light' ? 'dark' : 'light',
+        })),
     }),
     {
       name: 'watershed-banking',
+
       partialize: (s) => ({
         currentAdminId: s.currentAdminId,
         currentAdmin: s.currentAdmin,

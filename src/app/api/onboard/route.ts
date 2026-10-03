@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getAuthFromRequest } from '@/lib/auth';
 import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
+import { Prisma } from '@prisma/client';
 import { notifyWelcome } from '@/lib/notification-service';
 import { createNotification } from '@/lib/notifications';
 
@@ -24,29 +26,19 @@ async function generateUniqueAccountNumber(): Promise<string> {
 }
 
 /** Generate an 8-char alphanumeric merchantId, retrying until unique. */
-async function generateUniqueMerchantId(): Promise<string> {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  for (let i = 0; i < 25; i++) {
-    let code = '';
-    for (let j = 0; j < 8; j++) {
-      code += alphabet[Math.floor(Math.random() * alphabet.length)];
-    }
-    const existing = await db.user.findUnique({
-      where: { merchantId: code },
-      select: { id: true },
-    });
-    if (!existing) return code;
-  }
-  return Math.random().toString(36).slice(2, 10).toUpperCase();
+function generateUniqueMerchantId(): string {
+  // Collision-resistant identifier; the database UNIQUE constraint remains
+  // the final authority.
+  return `M${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
 }
 
 /** Generate the next application reference in the LN-YYYY-NNNN format. */
-async function generateApplicationRef(): Promise<string> {
+async function generateApplicationRef(tx: any): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `LN-${year}-`;
 
   // Find any existing app ref that starts with the prefix for this year.
-  const existing = await db.loanApplicants.findFirst({
+  const existing = await tx.loanApplicants.findFirst({
     where: { applicationRef: { startsWith: prefix } },
     orderBy: { applicationRef: 'desc' },
     select: { applicationRef: true },
@@ -121,6 +113,9 @@ export async function POST(req: NextRequest) {
     if (personal.phone && String(personal.phone).replace(/\D/g, '').length < 10) {
       return NextResponse.json({ error: 'Phone number must be at least 10 digits' }, { status: 400 });
     }
+    if (channel === 'self_onboard' && !personal.password) {
+      return NextResponse.json({ error: 'Password is required for customer self-onboarding.' }, { status: 400 });
+    }
     if (loan?.loanAmount && Number(loan.loanAmount) <= 0) {
       return NextResponse.json({ error: 'Loan amount must be greater than 0' }, { status: 400 });
     }
@@ -141,8 +136,14 @@ export async function POST(req: NextRequest) {
     if (!documents?.passportPhoto) requiredDocs.push('passportPhoto (selfie)');
     if (!documents?.idCardFront && !documents?.meansOfId) requiredDocs.push('idCardFront or meansOfId (acceptable ID)');
     if (!documents?.proofOfAddress) requiredDocs.push('proofOfAddress (utility bill)');
-    if (business?.rcBnNumber && !documents?.cacCertificate) {
-      requiredDocs.push('cacCertificate (required for registered businesses)');
+    // CAC certificate is part of the mandatory onboarding document pack.
+    if (!documents?.cacCertificate) requiredDocs.push('cacCertificate');
+    // Registered/company structures must also provide the additional business
+    // certificate/photo requested by the onboarding policy.
+    const businessType = String(business?.businessType || business?.legalStructure || '').toLowerCase();
+    if (['partnership', 'llc', 'limited liability', 'company', 'plc', 'public limited liability'].some(v => businessType.includes(v))
+        && !documents?.additionalDocs) {
+      requiredDocs.push('additionalDocs (business certificate/photo)');
     }
     if (requiredDocs.length > 0) {
       return NextResponse.json(
@@ -297,6 +298,58 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Server-side ownership validation for staff-supplied assignment.
+    if (adminId) {
+      const creator = await db.admin.findUnique({
+        where: { id: adminId },
+        select: { role: true, branchId: true },
+      });
+      if (!creator) return NextResponse.json({ error: 'Authenticated staff record not found.' }, { status: 403 });
+
+      const branchScopedRoles = ['bm', 'loan', 'lo', 'frontdesk'];
+      if (branchScopedRoles.includes(creator.role) && assignment?.branchId &&
+          creator.branchId && assignment.branchId !== creator.branchId) {
+        return NextResponse.json({ error: 'You may only onboard customers into your own branch.' }, { status: 403 });
+      }
+      if (assignment?.staffId) {
+        const target = await db.admin.findUnique({
+          where: { id: assignment.staffId },
+          select: { id: true, role: true, branchId: true, status: true },
+        });
+        if (!target || target.status !== 1 || !['loan', 'lo'].includes(target.role)) {
+          return NextResponse.json({ error: 'Invalid or inactive Loan Officer assignment.' }, { status: 400 });
+        }
+        if (creator.role === 'bm' && creator.branchId && target.branchId !== creator.branchId) {
+          return NextResponse.json({ error: 'Branch Manager may only assign Loan Officers in their own branch.' }, { status: 403 });
+        }
+        if (assignment?.branchId && target.branchId && target.branchId !== assignment.branchId) {
+          return NextResponse.json({ error: 'Selected Loan Officer does not belong to the selected branch.' }, { status: 400 });
+        }
+      }
+    } else if (assignment?.staffId) {
+      // Self-onboarding cannot choose or impersonate an internal Loan Officer.
+      return NextResponse.json({ error: 'Customer self-onboarding cannot assign an internal staff member.' }, { status: 400 });
+    }
+
+    if (loan?.planId) {
+      const plan = await db.loanPlan.findUnique({
+        where: { id: loan.planId },
+        select: { id: true, status: true, duration: true, interest: true, min: true, max: true },
+      });
+      if (!plan || plan.status !== 1) return NextResponse.json({ error: 'Selected loan plan is unavailable.' }, { status: 400 });
+      const requestedAmount = Number(loan.loanAmount || 0);
+      const requestedDuration = Number(loan.loanDuration || 0);
+      if (plan.min != null && requestedAmount < Number(plan.min)) {
+        return NextResponse.json({ error: `Loan amount is below the selected plan minimum of ₦${Number(plan.min).toLocaleString()}.` }, { status: 400 });
+      }
+      if (plan.max != null && requestedAmount > Number(plan.max)) {
+        return NextResponse.json({ error: `Loan amount exceeds the selected plan maximum of ₦${Number(plan.max).toLocaleString()}.` }, { status: 400 });
+      }
+      if (requestedDuration !== Number(plan.duration)) {
+        return NextResponse.json({ error: `Loan duration must match the selected plan duration of ${plan.duration} months.` }, { status: 400 });
+      }
+    }
+
     // ----- generate identifiers -----
     // v37: Account number is NOT assigned at onboarding — only after Legal CAC approval.
     // merchantId is still generated here (used for internal tracking).
@@ -384,6 +437,23 @@ export async function POST(req: NextRequest) {
     // whole onboarding. Previously a failure on step 4 (loan create)
     // after step 1 (user create) would leave an orphaned user record.
     const onboardResult = await db.$transaction(async (tx) => {
+    // Repeat duplicate detection inside the SERIALIZABLE transaction. The
+    // preflight check above is only an optimization; it cannot prevent two
+    // concurrent requests from creating the same BVN.
+    if (personal.bvn || personal.email || personal.phone) {
+      const duplicate = await tx.user.findFirst({
+        where: {
+          OR: [
+            ...(personal.bvn ? [{ bvn: String(personal.bvn).replace(/\s/g, '') }] : []),
+            ...(personal.email ? [{ email: personal.email.toLowerCase() }] : []),
+            ...(personal.phone ? [{ phone: personal.phone }] : []),
+          ],
+        },
+        select: { id: true },
+      });
+      if (duplicate) throw new Error('DUPLICATE_ACCOUNT');
+    }
+
     // ----- create user -----
     const user = await tx.user.create({
       data: {
@@ -436,6 +506,22 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // Uploaded KYC documents must be private proxy paths belonging to the
+    // just-created customer. Never persist arbitrary external URLs supplied
+    // by a client into the KYC record.
+    const suppliedDocs = [
+      documents?.passportPhoto,
+      documents?.idCardFront,
+      documents?.meansOfId,
+      documents?.proofOfAddress,
+      documents?.cacCertificate,
+      documents?.additionalDocs,
+    ].filter(Boolean) as string[];
+    const allowedDocPrefix = `/api/customer/kyc-file/${user.id}/`;
+    if (suppliedDocs.some((doc) => !doc.startsWith(allowedDocPrefix))) {
+      throw new Error('Invalid KYC document reference. Documents must be uploaded through the secure KYC upload endpoint.');
+    }
+
     // ----- create business -----
     let yearsInOperation: number | undefined;
     if (business.businessDateEstablished) {
@@ -480,14 +566,14 @@ export async function POST(req: NextRequest) {
       // resolve branch for the loan — staff's branch or selected branch
       let loanBranchId = assignedBranchId;
       if (!loanBranchId && assignedStaffId) {
-        const officer = await db.admin.findUnique({
+        const officer = await tx.admin.findUnique({
           where: { id: assignedStaffId },
           select: { branchId: true },
         });
         loanBranchId = officer?.branchId || undefined;
       }
 
-      const applicationRef = await generateApplicationRef();
+      const applicationRef = await generateApplicationRef(tx);
 
       loanRow = await tx.loanApplicants.create({
         data: {
@@ -495,6 +581,7 @@ export async function POST(req: NextRequest) {
           loanOfficer: assignedStaffId ? { connect: { id: assignedStaffId } } : undefined,
           branch: loanBranchId ? { connect: { id: loanBranchId } } : undefined,
           plan: loan?.planId ? { connect: { id: loan.planId } } : undefined,
+          sectorRef: business.sectorId ? { connect: { id: business.sectorId } } : undefined,
           amount: loanAmount,
           duration: Number(loan?.loanDuration) || 0,
           reason: loan?.loanPurpose || null,
@@ -542,13 +629,17 @@ export async function POST(req: NextRequest) {
         userId: user.id,
         feeKey: consent.feeKey,
         feeAmount: serverFeeAmount, // SERVER value, not caller-supplied
-        acceptedAt: consent.acceptedAt ? new Date(consent.acceptedAt) : new Date(),
+        acceptedAt: new Date(),
         ipAddress: req.headers.get('x-forwarded-for') || null,
         userAgent: req.headers.get('user-agent') || null,
       },
     });
 
     return { user, businessRow, loanRow, appraisalRow };
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      maxWait: 5000,
+      timeout: 30000,
     }); // end db.$transaction
 
     const user = onboardResult.user;
@@ -606,6 +697,9 @@ export async function POST(req: NextRequest) {
     );
   } catch (e: any) {
     console.error('Onboard API error:', e);
-    return NextResponse.json({ error: e.message || 'Onboarding failed' }, { status: 500 });
+    if (e?.message === 'DUPLICATE_ACCOUNT') {
+      return NextResponse.json({ error: 'Duplicate account detected. An account already exists for the supplied BVN, email, or phone.' }, { status: 409 });
+    }
+    return NextResponse.json({ error: 'Onboarding failed' }, { status: 500 });
   }
 }

@@ -566,36 +566,48 @@ function InfoBlock({ label, value, mono }: { label: string; value: string; mono?
 }
 
 function DocTile({ label, src }: { label: string; src: string | null | undefined }) {
+  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    if (!src) {
+      setResolvedSrc(null);
+      return () => {};
+    }
+    void authFetch(src)
+      .then(async (res) => {
+        if (!res.ok) throw new Error('Unable to load document');
+        const blob = await res.blob();
+        objectUrl = URL.createObjectURL(blob);
+        setResolvedSrc(objectUrl);
+      })
+      .catch(() => setResolvedSrc(null));
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [src]);
+
   return (
     <div className="rounded-md border border-slate-200 overflow-hidden bg-slate-50">
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-200 bg-white">
         <p className="text-[11px] font-semibold text-slate-700 flex items-center gap-1">
           <FileText className="h-3 w-3 text-slate-400" /> {label}
         </p>
-        {src ? (
-          <a href={src} target="_blank" rel="noreferrer" className="text-[10px] text-emerald-700 hover:underline">
+        {resolvedSrc ? (
+          <a href={resolvedSrc} target="_blank" rel="noreferrer" className="text-[10px] text-emerald-700 hover:underline">
             Open
           </a>
+        ) : src ? (
+          <span className="text-[10px] text-slate-400">Loading…</span>
         ) : null}
       </div>
       <div className="aspect-[4/3] bg-slate-100 flex items-center justify-center">
-        {src ? (
-          <img
-            src={src}
-            alt={label}
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-              const parent = (e.target as HTMLImageElement).parentElement;
-              if (parent) {
-                parent.innerHTML = '<div class="text-slate-400 text-xs flex flex-col items-center"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg><span class="mt-1">Preview unavailable</span></div>';
-              }
-            }}
-          />
+        {resolvedSrc ? (
+          <img src={resolvedSrc} alt={label} className="w-full h-full object-cover" />
         ) : (
           <div className="text-slate-400 text-xs flex flex-col items-center">
             <ImageIcon className="h-5 w-5 mb-1" />
-            <span>Not provided</span>
+            <span>{src ? 'Preview unavailable' : 'Not provided'}</span>
           </div>
         )}
       </div>

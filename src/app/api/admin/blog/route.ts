@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthFromRequest } from '@/lib/auth';
+import { requireRole } from '@/lib/auth';
 
 /**
  * /api/admin/blog
@@ -84,8 +84,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const authPayload = await getAuthFromRequest(req);
-    if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    const authResult = await requireRole(req, ['super', 'admin']);
+    if (authResult instanceof NextResponse) return authResult;
+    const authPayload = authResult;
     const body = await req.json();
 
     if (!body.title || !body.body) {

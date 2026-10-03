@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthFromRequest } from '@/lib/auth';
+import { requireRole } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
 import { notifyPasswordReset } from '@/lib/notification-service';
 
@@ -17,16 +17,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authPayload = await getAuthFromRequest(req);
-    if (!authPayload) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
-
-    // Only frontdesk, bm, and super can reset passwords
-    const allowedRoles = ['super', 'frontdesk', 'bm'];
-    if (!allowedRoles.includes(authPayload.role)) {
-      return NextResponse.json({ error: 'Only Front Desk, Branch Manager, or Super Admin can reset passwords' }, { status: 403 });
-    }
+    const authResult = await requireRole(req, ['super', 'frontdesk', 'bm']);
+    if (authResult instanceof NextResponse) return authResult;
+    const authPayload = authResult;
 
     const { id: userId } = await params;
 
@@ -46,18 +39,11 @@ export async function POST(
     const hash = bcrypt.hashSync(tempPassword, 10);
     await db.user.update({
       where: { id: userId },
-      data: { password: hash },
+      data: { password: hash, authVersion: { increment: 1 } },
     });
 
-    // v54 (audit #13): Revoke all active sessions for this user after a password reset.
-    // Customer sessions are stateless JWTs (not tracked in ActiveSession), but we
-    // defensively clear any admin-side ActiveSession rows that reference this id
-    // in case the customer id was ever linked to an admin login. The .catch
-    // ensures a no-op if the id is not present.
-    await db.activeSession.updateMany({
-      where: { adminId: userId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    }).catch(() => {});
+    // Incrementing User.authVersion invalidates all previously issued
+    // customer JWTs without conflating customer IDs with admin sessions.
 
     // Send notifications (dashboard + email)
     const customerName = `${user.firstName} ${user.lastName}`.trim();

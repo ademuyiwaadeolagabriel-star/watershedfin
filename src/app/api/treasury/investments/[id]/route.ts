@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireRole, requireMakerChecker } from '@/lib/auth';
+import { requireRole, requireMakerChecker, completeMakerCheckerExecution } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { computeMaturity, generateSubscriptionCode, refreshAccrual } from '@/lib/treasury';
 
@@ -38,9 +38,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Without a stage query param the route falls back to its existing behavior.
   // Applies to both `redeem` and `rollover` actions.
   const url_v53 = new URL(req.url);
-  if (url_v53.searchParams.get('stage')) {
-    const mc_v53 = await requireMakerChecker(req, {
+  let mc_v53: any;
+  const targetId_v53 = new URL(req.url).pathname.split('/').filter(Boolean).at(-1) || undefined;
+  {
+    mc_v53 = await requireMakerChecker(req, {
       operation: 'treasury_investment_redeem_rollover',
+      targetId: targetId_v53,
       stages: ['propose', 'review', 'authorize', 'execute'],
       enforceSegregation: true,
       makerRoles: ['treasury', 'cfo', 'finance'],
@@ -89,6 +92,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         data: { status: 'liquidated' },
       });
 
+    if (mc_v53.stage === 'execute' && mc_v53.proposalId) await completeMakerCheckerExecution(mc_v53.proposalId, mc_v53.actorId);
       return NextResponse.json({
         investment: updated,
         payout: { principal: inv.principal, accrued: inv.accruedInterest, penalty, wht: inv.whtDeducted, net: netPayout },
@@ -153,6 +157,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         },
       });
 
+    if (mc_v53.stage === 'execute' && mc_v53.proposalId) await completeMakerCheckerExecution(mc_v53.proposalId, mc_v53.actorId);
       return NextResponse.json({ investment: newInv, previous: inv.subscriptionCode });
     }
 

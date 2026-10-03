@@ -3,96 +3,70 @@ import { requireCustomerAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { randomUUID } from 'crypto';
+import { put } from '@vercel/blob';
 
-/**
- * POST /api/customer/onboarding-payment/upload-proof
- * Customer uploads proof of payment for manual bank transfer.
- * Body: FormData { reference?, file } — userId is derived from the JWT,
- * NOT from the form data (v52 IDOR fix).
- *
- * Saves the file to /public/payments/ and creates an OnboardingPayment
- * record with status 'pending' for CS to verify.
- *
- * v52 — atomicity + IDOR alignment with v50 pattern (#10):
- *  - Customer identity is derived from the JWT via `requireCustomerAuth`,
- *    NOT from `formData.get('userId')`. The previous implementation
- *    (v51) added the auth gate but still trusted the form-data userId,
- *    so a logged-in customer could upload proof under any other
- *    customer's account. The form-data userId field is now ignored.
- *  - Idempotency: if the customer already has an ACTIVE LegalNameSearch
- *    (isActive=true), the upload is still accepted (the customer may
- *    be uploading additional/replacement proof) but the response flags
- *    the idempotent state so the client UI can redirect.
- *  - File write + DB write: if the DB write fails after the file has
- *    been written, the orphaned file is removed in a compensating
- *    catch — this is the closest equivalent of `db.$transaction` for
- *    a single-DB-write + filesystem-write flow.
- *  - The downstream CS confirm route (and the Paystack webhook) enforce
- *    the unique-active-Legal-case invariant (#26) on the LegalNameSearch
- *    creation side, so duplicate upload-proof submissions cannot lead
- *    to duplicate Legal cases.
- */
+const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
+const MAX_SIZE = 10 * 1024 * 1024;
+
 export async function POST(req: NextRequest) {
-  // v51/v52 — customer auth gate: identity derived from JWT, NOT body.
   const authResult = await requireCustomerAuth(req);
   if (authResult instanceof NextResponse) return authResult;
-  const authPayload = authResult as { id: string; type: string };
-  const userId = authPayload.id; // v52 — JWT subject, NOT formData.get('userId')
+  const userId = (authResult as { id: string }).id;
 
-  let absolutePath: string | null = null;
-
+  let localPath: string | null = null;
   try {
     const formData = await req.formData();
-    // v52 — `userId` is no longer read from the form data. We accept
-    // (and ignore) any caller-supplied userId field for backwards
-    // compatibility with older clients, but the authenticated JWT
-    // subject is the sole source of truth.
-    const reference = (formData.get('reference') as string) || `WAT-TRF-${Date.now()}`;
-    const file = formData.get('file') as File;
+    const referenceInput = String(formData.get('reference') || '').trim();
+    const file = formData.get('file');
+    if (!(file instanceof File)) {
+      return NextResponse.json({ error: 'Proof of payment file is required' }, { status: 400 });
+    }
 
-    if (!file) {
-      return NextResponse.json(
-        { error: 'Proof of payment file is required' },
-        { status: 400 },
-      );
+    const mime = file.type;
+    if (!ALLOWED_TYPES.has(mime)) {
+      return NextResponse.json({ error: 'Unsupported proof file type.' }, { status: 400 });
+    }
+    if (file.size <= 0 || file.size > MAX_SIZE) {
+      return NextResponse.json({ error: 'File must be between 1 byte and 10MB.' }, { status: 400 });
     }
 
     const user = await db.user.findUnique({
       where: { id: userId },
       select: { id: true, onboardingStage: true },
     });
-
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    if (!['payment_pending', 'kyc_approved', 'payment_confirmed'].includes(user.onboardingStage)) {
+      return NextResponse.json({ error: `Manual CAC payment is not allowed at stage ${user.onboardingStage}.` }, { status: 400 });
     }
 
-    // Get the CAC search fee
-    const feeSetting = await db.systemSetting.findUnique({
-      where: { key: 'fee_cac_search' },
-    });
-    const amount =
-      feeSetting && feeSetting.active !== false
-        ? Number(feeSetting.value)
-        : 5000;
+    const feeSetting = await db.systemSetting.findUnique({ where: { key: 'fee_cac_search' } });
+    const amount = feeSetting && feeSetting.active !== false ? Number(feeSetting.value) : 5000;
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return NextResponse.json({ error: 'CAC fee is not configured correctly.' }, { status: 500 });
+    }
 
-    // Save the file
-    const ext = file.name.split('.').pop() || 'jpg';
-    const fileName = `proof-${userId}-${Date.now()}.${ext}`;
-    const filePath = `/payments/${fileName}`;
-    absolutePath = path.join(process.cwd(), 'public', 'payments', fileName);
+    const ext = mime === 'application/pdf' ? 'pdf' : mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg';
+    const objectName = `${userId}/${randomUUID()}.${ext}`;
+    let proxyPath: string;
 
-    // Create directory if it doesn't exist
-    await fs.mkdir(path.dirname(absolutePath), { recursive: true });
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await fs.writeFile(absolutePath, buffer);
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+      await put(`payment-proofs/${objectName}`, file, {
+        access: 'private',
+        addRandomSuffix: false,
+        contentType: mime,
+      });
+      proxyPath = `/api/admin/cs/payment-proof/${objectName}`;
+    } else {
+      const dir = path.join('/tmp', 'uploads', 'payment-proofs', userId);
+      await fs.mkdir(dir, { recursive: true });
+      localPath = path.join(dir, `${randomUUID()}.${ext}`);
+      await fs.writeFile(localPath, Buffer.from(await file.arrayBuffer()));
+      proxyPath = `/api/admin/cs/payment-proof/${userId}/${path.basename(localPath)}`;
+    }
 
-    // Create OnboardingPayment record with status 'pending'.
-    //
-    // v52 — Compensating-action atomicity: if the DB write fails after
-    // the file has been written, remove the orphaned file so we don't
-    // accumulate unreferenced payment proofs on disk. This is the
-    // filesystem equivalent of `db.$transaction` rollback for a
-    // single-row insert + single-file-write flow.
+    const reference = referenceInput || `WAT-TRF-${Date.now()}-${randomUUID().slice(0, 8).toUpperCase()}`;
+
     let payment;
     try {
       payment = await db.onboardingPayment.create({
@@ -102,70 +76,39 @@ export async function POST(req: NextRequest) {
           method: 'transfer',
           status: 'pending',
           reference,
-          proofOfPaymentPath: filePath,
+          proofOfPaymentPath: proxyPath,
         },
       });
-    } catch (dbErr) {
-      // Best-effort cleanup of the orphaned file.
-      try {
-        if (absolutePath) await fs.unlink(absolutePath);
-      } catch {
-        // ignore — disk cleanup best-effort
-      }
-      throw dbErr;
+    } catch (e) {
+      if (localPath) await fs.unlink(localPath).catch(() => {});
+      throw e;
     }
 
-    // Notify CS staff that a manual payment needs verification.
-    // Fire-and-forget: notification failure must never cause the upload
-    // itself to fail.
     try {
       const csStaff = await db.admin.findMany({
         where: { role: 'cs', status: 1, csPaymentVerify: true },
         select: { id: true },
       });
       const { createNotification } = await import('@/lib/notifications');
-      await Promise.all(csStaff.map(cs =>
-        createNotification({
-          adminId: cs.id,
-          type: 'payment_verification_request',
-          title: 'New Manual Payment — Verification Needed',
-          message: `A customer has uploaded proof of payment for the CAC search fee (₦${amount.toLocaleString()}). Please verify.`,
-          category: 'payment',
-          actionLabel: 'Verify Payment',
-          actionView: 'cs-payment-verification',
-        })
-      ));
-    } catch (e) {
-      // non-blocking
-    }
-
-    // Surface whether the user already has an ACTIVE Legal case so the
-    // client UI can decide whether to redirect (the upload is still
-    // accepted in either case — the customer may be re-uploading proof
-    // after a previous rejection).
-    const existingActiveCase = await db.legalNameSearch.findFirst({
-      where: { userId, isActive: true },
-      select: { id: true, status: true },
-    });
+      await Promise.all(csStaff.map(cs => createNotification({
+        adminId: cs.id,
+        type: 'payment_verification_request',
+        title: 'New Manual Payment — Verification Needed',
+        message: `A customer has uploaded proof of payment for the CAC search fee (₦${amount.toLocaleString()}). Please verify.`,
+        category: 'payment',
+        actionLabel: 'Verify Payment',
+        actionView: 'cs-payment-verification',
+      })));
+    } catch {}
 
     return NextResponse.json({
       ok: true,
       paymentId: payment.id,
       message: 'Proof of payment uploaded. Customer Service will verify your payment shortly.',
-      existingActiveLegalCase: existingActiveCase
-        ? { id: existingActiveCase.id, status: existingActiveCase.status }
-        : null,
     });
   } catch (e: any) {
-    // If the file was written but a later step failed, attempt cleanup.
-    if (absolutePath) {
-      try {
-        await fs.unlink(absolutePath);
-      } catch {
-        // ignore — best-effort
-      }
-    }
+    if (localPath) await fs.unlink(localPath).catch(() => {});
     console.error('[ONBOARDING PAYMENT UPLOAD] error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
   }
 }

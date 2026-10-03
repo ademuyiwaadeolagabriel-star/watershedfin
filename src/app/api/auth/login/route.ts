@@ -102,26 +102,22 @@ export async function POST(req: NextRequest) {
       id: admin.id,
       role: admin.role,
       branchId: admin.branchId,
+      type: 'admin',
     });
 
-    // v25 — Track active session (wrapped in try/catch, NOT .catch on undefined)
-    try {
-      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-      const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000); // 8 hours
-      await db.activeSession.create({
-        data: {
-          adminId: admin.id,
-          tokenHash,
-          ip,
-          userAgent,
-          expiresAt,
-        },
-      });
-    } catch (sessionErr) {
-      // If ActiveSession table doesn't exist or Prisma Client wasn't regenerated,
-      // this will fail — but login should still succeed
-      console.error('[LOGIN] ActiveSession write failed (non-blocking):', sessionErr);
-    }
+    // Server-side session creation is mandatory because verifyAuthToken is
+    // fail-closed for admin tokens. Never return a token that has no session.
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000);
+    await db.activeSession.create({
+      data: {
+        adminId: admin.id,
+        tokenHash,
+        ip,
+        userAgent,
+        expiresAt,
+      },
+    });
 
     // Log login history (also wrapped in try/catch)
     try {

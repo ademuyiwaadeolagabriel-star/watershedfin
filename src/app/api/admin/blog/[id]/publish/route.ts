@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requireAuth } from '@/lib/auth';
+import { requireRole } from '@/lib/auth';
 
 /**
  * POST /api/admin/blog/[id]/publish
@@ -18,7 +18,7 @@ export async function POST(
 ) {
   try {
     // v50 — auth gate mandatory, no fallback.
-    const authResult = await requireAuth(req);
+    const authResult = await requireRole(req, ['super', 'admin']);
     if (authResult instanceof NextResponse) return authResult;
     const authPayload = authResult as { id: string; role: string };
     const adminId = authPayload.id;

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthFromRequest } from '@/lib/auth';
+import { requireRole } from '@/lib/auth';
 import { notifyClientAssigned } from '@/lib/notification-service';
 
 /**
@@ -18,10 +18,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authPayload = await getAuthFromRequest(req);
-    if (!authPayload) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
+    const authResult = await requireRole(req, ['super', 'frontdesk', 'bm']);
+    if (authResult instanceof NextResponse) return authResult;
+    const authPayload = authResult;
 
     const { id: userId } = await params;
     const body = await req.json();
@@ -34,6 +33,12 @@ export async function POST(
 
     if (!user) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+    }
+
+    // Branch-scoped staff may only reassign customers in their own branch.
+    if (authPayload.role === 'bm' && authPayload.branchId && user.branchId &&
+        authPayload.branchId !== user.branchId) {
+      return NextResponse.json({ error: 'Access denied — customer belongs to a different branch.' }, { status: 403 });
     }
 
     if (assignTo === 'bm') {

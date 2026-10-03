@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { calculateLoanSchedule } from '@/lib/loan-calc';
+import { calculateLoanSchedule, addMonthsClamped } from '@/lib/loan-calc';
 import { createNotification } from '@/lib/notifications';
 import { getAuthFromRequest } from '@/lib/auth';
+import { Prisma } from '@prisma/client';
 import { postJournal } from '@/lib/accounting';
 
 // POST /api/loans/[id]/disburse
@@ -168,13 +169,19 @@ export async function POST(
 
     // v48 FIX (Data-2): Wrap entire disbursement in a database transaction
     // v48 FIX (Data-3): Use setMonth for maturity date (matches schedule calculation)
-    const maturityDate = new Date(disbursementDate);
-    maturityDate.setMonth(maturityDate.getMonth() + tenorMonths);
+    const maturityDate = addMonthsClamped(disbursementDate, tenorMonths);
 
     const result = await db.$transaction(async (tx) => {
-      // Update loan — activate it
-      const updatedLoan = await tx.loanApplicants.update({
-        where: { id },
+      // Atomic maker/checker claim: only one concurrent request can move the
+      // loan out of the disbursement state. This prevents two second
+      // approvers racing and creating two schedules/disbursements.
+      const claim = await tx.loanApplicants.updateMany({
+        where: {
+          id,
+          currentStep: { in: ['CFO_DISBURSEMENT', 'TREASURY_PAYOUT', 'INTERNAL_CONTROL_CHECK'] },
+          disbursedAt: null,
+          status: { not: 'running' },
+        },
         data: {
           status: 'running',
           currentStep: 'ACTIVE_MONITORING',
@@ -182,7 +189,7 @@ export async function POST(
           disbursementDate,
           disbursedBy: adminId,
           startDate: disbursementDate,
-          maturityDate, // v48: Uses setMonth, matching the schedule's date calculation
+          maturityDate,
           approvedAmount: principal,
           approvedTenor: tenorMonths,
           approvedDate: disbursementDate,
@@ -190,6 +197,10 @@ export async function POST(
           auditPassedAt: loan.auditPassedAt || new Date(),
         },
       });
+      if (claim.count !== 1) {
+        throw new Error('DISBURSEMENT_ALREADY_CLAIMED');
+      }
+      const updatedLoan = await tx.loanApplicants.findUniqueOrThrow({ where: { id } });
 
       // Create disbursement transaction
       await tx.loanTransaction.create({
@@ -284,6 +295,17 @@ export async function POST(
           (await tx.chartOfAccount.findFirst({
             where: { OR: [{ subType: 'bank' }, { subType: 'cash' }] },
           }));
+        const upfrontFeeAcc =
+          (await tx.chartOfAccount.findUnique({ where: { code: '4200' } })) ??
+          (await tx.chartOfAccount.findFirst({
+            where: { name: { contains: 'Upfront Fees', mode: 'insensitive' } },
+          }));
+        const ccdAcc =
+          (await tx.chartOfAccount.findUnique({ where: { code: '2110' } })) ??
+          (await tx.chartOfAccount.findFirst({
+            where: { name: { contains: 'Contribution Deposit', mode: 'insensitive' } },
+          })) ??
+          (await tx.chartOfAccount.findUnique({ where: { code: '2100' } }));
 
         // v54 — Blocker 3: missing GL accounts are FATAL (audit #9).
         // Previously the if/else logged but didn't throw — the disbursement
@@ -291,12 +313,13 @@ export async function POST(
         // diverge from GL. Now: throw inside the transaction → entire
         // disbursement rolls back. The COA must be configured before any
         // disbursement can proceed.
-        if (!loanRecAcc || !bankAcc) {
+        if (!loanRecAcc || !bankAcc || !upfrontFeeAcc || !ccdAcc) {
           throw new Error(
             `Disbursement aborted — required GL accounts not found. ` +
-              `loanReceivable=${loanRecAcc ? 'found' : 'MISSING (expected COA code 1200 or subType="loan_receivable")'}, ` +
-              `bank=${bankAcc ? 'found' : 'MISSING (expected COA subType "bank" or "cash")'}. ` +
-              `Configure the Chart of Accounts before disbursement can proceed.`,
+              `loanReceivable=${loanRecAcc ? 'found' : 'MISSING'}, ` +
+              `bank=${bankAcc ? 'found' : 'MISSING'}, ` +
+              `upfrontFee=${upfrontFeeAcc ? 'found' : 'MISSING'}, ` +
+              `ccd=${ccdAcc ? 'found' : 'MISSING'}.`,
           );
         }
         await postJournal(
@@ -304,8 +327,14 @@ export async function POST(
             date: disbursementDate,
             description: `Loan disbursement — ${loan.applicationRef}`,
             items: [
+              // Gross principal becomes the loan receivable.
               { accountId: loanRecAcc.id, debit: principal, credit: 0 },
-              { accountId: bankAcc.id, debit: 0, credit: principal },
+              // Only net cash is actually paid out.
+              { accountId: bankAcc.id, debit: 0, credit: netDisbursement },
+              // Upfront fee is recognized as revenue.
+              { accountId: upfrontFeeAcc.id, debit: 0, credit: upfrontFeeAmount },
+              // CCD is held as a customer liability/deposit, not revenue.
+              { accountId: ccdAcc.id, debit: 0, credit: ccdAmount },
             ],
             createdById: adminId,
             sourceType: 'loan_disbursement',
@@ -340,6 +369,10 @@ export async function POST(
       });
 
       return updatedLoan;
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      maxWait: 5000,
+      timeout: 30000,
     });
 
     const updatedLoan = result;
@@ -391,6 +424,9 @@ export async function POST(
     });
   } catch (e: any) {
     console.error('Disbursement error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    if (e?.message === 'DISBURSEMENT_ALREADY_CLAIMED') {
+      return NextResponse.json({ error: 'Disbursement has already been processed or is being processed by another approver.' }, { status: 409 });
+    }
+    return NextResponse.json({ error: 'Disbursement failed.' }, { status: 500 });
   }
 }

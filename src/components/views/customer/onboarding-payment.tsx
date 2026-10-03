@@ -59,15 +59,15 @@ export function OnboardingPaymentView() {
       const res = await authFetch('/api/customer/onboarding-payment/initiate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: currentUser?.id }),
+        body: JSON.stringify({}),
       });
       const d = await res.json();
       if (res.ok) {
-        // Redirect to Paystack checkout
-        if (d.publicKey && d.reference) {
-          // Use Paystack inline checkout
-          const paystackUrl = `https://checkout.paystack.com/${d.reference}`;
-          window.open(paystackUrl, '_blank');
+        // Redirect to the authorization URL returned by our server-side
+        // Paystack initialization. Never construct checkout URLs from a
+        // payment reference in the browser.
+        if (d.checkoutUrl) {
+          window.open(d.checkoutUrl, '_blank');
           toast({
             title: 'Payment initiated',
             description: 'Complete your payment in the Paystack window. After payment, click "I have paid" to refresh.',

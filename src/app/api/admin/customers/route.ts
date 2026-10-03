@@ -12,14 +12,18 @@ import { KYC_STATUSES } from '@/lib/constants';
  */
 export async function GET(req: NextRequest) {
   // v53 — auth gate: least-privilege role check.
-  const authResult_v53 = await requireRole(req, ['super', 'cs', 'compliance', 'bm', 'lo']);
+  const authResult_v53 = await requireRole(req, ['super', 'cs', 'compliance', 'bm', 'lo', 'loan']);
   if (authResult_v53 instanceof NextResponse) return authResult_v53;
 
   try {
     const { searchParams } = new URL(req.url);
     const search = (searchParams.get('search') || '').trim();
     const kycStatus = searchParams.get('kycStatus') || '';
-    const branchId = searchParams.get('branchId') || '';
+    let branchId = searchParams.get('branchId') || '';
+    if (['bm', 'loan', 'lo', 'cs'].includes(authResult_v53.role)) {
+      if (!authResult_v53.branchId) return NextResponse.json({ error: 'Your staff account is not assigned to a branch.' }, { status: 403 });
+      branchId = authResult_v53.branchId || '';
+    }
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
     const pageSize = 50;
 

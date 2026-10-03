@@ -10,9 +10,11 @@ import { requireRole, getAuthFromRequest } from '@/lib/auth';
  * flags + loan counts (assigned, processed, approved).
  */
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireRole(req, ['super', 'md', 'hoc', 'hr']);
+  if (auth instanceof NextResponse) return auth;
   try {
     const { id } = await params;
     const admin = await db.admin.findUnique({

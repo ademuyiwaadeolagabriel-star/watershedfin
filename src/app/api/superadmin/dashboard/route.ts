@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
       activeSessions,
       auditLogsToday,
       recentErrors,
+      pendingMutations,
     ] = await Promise.all([
       db.admin.count(),
       db.admin.count({ where: { status: 1 } }),
@@ -42,6 +43,7 @@ export async function GET(req: NextRequest) {
           action: { contains: 'error', mode: 'insensitive' },
         },
       }),
+      db.pendingMutation.count({ where: { status: { in: ['PENDING', 'REVIEWED', 'AUTHORIZED'] } } }),
     ]);
 
     // Disbursement this month
@@ -99,6 +101,7 @@ export async function GET(req: NextRequest) {
         activeSessions,
         auditLogsToday,
         recentErrors,
+        pendingMutations,
       },
       disbursedThisMonth: {
         count: disbursedThisMonth._count,

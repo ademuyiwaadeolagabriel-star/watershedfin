@@ -16,12 +16,16 @@ export async function GET(req : NextRequest) {
   if (authResult_v53 instanceof NextResponse) return authResult_v53;
 
   try {
-    const where = {
+    const where: any = {
       OR: [
         { kycStatus: { in: [KYC_STATUSES.PROCESSING, KYC_STATUSES.RESUBMIT] } },
         { onboardingStage: 'cs_kyc_review' },
       ],
     };
+    if (authResult_v53.role === 'cs' && !authResult_v53.branchId) return NextResponse.json({ error: 'Your Customer Service account is not assigned to a branch.' }, { status: 403 });
+    if (authResult_v53.role === 'cs' && authResult_v53.branchId) {
+      where.branchId = authResult_v53.branchId;
+    }
 
     const [users, pending, approved, declined, resubmit, total] = await Promise.all([
       db.user.findMany({

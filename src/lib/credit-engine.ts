@@ -497,7 +497,7 @@ const FSV_HAIRCUTS: Record<'MOVABLE' | 'IMMOVABLE' | 'CASH', number> = {
 const STOCK_COLLATERAL_RATE = 0.1;
 
 /** Default margin fallback when no stock can be valued. */
-const DEFAULT_MARGIN_FALLBACK = 0.25;
+const DEFAULT_MARGIN_FALLBACK = 0;
 
 /** Cost-of-fund rate (annual, as a fraction of principal). */
 const COST_OF_FUND_RATE = 0.3;

@@ -116,6 +116,7 @@ export const CHART_OF_ACCOUNTS = [
   { code: '1520', name: 'Motor Vehicles', type: 'ASSET', subType: 'fixed_asset' },
   { code: '2000', name: 'Accounts Payable', type: 'LIABILITY', subType: 'current_liability' },
   { code: '2100', name: 'Customer Deposits', type: 'LIABILITY', subType: 'current_liability' },
+  { code: '2110', name: 'Credit Contribution Deposits', type: 'LIABILITY', subType: 'customer_deposit' },
   { code: '2200', name: 'Accrued Expenses', type: 'LIABILITY', subType: 'current_liability' },
   { code: '2300', name: 'Interest Payable', type: 'LIABILITY', subType: 'current_liability' },
   { code: '3000', name: 'Share Capital', type: 'EQUITY', subType: 'equity' },

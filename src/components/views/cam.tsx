@@ -7,7 +7,6 @@ import {
   DEFAULT_SECTORS, LOCATION_RATINGS, lookupLocationRating, LOAN_STATUS_TAXONOMY,
   // v42 — Excel parity constants
   LOAN_PRODUCT_LABELS, lookupRateTier,
-  SECTOR_BENCHMARK_MARGINS, lookupSectorMargin,
   COLLATERAL_DEPRECIATION, CRC_LOAN_STATUSES,
   COLLATERAL_OWNERSHIP_TYPES, MOVABLE_COLLATERAL_TITLES, IMMOVABLE_COLLATERAL_TITLES,
   LoanProductKey, LoanCycleGrade,
@@ -185,6 +184,7 @@ const INITIAL_DATA: CamData = {
   // Risk
   sectorRiskScore: 0.5,
   sectorBenchmarkMargin: 0,
+  selectedSectorId: null,
   selectedSectorName: '',
   businessLocation: '',
   previousDefault: false,
@@ -391,6 +391,7 @@ export function CamView() {
               : prev.applicantAge,
             yearsAtAddress: ln.user?.yearsAtResidence || prev.yearsAtAddress,
             businessLocation: biz?.state || biz?.shopAddress || prev.businessLocation,
+            selectedSectorId: sectorObj?.id || prev.selectedSectorId,
             selectedSectorName: sectorObj?.name || prev.selectedSectorName,
             sectorRiskScore: sectorObj?.riskScore ?? prev.sectorRiskScore,
             sectorBenchmarkMargin: sectorObj?.benchmarkedMargin ?? prev.sectorBenchmarkMargin,
@@ -783,6 +784,7 @@ export function CamView() {
         guarantorExistingInstallment: data.guarantorExistingInstallment,
         sectorRiskScore: data.sectorRiskScore,
         sectorBenchmarkMargin: data.sectorBenchmarkMargin,
+        selectedSectorId: data.selectedSectorId,
         selectedSectorName: data.selectedSectorName,
         businessLocation: data.businessLocation,
         yearsInOperation: data.yearsInOperation,
@@ -1675,17 +1677,34 @@ function RatioCard({ label, value, target, status }: { label: string; value: str
 // ============================================================================
 
 function SectorAutoLookupSection({ data, update }: any) {
-  const [overrideMode, setOverrideMode] = useState(false);
-  const selectedSector = DEFAULT_SECTORS.find((s) => s.name === data.selectedSectorName);
+  const [liveSectors, setLiveSectors] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleSelect = (name: string) => {
-    const sector = DEFAULT_SECTORS.find((s) => s.name === name);
-    if (sector) {
-      update('selectedSectorName', name);
-      update('sectorRiskScore', sector.riskScore);
-      update('sectorBenchmarkMargin', sector.benchmarkedMargin);
-      setOverrideMode(false);
-    }
+  useEffect(() => {
+    let cancelled = false;
+    void authFetch('/api/sectors')
+      .then(async (res) => {
+        if (!res.ok) throw new Error('Unable to load sectors');
+        const json = await res.json();
+        if (!cancelled && Array.isArray(json.sectors)) setLiveSectors(json.sectors);
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const sectors = liveSectors.length > 0 ? liveSectors : DEFAULT_SECTORS;
+  const selectedSector =
+    sectors.find((s) => s.id === data.selectedSectorId) ||
+    sectors.find((s) => s.name === data.selectedSectorName);
+
+  const handleSelect = (idOrName: string) => {
+    const sector = sectors.find((s) => String(s.id || s.name) === idOrName);
+    if (!sector) return;
+    update('selectedSectorId', sector.id || null);
+    update('selectedSectorName', sector.name);
+    update('sectorRiskScore', Number(sector.riskScore ?? 0));
+    update('sectorBenchmarkMargin', Number(sector.benchmarkedMargin ?? 0));
   };
 
   return (
@@ -1695,55 +1714,37 @@ function SectorAutoLookupSection({ data, update }: any) {
           <Boxes className="h-4 w-4 text-emerald-700" />
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Sector &amp; Business Nature Lookup</h3>
         </div>
-        <Badge className="bg-emerald-100 text-emerald-700 text-[10px]">{DEFAULT_SECTORS.length} sectors</Badge>
+        <Badge className="bg-emerald-100 text-emerald-700 text-[10px]">
+          {loading ? 'Loading…' : `${sectors.length} sectors`}
+        </Badge>
       </div>
       <p className="text-xs text-slate-600 mb-3">
-        Select a business nature from the Excel Sheet1 reference (60+ entries). Risk score and benchmark margin auto-populate.
+        Sector risk and benchmark margin are loaded from the current server-configured sector record.
       </p>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="md:col-span-1">
           <Label className="text-xs text-slate-600">Business Nature / Sector</Label>
           <select
-            value={data.selectedSectorName || ''}
+            value={selectedSector?.id || selectedSector?.name || ''}
             onChange={(e) => handleSelect(e.target.value)}
             className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500"
           >
             <option value="">— Select business nature —</option>
-            {DEFAULT_SECTORS.map((s) => (
-              <option key={s.name} value={s.name}>
-                {s.name} (margin: {s.benchmarkedMargin}%)
+            {sectors.map((sector) => (
+              <option key={sector.id || sector.name} value={sector.id || sector.name}>
+                {sector.name} (margin: {sector.benchmarkedMargin ?? '—'}%)
               </option>
             ))}
           </select>
         </div>
-        <Field
-          label="Sector Risk Score (auto)"
-          type="number"
-          value={data.sectorRiskScore}
-          onChange={(v: any) => update('sectorRiskScore', Number(v))}
-          readOnly={!overrideMode}
-        />
-        <Field
-          label="Sector Benchmark Margin % (auto)"
-          type="number"
-          value={data.sectorBenchmarkMargin}
-          onChange={(v: any) => update('sectorBenchmarkMargin', Number(v))}
-          readOnly={!overrideMode}
-        />
+        <Field label="Sector Risk Score (auto)" type="number" value={data.sectorRiskScore} onChange={() => {}} readOnly />
+        <Field label="Sector Benchmark Margin % (auto)" type="number" value={data.sectorBenchmarkMargin} onChange={() => {}} readOnly />
       </div>
       {selectedSector && (
         <div className="mt-3 flex items-center justify-between text-xs">
           <p className="text-slate-600">
             <strong>Selected:</strong> {selectedSector.name} · Risk: {selectedSector.riskScore} · Margin: {selectedSector.benchmarkedMargin}%
           </p>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-6 text-[10px] text-amber-700"
-            onClick={() => setOverrideMode(!overrideMode)}
-          >
-            {overrideMode ? '🔒 Lock' : '✏️ Override'}
-          </Button>
         </div>
       )}
     </Card>
@@ -2099,42 +2100,13 @@ function ProfileTab({ data, update, loan }: any) {
               <Field label="Loan Purpose" value={data.loanPurpose || '—'} readOnly />
               <div>
             <Label className="text-xs font-semibold">Sector Benchmark Margin</Label>
-            <div className="mt-1 flex items-center gap-2">
-              <Input
-                type="number"
-                value={data.sectorBenchmarkMargin || 0}
-                onChange={(e) => update('sectorBenchmarkMargin', Number(e.target.value))}
-                className="text-xs"
-                placeholder="0.00"
-              />
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={async () => {
-                  // v50 — fetch the AUTHORITATIVE benchmarked margin from the
-                  // DB via the sectors API. The static lookupSectorMargin()
-                  // in constants.ts is no longer used as a runtime source.
-                  const sectorName = data.selectedSectorName || data.businessSector || '';
-                  if (!sectorName) return;
-                  try {
-                    const res = await fetch('/api/sectors');
-                    const json = await res.json();
-                    const match = (json.sectors || []).find(
-                      (s: any) => (s.name || '').toLowerCase() === sectorName.toLowerCase(),
-                    );
-                    if (match && typeof match.benchmarkedMargin === 'number') {
-                      update('sectorBenchmarkMargin', match.benchmarkedMargin);
-                    }
-                  } catch (err) {
-                    console.error('[cam] failed to fetch sector benchmark:', err);
-                  }
-                }}
-                title="Fetch admin-configured sector benchmark from DB"
-              >
-                Fetch from DB
-              </Button>
-            </div>
+            <Input
+              type="number"
+              value={data.sectorBenchmarkMargin ?? 0}
+              readOnly
+              className="text-xs mt-1"
+              aria-label="Admin-configured sector benchmark margin"
+            />
             {data.selectedSectorName && (
               <p className="text-[10px] text-slate-400 mt-1">Sector: {data.selectedSectorName}</p>
             )}
@@ -5421,6 +5393,8 @@ function CommitteeSignatureSection() {
 // SHARED FORM COMPONENTS
 // ============================================================================
 
+// v46: FormattedNumberInput — shows empty for 0/null, formats with commas as user types
+// Returns raw number via onChange. Used everywhere a currency/figure is entered.
 function FormattedNumberInput({
   value,
   onChange,
@@ -5434,48 +5408,38 @@ function FormattedNumberInput({
   placeholder?: string;
   className?: string;
 }) {
-  const [display, setDisplay] = useState<string | null>(null);
+  // Internal display state — allows user to type freely while we format
+  const [display, setDisplay] = useState('');
 
-  const externalDisplay =
-    value === null ||
-    value === undefined ||
-    value === '' ||
-    Number.isNaN(Number(value)) ||
-    Number(value) === 0
-      ? ''
-      : Number(value).toLocaleString('en-NG', {
-          maximumFractionDigits: 2,
-        });
-
-  const shownValue = display !== null ? display : externalDisplay;
+  // Sync external value → display when value changes externally
+  useEffect(() => {
+    const num = Number(value);
+    if (!value || isNaN(num) || num === 0) {
+      setDisplay('');
+    } else {
+      setDisplay(num.toLocaleString('en-NG', { maximumFractionDigits: 2 }));
+    }
+  }, [value]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (readOnly) return;
-
+    // Strip all non-numeric chars except decimal point
     const raw = e.target.value.replace(/[^0-9.]/g, '');
-
     if (raw === '') {
       setDisplay('');
-      onChange?.(0);
+      if (onChange) onChange(0);
       return;
     }
-
     const num = Number(raw);
-
-    if (Number.isNaN(num)) return;
-
-    setDisplay(
-      num.toLocaleString('en-NG', {
-        maximumFractionDigits: 2,
-      }),
-    );
-
-    onChange?.(num);
+    if (isNaN(num)) return;
+    // Format with commas
+    setDisplay(num.toLocaleString('en-NG', { maximumFractionDigits: 2 }));
+    if (onChange) onChange(num);
   };
 
   const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
     if (readOnly) return;
-
+    // Select all on focus for easy overwrite
     e.target.select();
   };
 
@@ -5483,7 +5447,7 @@ function FormattedNumberInput({
     <Input
       type="text"
       inputMode="decimal"
-      value={shownValue}
+      value={display}
       onChange={handleChange}
       onFocus={handleFocus}
       readOnly={readOnly}
@@ -5530,62 +5494,45 @@ function InlineFormattedNumber({
   readOnly?: boolean;
   className?: string;
 }) {
-  const [display, setDisplay] = useState<string | null>(null);
+  const [display, setDisplay] = useState('');
 
-  const externalDisplay =
-    value === null ||
-    value === undefined ||
-    value === '' ||
-    Number.isNaN(Number(value)) ||
-    Number(value) === 0
-      ? ''
-      : Number(value).toLocaleString('en-NG', {
-          maximumFractionDigits: 2,
-        });
-
-  const shownValue = display !== null ? display : externalDisplay;
+  useEffect(() => {
+    const num = Number(value);
+    if (!value || isNaN(num) || num === 0) {
+      setDisplay('');
+    } else {
+      setDisplay(num.toLocaleString('en-NG', { maximumFractionDigits: 2 }));
+    }
+  }, [value]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (readOnly) return;
-
     const raw = e.target.value.replace(/[^0-9.]/g, '');
-
     if (raw === '') {
       setDisplay('');
-      onChange?.(0);
+      if (onChange) onChange(0);
       return;
     }
-
     const num = Number(raw);
-
-    if (Number.isNaN(num)) return;
-
-    setDisplay(
-      num.toLocaleString('en-NG', {
-        maximumFractionDigits: 2,
-      }),
-    );
-
-    onChange?.(num);
+    if (isNaN(num)) return;
+    setDisplay(num.toLocaleString('en-NG', { maximumFractionDigits: 2 }));
+    if (onChange) onChange(num);
   };
 
   return (
     <Input
       type="text"
       inputMode="decimal"
-      value={shownValue}
+      value={display}
       onChange={handleChange}
-      onFocus={(e) => {
-        if (!readOnly) {
-          e.target.select();
-        }
-      }}
+      onFocus={(e) => !readOnly && e.target.select()}
       readOnly={readOnly}
       placeholder="0"
       className={cn('text-right', className)}
     />
   );
 }
+
 function SelectField({ label, value, onChange, options }: any) {
   return (
     <div>

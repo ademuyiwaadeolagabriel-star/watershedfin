@@ -4,7 +4,7 @@ import { db } from '@/lib/db';
 
 export async function GET(req: NextRequest) {
   // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
-  const authResult_v51 = await requireRole(req, ['super', 'md', 'hoc', 'cro']);
+  const authResult_v51 = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'cfo', 'bm', 'loan', 'lo', 'cs', 'compliance']);
   if (authResult_v51 instanceof NextResponse) return authResult_v51;
 
   try {
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
-  const authResult_v51 = await requireRole(req, ['super', 'md', 'hoc', 'cro']);
+  const authResult_v51 = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'cfo', 'bm', 'loan', 'lo', 'cs', 'compliance']);
   if (authResult_v51 instanceof NextResponse) return authResult_v51;
 
   try {

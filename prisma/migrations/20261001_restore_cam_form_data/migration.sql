@@ -1,0 +1,2 @@
+ALTER TABLE "CreditAppraisal"
+ADD COLUMN IF NOT EXISTS "camFormData" TEXT;
