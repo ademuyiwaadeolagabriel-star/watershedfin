@@ -7,10 +7,6 @@ import { Prisma } from '@prisma/client';
 import { notifyWelcome } from '@/lib/notification-service';
 import { createNotification } from '@/lib/notifications';
 
-function hashOnboardingUploadToken(token: string) {
-  return crypto.createHash('sha256').update(token).digest('hex');
-}
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -25,7 +21,7 @@ async function generateUniqueAccountNumber(): Promise<string> {
     });
     if (!existing) return num;
   }
-  // Fallback ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â extremely unlikely collision
+  // Fallback — extremely unlikely collision
   return Date.now().toString().slice(-10);
 }
 
@@ -59,13 +55,13 @@ async function generateApplicationRef(tx: any): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
-// POST handler ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â create customer (and optional loan + appraisal)
+// POST handler — create customer (and optional loan + appraisal)
 // ---------------------------------------------------------------------------
 
 export async function POST(req: NextRequest) {
-  // v53 ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â P5 #28 fix: dual-mode auth.
-  //   - self_onboard channel ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ public, no Bearer token required
-  //   - desk_onboard / bm_onboard / field_onboard ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ admin JWT required
+  // v53 — P5 #28 fix: dual-mode auth.
+  //   - self_onboard channel → public, no Bearer token required
+  //   - desk_onboard / bm_onboard / field_onboard → admin JWT required
   //
   // We peek at the body's `channel` field first. If it's self_onboard,
   // no auth required (customer is creating their own account). For staff
@@ -82,22 +78,22 @@ export async function POST(req: NextRequest) {
 
   let adminId: string | undefined = undefined;
   if (!isSelfOnboard) {
-    // Staff onboarding ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â admin JWT required.
-    const authResult_v51 = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'credit', 'loan', 'bm', 'lo', 'frontdesk']);
+    // Staff onboarding — admin JWT required.
+    const authResult_v51 = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'credit', 'loan', 'bm', 'lo']);
     if (authResult_v51 instanceof NextResponse) return authResult_v51;
     const authPayload = authResult_v51 as { id: string; role: string };
     adminId = authPayload.id;
   } else {
-    // Self-onboard ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â verify NO valid admin token is being misused to spoof
+    // Self-onboard — verify NO valid admin token is being misused to spoof
     // adminId. If a Bearer token is present, we IGNORE it for self_onboard
-    // (adminId stays undefined ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ createdBy is null, which is the correct
+    // (adminId stays undefined → createdBy is null, which is the correct
     // audit trail for a self-registered customer).
     adminId = undefined;
   }
 
   try {
-    // v52 ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â P0-G5 cleanup: adminId derived from JWT (or undefined for self).
-    // v53 ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â body was already read above for channel detection; do NOT
+    // v52 — P0-G5 cleanup: adminId derived from JWT (or undefined for self).
+    // v53 — body was already read above for channel detection; do NOT
     // re-invoke req.json() (Next.js throws on second read).
 
     // G6: Input validation
@@ -127,7 +123,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Loan duration must be at least 1 month' }, { status: 400 });
     }
 
-    // ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ v52 ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â P0-G7: KYC DOCUMENT COMPLETENESS IS SERVER-ENFORCED ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬
+    // ── v52 — P0-G7: KYC DOCUMENT COMPLETENESS IS SERVER-ENFORCED ──────
     // The audit's #3 finding was that documents? was entirely optional,
     // so an API client could bypass the UI and submit onboarding with
     // zero documents. The server now requires:
@@ -159,13 +155,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ v52 ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â P0-G6: CAC CONSENT IS MANDATORY + FEE AMOUNT CROSS-CHECK ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬
+    // ── v52 — P0-G6: CAC CONSENT IS MANDATORY + FEE AMOUNT CROSS-CHECK ─
     // The audit's #4 finding was that consent was optional AND that
-    // `consent.feeAmount` was caller-supplied ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â the customer could lie
-    // "I agreed to ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦1" and the server would store it. Now:
+    // `consent.feeAmount` was caller-supplied — the customer could lie
+    // "I agreed to ₦1" and the server would store it. Now:
     //   1. consent is REQUIRED (server rejects onboarding without it)
     //   2. consent.feeKey is REQUIRED (must match a current SystemSetting fee key)
-    //   3. consent.feeAmount is IGNORED from the body ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â the server looks
+    //   3. consent.feeAmount is IGNORED from the body — the server looks
     //      up the actual configured fee from SystemSetting and uses that.
     //      The caller's value is recorded only for audit comparison.
     if (!consent || !consent.feeKey) {
@@ -205,7 +201,7 @@ export async function POST(req: NextRequest) {
     // fee amount, not the caller's.
     if (consent.feeAmount != null && Number(consent.feeAmount) !== serverFeeAmount) {
       console.warn(
-        `[ONBOARD] Consent fee mismatch: caller claimed ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦${consent.feeAmount}, server configured ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦${serverFeeAmount}. Using server value.`,
+        `[ONBOARD] Consent fee mismatch: caller claimed ₦${consent.feeAmount}, server configured ₦${serverFeeAmount}. Using server value.`,
       );
     }
 
@@ -230,7 +226,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // v53 ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â body type annotation (channel + assignment already destructured
+    // v53 — body type annotation (channel + assignment already destructured
     // at the top of the handler for dual-mode auth; we re-extract assignment
     // here for clarity, and use the existing `channel` variable from line 84).
     const { assignment } = body as {
@@ -280,7 +276,6 @@ export async function POST(req: NextRequest) {
       };
       // v43: KYC document paths (uploaded before submit via /api/customer/kyc-upload)
       documents?: {
-        uploadSessionToken?: string;
         passportPhoto?: string;
         idCardFront?: string;
         meansOfId?: string;
@@ -345,10 +340,10 @@ export async function POST(req: NextRequest) {
       const requestedAmount = Number(loan.loanAmount || 0);
       const requestedDuration = Number(loan.loanDuration || 0);
       if (plan.min != null && requestedAmount < Number(plan.min)) {
-        return NextResponse.json({ error: `Loan amount is below the selected plan minimum of ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦${Number(plan.min).toLocaleString()}.` }, { status: 400 });
+        return NextResponse.json({ error: `Loan amount is below the selected plan minimum of ₦${Number(plan.min).toLocaleString()}.` }, { status: 400 });
       }
       if (plan.max != null && requestedAmount > Number(plan.max)) {
-        return NextResponse.json({ error: `Loan amount exceeds the selected plan maximum of ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦${Number(plan.max).toLocaleString()}.` }, { status: 400 });
+        return NextResponse.json({ error: `Loan amount exceeds the selected plan maximum of ₦${Number(plan.max).toLocaleString()}.` }, { status: 400 });
       }
       if (requestedDuration !== Number(plan.duration)) {
         return NextResponse.json({ error: `Loan duration must match the selected plan duration of ${plan.duration} months.` }, { status: 400 });
@@ -356,7 +351,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ----- generate identifiers -----
-    // v37: Account number is NOT assigned at onboarding ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â only after Legal CAC approval.
+    // v37: Account number is NOT assigned at onboarding — only after Legal CAC approval.
     // merchantId is still generated here (used for internal tracking).
     const merchantId = await generateUniqueMerchantId();
 
@@ -373,7 +368,7 @@ export async function POST(req: NextRequest) {
       }
       passwordHash = bcrypt.hashSync(personal.password, 10);
     } else {
-      // Staff onboarding ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â generate random temp password
+      // Staff onboarding — generate random temp password
       tempPasswordPlain = Math.random().toString(36).slice(-8);
       passwordHash = bcrypt.hashSync(tempPasswordPlain, 10);
     }
@@ -382,7 +377,7 @@ export async function POST(req: NextRequest) {
     let assignedBranchId: string | undefined = assignment?.branchId;
     let assignedStaffId: string | undefined = assignment?.staffId;
 
-    // ANY staff onboarding (field, desk, bm) ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ if the creator is a Loan Officer, auto-assign to them
+    // ANY staff onboarding (field, desk, bm) → if the creator is a Loan Officer, auto-assign to them
     if (adminId && !assignedStaffId) {
       const creatorAdmin = await db.admin.findUnique({
         where: { id: adminId },
@@ -396,7 +391,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Field onboarding ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ assign to the current admin (creator) directly.
+    // Field onboarding → assign to the current admin (creator) directly.
     if (channel === 'field_onboard' && adminId && !assignedStaffId) {
       assignedStaffId = adminId;
       const admin = await db.admin.findUnique({
@@ -408,7 +403,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // BM onboarding ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ assign to selected loan officer; default branch to BM's branch.
+    // BM onboarding → assign to selected loan officer; default branch to BM's branch.
     if (channel === 'bm_onboard' && adminId && !assignedBranchId) {
       const admin = await db.admin.findUnique({
         where: { id: adminId },
@@ -436,7 +431,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // v53 ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â P5 #31: atomic onboarding. The entire create sequence (user +
+    // v53 — P5 #31: atomic onboarding. The entire create sequence (user +
     // business + user.update(businessId) + loan + appraisal + consent) is
     // wrapped in db.$transaction so a partial failure rolls back the
     // whole onboarding. Previously a failure on step 4 (loan create)
@@ -464,7 +459,7 @@ export async function POST(req: NextRequest) {
       data: {
         firstName: personal.firstName,
         lastName: personal.lastName,
-        // Persist title in username (no dedicated column) ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â title is for display only.
+        // Persist title in username (no dedicated column) — title is for display only.
         username: personal.title
           ? `${personal.title}.${personal.firstName}`.toLowerCase()
           : personal.firstName.toLowerCase(),
@@ -472,7 +467,7 @@ export async function POST(req: NextRequest) {
         phone: personal.phone || null,
         password: passwordHash,
         accountType: 'customer',
-        // v37: accountNumber NOT set here ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â only after Legal CAC approval
+        // v37: accountNumber NOT set here — only after Legal CAC approval
         // accountNumberStatus defaults to 'pending' per schema
         merchantId,
         branch: assignedBranchId ? { connect: { id: assignedBranchId } } : undefined,
@@ -511,141 +506,20 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // v54 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â SECURE ONBOARDING UPLOAD SESSION
-    // During self/staff onboarding, documents are uploaded before the customer
-    // User exists. They therefore belong temporarily to a one-time upload
-    // session. Never trust client-supplied URLs or upload IDs without verifying
-    // the session, channel, document type, and staff actor binding.
-    const uploadSessionToken = String(documents?.uploadSessionToken || '').trim();
-
-    if (!uploadSessionToken) {
-      throw new Error('A secure onboarding upload session is required.');
-    }
-
-    const uploadSession = await tx.onboardingUploadSession.findUnique({
-      where: {
-        sessionTokenHash: hashOnboardingUploadToken(uploadSessionToken),
-      },
-      select: {
-        id: true,
-        channel: true,
-        actorUserId: true,
-        expiresAt: true,
-        consumedAt: true,
-      },
-    });
-
-    if (
-      !uploadSession ||
-      uploadSession.channel !== channel ||
-      uploadSession.consumedAt ||
-      uploadSession.expiresAt <= new Date()
-    ) {
-      throw new Error('Invalid or expired onboarding upload session.');
-    }
-
-    // Self onboarding must use an anonymous session. Staff onboarding must use
-    // a session bound to the authenticated staff actor that is creating this
-    // customer. The actor ID is server-derived from JWT auth above.
-    if (isSelfOnboard) {
-      if (uploadSession.actorUserId) {
-        throw new Error('Invalid self-onboarding upload session.');
-      }
-    } else if (!adminId || uploadSession.actorUserId !== adminId) {
-      throw new Error('Onboarding upload session does not belong to the authenticated staff user.');
-    }
-
-    const uploadReferences = [
-      { value: documents?.passportPhoto, docType: 'passport' },
-      { value: documents?.idCardFront, docType: 'id_front' },
-      { value: documents?.meansOfId, docType: 'means_of_id' },
-      { value: documents?.proofOfAddress, docType: 'proof_of_address' },
-      { value: documents?.cacCertificate, docType: 'cac_certificate' },
-      { value: documents?.additionalDocs, docType: 'additional_docs' },
-    ].filter((item): item is { value: string; docType: string } =>
-      typeof item.value === 'string' && item.value.trim().length > 0
-    );
-
-    const uploadIds = [...new Set(uploadReferences.map((item) => item.value))];
-
-    if (uploadIds.length !== uploadReferences.length) {
-      throw new Error('Duplicate KYC upload references are not allowed.');
-    }
-
-    const onboardingUploads = await tx.onboardingUpload.findMany({
-      where: {
-        id: { in: uploadIds },
-        sessionId: uploadSession.id,
-      },
-      select: {
-        id: true,
-        docType: true,
-      },
-    });
-
-    if (onboardingUploads.length !== uploadIds.length) {
-      throw new Error('One or more KYC documents do not belong to this onboarding session.');
-    }
-
-    const uploadById = new Map(
-      onboardingUploads.map((upload) => [upload.id, upload.docType])
-    );
-
-    for (const reference of uploadReferences) {
-      if (uploadById.get(reference.value) !== reference.docType) {
-        throw new Error(
-          `KYC upload type mismatch for ${reference.docType}.`
-        );
-      }
-    }
-
-    const uploadPath = (uploadId: string) =>
-      `/api/customer/kyc-file/${user.id}/${uploadId}`;
-
-    const passportPhoto = documents?.passportPhoto
-      ? uploadPath(documents.passportPhoto)
-      : null;
-    const idCardFront = documents?.idCardFront
-      ? uploadPath(documents.idCardFront)
-      : null;
-    const meansOfId = documents?.meansOfId
-      ? uploadPath(documents.meansOfId)
-      : null;
-    const proofOfAddress = documents?.proofOfAddress
-      ? uploadPath(documents.proofOfAddress)
-      : null;
-    const cacCertificate = documents?.cacCertificate
-      ? uploadPath(documents.cacCertificate)
-      : null;
-    // Transfer the upload records to the newly-created customer. The actual
-    // private Blob object remains private; the ID is resolved through the
-    // authenticated KYC-file proxy when the document is later viewed.
-    await tx.onboardingUpload.updateMany({
-      where: {
-        id: { in: uploadIds },
-        sessionId: uploadSession.id,
-        userId: null,
-      },
-      data: {
-        userId: user.id,
-      },
-    });
-
-    // A session is one-time use. Conditional consumption also prevents a
-    // second concurrent request from successfully reusing the same session.
-    const consumedSession = await tx.onboardingUploadSession.updateMany({
-      where: {
-        id: uploadSession.id,
-        consumedAt: null,
-        expiresAt: { gt: new Date() },
-      },
-      data: {
-        consumedAt: new Date(),
-      },
-    });
-
-    if (consumedSession.count !== 1) {
-      throw new Error('Onboarding upload session has already been consumed or expired.');
+    // Uploaded KYC documents must be private proxy paths belonging to the
+    // just-created customer. Never persist arbitrary external URLs supplied
+    // by a client into the KYC record.
+    const suppliedDocs = [
+      documents?.passportPhoto,
+      documents?.idCardFront,
+      documents?.meansOfId,
+      documents?.proofOfAddress,
+      documents?.cacCertificate,
+      documents?.additionalDocs,
+    ].filter(Boolean) as string[];
+    const allowedDocPrefix = `/api/customer/kyc-file/${user.id}/`;
+    if (suppliedDocs.some((doc) => !doc.startsWith(allowedDocPrefix))) {
+      throw new Error('Invalid KYC document reference. Documents must be uploaded through the secure KYC upload endpoint.');
     }
 
     // ----- create business -----
@@ -669,12 +543,11 @@ export async function POST(req: NextRequest) {
           : null,
         yearsInOperation,
         kycStatus: 'DRAFT',
-        // v54: Persist only server-generated references to verified onboarding
-        // uploads. Client-supplied upload IDs are never stored as KYC paths.
-        selfie: passportPhoto,
-        docFront: idCardFront || meansOfId,
-        proofOfAddress,
-        docCac: cacCertificate,
+        // v43: Persist KYC document paths uploaded during onboarding (removed id_back + shop_photo)
+        selfie: documents?.passportPhoto || null,
+        docFront: documents?.idCardFront || documents?.meansOfId || null,
+        proofOfAddress: documents?.proofOfAddress || null,
+        docCac: documents?.cacCertificate || null,
       },
     });
 
@@ -690,7 +563,7 @@ export async function POST(req: NextRequest) {
     const loanAmount = Number(loan?.loanAmount || 0);
 
     if (loanAmount > 0) {
-      // resolve branch for the loan ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â staff's branch or selected branch
+      // resolve branch for the loan — staff's branch or selected branch
       let loanBranchId = assignedBranchId;
       if (!loanBranchId && assignedStaffId) {
         const officer = await tx.admin.findUnique({
@@ -739,17 +612,17 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // v53 ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â fire-and-forget welcome notification (post-create, pre-consent).
+    // v53 — fire-and-forget welcome notification (post-create, pre-consent).
     // The consent.create below is part of the same transaction; if it fails,
     // the welcome email is the only side-effect outside the tx (acceptable
-    // ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â the customer's account is rolled back, but they got a "welcome"
+    // — the customer's account is rolled back, but they got a "welcome"
     // email that's harmless).
     const customerName = `${user.firstName} ${user.lastName}`.trim();
     void notifyWelcome(user.id, customerName, user.email || '');
 
-    // v53 ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â consent persistence: now inside the same `db.$transaction`
+    // v53 — consent persistence: now inside the same `db.$transaction`
     // as user/business/loan/appraisal creation. If consent.create fails,
-    // the whole transaction rolls back automatically ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â no manual cleanup
+    // the whole transaction rolls back automatically — no manual cleanup
     // needed.
     await tx.onboardingConsent.create({
       data: {
@@ -774,7 +647,7 @@ export async function POST(req: NextRequest) {
     const loanRow = onboardResult.loanRow;
     const appraisalRow = onboardResult.appraisalRow;
 
-    // v53 ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â strip sensitive fields (post-transaction).
+    // v53 — strip sensitive fields (post-transaction).
     const { password: _pw, ...safeUser } = user as any;
     const safeBusiness = businessRow;
     const customerName = `${user.firstName} ${user.lastName}`.trim();
@@ -790,7 +663,7 @@ export async function POST(req: NextRequest) {
           createNotification({
             adminId: cs.id,
             type: 'kyc_review_request',
-            title: 'New Customer Application ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â KYC Review Needed',
+            title: 'New Customer Application — KYC Review Needed',
             message: `A new application from ${customerName} requires KYC verification. Please review the submitted documents.`,
             category: 'kyc',
             actionLabel: 'Review KYC',

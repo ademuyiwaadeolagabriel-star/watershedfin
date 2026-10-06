@@ -2366,35 +2366,3 @@ model ComplianceQuery {
   @@index([loanId])
   @@index([status])
 }
-
-model OnboardingUploadSession {
-  id               String    @id @default(cuid())
-  sessionTokenHash String    @unique
-  channel          String
-  actorUserId      String?
-  expiresAt        DateTime
-  consumedAt       DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  @@index([expiresAt])
-  @@index([actorUserId])
-  @@index([channel])
-}
-
-model OnboardingUpload {
-  id               String    @id @default(cuid())
-  sessionId        String
-  docType          String
-  storagePath      String
-  originalName     String?
-  mimeType         String?
-  sizeBytes        Int?
-  userId           String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  @@index([sessionId])
-  @@index([userId])
-  @@index([docType])
-}

@@ -9,7 +9,7 @@ import { get } from '@vercel/blob';
 // GET /api/customer/kyc-file/[...path]
 // Authorization: Bearer <customer-jwt>
 //
-// v50 â€” Authenticated proxy for serving KYC documents. The blob URL is
+// v50 — Authenticated proxy for serving KYC documents. The blob URL is
 // NEVER exposed to the client; only the proxy path is stored on the
 // Business record. Reads are gated behind:
 //   1. requireCustomerAuth (caller must be a customer with a valid JWT)
@@ -55,104 +55,17 @@ export async function GET(
         authPayload.branchId !== user.branchId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
-    const proxyPath = `/api/customer/kyc-file/${fullPath}`;
-    const uploadId = parts.length === 2 ? parts[1] : null;
-
-    // v54 — NEW ONBOARDING UPLOADS
-    // New onboarding documents are stored as private blobs under the
-    // onboarding session path. The client only receives a proxy path containing
-    // the opaque OnboardingUpload ID. Resolve the real storagePath server-side.
-    let onboardingUpload: {
-      id: string;
-      storagePath: string;
-      originalName: string | null;
-      mimeType: string | null;
-    } | null = null;
-
-    if (uploadId) {
-      onboardingUpload = await db.onboardingUpload.findFirst({
-        where: {
-          id: uploadId,
-          userId: pathUserId,
-        },
-        select: {
-          id: true,
-          storagePath: true,
-          originalName: true,
-          mimeType: true,
-        },
-      });
-    }
-
-    if (onboardingUpload) {
-      const filename = onboardingUpload.originalName || uploadId || 'kyc-document';
-
-      if (!process.env.BLOB_READ_WRITE_TOKEN) {
-        return NextResponse.json(
-          { error: 'Private document storage is not configured.' },
-          { status: 503 },
-        );
-      }
-
-      try {
-        const result = await get(onboardingUpload.storagePath, { access: 'private' });
-
-        if (!result || result.statusCode !== 200) {
-          return NextResponse.json(
-            { error: 'File not found in blob storage.' },
-            { status: 404 },
-          );
-        }
-
-        const reader = result.stream.getReader();
-        const chunks: Uint8Array[] = [];
-
-        // eslint-disable-next-line no-constant-condition
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          if (value) chunks.push(value);
-        }
-
-        const buf = Buffer.concat(chunks);
-        const contentType =
-          onboardingUpload.mimeType ||
-          result.blob.contentType ||
-          'application/octet-stream';
-
-        return new NextResponse(buf, {
-          status: 200,
-          headers: {
-            'Content-Type': contentType,
-            'Content-Disposition': `inline; filename="${filename}"`,
-            'Cache-Control': 'private, no-store, max-age=0',
-            'X-Content-Type-Options': 'nosniff',
-          },
-        });
-      } catch (blobErr: any) {
-        console.error('[KYC-FILE] onboarding blob fetch failed:', blobErr?.message);
-        return NextResponse.json(
-          { error: 'File not found in blob storage.' },
-          { status: 404 },
-        );
-      }
-    }
-
-    // Legacy KYC files remain supported. Their proxy path must still be
-    // explicitly referenced by the customer's Business KYC fields.
     if (!user?.businessId) {
       return NextResponse.json({ error: 'No business record on file.' }, { status: 404 });
     }
-
     const business = await db.business.findUnique({
       where: { id: user.businessId },
       select: ['selfie', 'docFront', 'docBack', 'proofOfAddress', 'docShopPhoto', 'docCac'].reduce((acc: any, c) => {
         acc[c] = true; return acc;
       }, {}),
     });
-
+    const proxyPath = `/api/customer/kyc-file/${fullPath}`;
     const referenced = business && Object.values(business).some(v => v === proxyPath);
-
     if (!referenced) {
       return NextResponse.json(
         { error: 'File not referenced by any of your KYC records.' },
@@ -160,11 +73,14 @@ export async function GET(
       );
     }
 
-    // --- Stream legacy file ----------------------------------------------
-    // Legacy production files are stored at kyc-private/{userId}/{filename}.
-    const filename = parts.slice(1).join('/');
+    // --- Stream the file --------------------------------------------------
+    // In dev: read from /tmp/uploads/kyc-private/{userId}/{filename}
+    // In prod: fetch from Vercel Blob at kyc-private/{userId}/{filename}
+    const filename = parts.slice(1).join('/'); // everything after userId
 
     if (process.env.BLOB_READ_WRITE_TOKEN) {
+      // Fetch the private blob via Vercel Blob SDK. The `get()` function
+      // requires `access: 'private'` and streams the bytes back.
       const blobName = `kyc-private/${fullPath}`;
       try {
         const result = await get(blobName, { access: 'private' });

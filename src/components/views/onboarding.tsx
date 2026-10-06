@@ -246,9 +246,8 @@ export function OnboardingView() {
   const [showConsent, setShowConsent] = useState(false);
   const [cacFee, setCacFee] = useState<number>(5000);
   const [consentAccepted, setConsentAccepted] = useState(false);
-  // v41: file upload state ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â tracks which doc is currently uploading
+  // v41: file upload state — tracks which doc is currently uploading
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
-  const [uploadSessionToken, setUploadSessionToken] = useState<string>('');
 
   // ----- load supporting data on mount -----
   useEffect(() => {
@@ -338,56 +337,42 @@ export function OnboardingView() {
   // in the form state. The path is also persisted to the Business record by
   // the API so CS staff can view it in the KYC queue.
   const uploadDoc = async (
-    docType: 'passport' | 'id_front' | 'proof_of_address' | 'cac_certificate' | 'means_of_id' | 'additional_docs' | 'additional_docs' | 'additional_docs',
+    docType: 'passport' | 'id_front' | 'proof_of_address' | 'cac_certificate' | 'means_of_id',
     fieldKey: keyof FormState,
     file: File
   ) => {
     if (!file) return;
     setUploadingDoc(docType);
-    setSubmitError('');
-
     try {
-      let sessionToken = uploadSessionToken;
-
-      if (!sessionToken) {
-        const sessionRes = await fetch('/api/onboard/upload-session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ channel }),
-        });
-
-        const sessionData = await sessionRes.json().catch(() => ({}));
-
-        if (!sessionRes.ok || !sessionData.sessionToken) {
-          throw new Error(
-            sessionData.error || 'Unable to initialize secure document upload.'
-          );
-        }
-
-        sessionToken = sessionData.sessionToken;
-        setUploadSessionToken(sessionToken);
-      }
-
+      // We need a userId to upload. For self_onboard, we don't have one yet
+      // (user is created on submit). So we upload to a temp path and store
+      // the filename in form state; the actual path persistence happens
+      // after submit when we know the userId.
+      //
+      // For staff onboarding, the admin may have a draft userId. We try
+      // uploading with userId='pending' and the API will store the file
+      // but skip the Business update. After submit, the onboarding API
+      // will update the Business record with the paths.
       const formData = new FormData();
       formData.append('docType', docType);
-      formData.append('channel', channel);
-      formData.append('sessionToken', sessionToken);
       formData.append('file', file);
+      // userId will be set by the API after user creation; for now pass 'pending'
+      formData.append('userId', 'pending');
 
-      const res = await fetch('/api/onboard/upload', {
+      const res = await fetch('/api/customer/kyc-upload', {
         method: 'POST',
         body: formData,
       });
 
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Unable to upload document.');
+      if (res.ok) {
+        const data = await res.json();
+        setField(fieldKey, data.path);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setSubmitError(`Upload failed for ${docType}: ${err.error || 'Unknown error'}`);
       }
-
-      setField(fieldKey, data.uploadId);
     } catch (e: any) {
-      setSubmitError(e?.message || 'Upload failed for this document.');
+      setSubmitError(`Upload error: ${e.message}`);
     } finally {
       setUploadingDoc(null);
     }
@@ -416,7 +401,7 @@ export function OnboardingView() {
       setBvnError('BVN must be exactly 11 digits.');
       return;
     }
-    // Just mark as entered ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â LO will verify externally
+    // Just mark as entered — LO will verify externally
     setBvnVerified({ score: 0, data: { note: 'BVN entered by customer. Loan Officer will verify externally.' } });
   };
 
@@ -427,7 +412,7 @@ export function OnboardingView() {
       setCacError('Enter RC/BN number first.');
       return;
     }
-    // Just mark as entered ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Legal will verify externally
+    // Just mark as entered — Legal will verify externally
     setCacVerified({ entered: true, note: 'RC/BN entered by customer. Legal will verify externally.' });
   };
 
@@ -472,7 +457,7 @@ export function OnboardingView() {
         if (!form.staffId) errs.push('staffId');
       }
       if (!form.agreed) errs.push('agreed');
-      // v43: Mandatory KYC documents (spec point #1) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â removed id_back and shop_photo
+      // v43: Mandatory KYC documents (spec point #1) — removed id_back and shop_photo
       if (!form.passportPhoto) errs.push('passportPhoto');
       if (!form.idCardPhoto) errs.push('idCardPhoto');
       if (!form.meansOfIdPhoto) errs.push('meansOfIdPhoto');
@@ -601,9 +586,8 @@ export function OnboardingView() {
             branchId: form.branchId || undefined,
             staffId: form.staffId || (channel === 'field_onboard' ? adminId : undefined),
           },
-          // v43/v52: Send secure onboarding upload IDs; the server resolves and binds them after customer creation
+          // v43: Send uploaded document paths so the API can persist them on Business
           documents: {
-            uploadSessionToken: uploadSessionToken || undefined,
             passportPhoto: form.passportPhoto || undefined,
             idCardFront: form.idCardPhoto || undefined,
             meansOfId: form.meansOfIdPhoto || undefined,
@@ -636,7 +620,6 @@ export function OnboardingView() {
 
   const resetForm = () => {
     setForm(emptyForm);
-    setUploadSessionToken('');
     setTouched({});
     setStep(0);
     setDupMatches([]);
@@ -773,9 +756,9 @@ export function OnboardingView() {
                     </p>
                   </div>
                   <p className="text-xs text-slate-600">
-                    Reference <span className="font-mono">{result.loan.applicationRef}</span> ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·
-                    Amount ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦{Number(result.loan.amount).toLocaleString('en-NG')} ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·
-                    Tenor {result.loan.duration} months ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· Step: LO_ENTRY
+                    Reference <span className="font-mono">{result.loan.applicationRef}</span> ·
+                    Amount ₦{Number(result.loan.amount).toLocaleString('en-NG')} ·
+                    Tenor {result.loan.duration} months · Step: LO_ENTRY
                   </p>
                 </div>
               )}
@@ -803,7 +786,7 @@ export function OnboardingView() {
   }
 
   // ---------------------------------------------------------------------------
-  // Render ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â main wizard
+  // Render — main wizard
   // ---------------------------------------------------------------------------
 
   return (
@@ -835,7 +818,7 @@ export function OnboardingView() {
               {currentAdmin && (
                 <Badge variant="secondary" className="bg-slate-100 text-slate-700">
                   You: {currentAdmin.firstName} {currentAdmin.lastName} ({currentAdmin.role})
-                  {currentAdmin.branch?.name ? ` ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${currentAdmin.branch.name}` : ''}
+                  {currentAdmin.branch?.name ? ` · ${currentAdmin.branch.name}` : ''}
                 </Badge>
               )}
             </div>
@@ -992,7 +975,7 @@ export function OnboardingView() {
             >
               {submitting ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-1 animate-spin" /> SubmittingÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" /> Submitting…
                 </>
               ) : (
                 <>
@@ -1015,7 +998,7 @@ export function OnboardingView() {
             <p className="text-sm text-slate-600">
               Your application will be reviewed by Customer Service for KYC verification. After
               KYC approval, a <strong>CAC Name Search</strong> will be conducted which attracts
-              a fee of <strong>ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦{cacFee.toLocaleString()}</strong>.
+              a fee of <strong>₦{cacFee.toLocaleString()}</strong>.
             </p>
             <p className="text-sm text-slate-600">
               By clicking <strong>Accept</strong>, you agree to pay this fee after your KYC is
@@ -1099,7 +1082,7 @@ function SummaryTile({
 }
 
 // ---------------------------------------------------------------------------
-// Step 1 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Personal
+// Step 1 — Personal
 // ---------------------------------------------------------------------------
 
 interface StepProps {
@@ -1200,7 +1183,7 @@ function StepPersonal({
           </Field>
         </div>
 
-        {/* v38: Password field ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â only for self_onboard */}
+        {/* v38: Password field — only for self_onboard */}
         {channel === 'self_onboard' && (
           <Field
             label="Create Password"
@@ -1225,7 +1208,7 @@ function StepPersonal({
               <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
               <div className="flex-1">
                 <p className="text-sm font-semibold text-red-700 mb-1">
-                  Customer already exists ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â click to view
+                  Customer already exists — click to view
                 </p>
                 <div className="space-y-1.5 max-h-44 overflow-y-auto">
                   {dupMatches.map((u) => (
@@ -1245,9 +1228,9 @@ function StepPersonal({
                         )}
                       </div>
                       <p className="text-xs text-slate-500">
-                        {u.email || 'ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â'} ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· {u.phone || 'ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â'} ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·{' '}
+                        {u.email || '—'} · {u.phone || '—'} ·{' '}
                         {u.accountNumber ? `Acct: ${u.accountNumber}` : 'No NUBAN'}
-                        {u.bvn ? ` ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· BVN: ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦${u.bvn.slice(-4)}` : ''}
+                        {u.bvn ? ` · BVN: …${u.bvn.slice(-4)}` : ''}
                       </p>
                     </button>
                   ))}
@@ -1314,7 +1297,7 @@ function StepPersonal({
               {bvnVerified && (
                 <div className="mt-2 p-2 rounded-md bg-blue-50 border border-blue-200">
                   <p className="text-xs text-blue-700">
-                    ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ BVN entered. Your Loan Officer will verify this externally during the assessment process.
+                    ✅ BVN entered. Your Loan Officer will verify this externally during the assessment process.
                   </p>
                 </div>
               )}
@@ -1467,7 +1450,7 @@ function StepPersonal({
 }
 
 // ---------------------------------------------------------------------------
-// Step 2 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Business & Loan
+// Step 2 — Business & Loan
 // ---------------------------------------------------------------------------
 
 function StepBusiness({
@@ -1572,7 +1555,7 @@ function StepBusiness({
           <div className="rounded-lg border border-slate-200 p-4 bg-slate-50/50">
             <Field
               label="RC/BN Number"
-              hint="Optional ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â required for registered companies"
+              hint="Optional — required for registered companies"
             >
               <div className="flex gap-2">
                 <Input
@@ -1601,7 +1584,7 @@ function StepBusiness({
               {cacVerified && (
                 <div className="mt-2 p-2 rounded-md bg-blue-50 border border-blue-200">
                   <p className="text-xs text-blue-700">
-                    ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ RC/BN entered. The Legal department will verify this externally during the review process.
+                    ✅ RC/BN entered. The Legal department will verify this externally during the review process.
                   </p>
                 </div>
               )}
@@ -1618,15 +1601,15 @@ function StepBusiness({
             Loan Request
           </CardTitle>
           <CardDescription>
-            Optional ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â leave loan amount as 0 if the customer is not applying for credit yet.
+            Optional — leave loan amount as 0 if the customer is not applying for credit yet.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="Loan Amount (ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦)">
+            <Field label="Loan Amount (₦)">
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
-                  ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦
+                  ₦
                 </span>
                 <Input
                   inputMode="numeric"
@@ -1664,7 +1647,7 @@ function StepBusiness({
               <SelectContent>
                 {plans.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
-                    {p.name} ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· {p.interest}% p.a. ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· {p.duration} months
+                    {p.name} · {p.interest}% p.a. · {p.duration} months
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1709,7 +1692,7 @@ function StepBusiness({
 }
 
 // ---------------------------------------------------------------------------
-// Step 3 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Uploads & Assignment
+// Step 3 — Uploads & Assignment
 // ---------------------------------------------------------------------------
 
 function StepAssignment({
@@ -1730,7 +1713,7 @@ function StepAssignment({
   branchManagers: any[];
   loanOfficers: any[];
   // v41: document upload handlers (passed from OnboardingView)
-  uploadDoc: (docType: 'passport' | 'id_front' | 'proof_of_address' | 'cac_certificate' | 'means_of_id' | 'additional_docs' | 'additional_docs', fieldKey: keyof FormState, file: File) => void;
+  uploadDoc: (docType: 'passport' | 'id_front' | 'proof_of_address' | 'cac_certificate' | 'means_of_id', fieldKey: keyof FormState, file: File) => void;
   uploadingDoc: string | null;
 }) {
   return (
@@ -1760,10 +1743,10 @@ function StepAssignment({
                     <SelectValue placeholder="Choose nearest branch" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Select Branch ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â</SelectItem>
+                    <SelectItem value="none">— Select Branch —</SelectItem>
                     {branches.map((b) => (
                       <SelectItem key={b.id} value={b.id}>
-                        {b.name} ({b.code}){b.state ? ` ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ${b.state}` : ''}
+                        {b.name} ({b.code}){b.state ? ` — ${b.state}` : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1796,13 +1779,13 @@ function StepAssignment({
                     <SelectContent>
                       {branches.map((b) => (
                         <SelectItem key={b.id} value={b.id}>
-                          {b.name} ({b.code}){b.state ? ` ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${b.state}` : ''}
+                          {b.name} ({b.code}){b.state ? ` · ${b.state}` : ''}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </Field>
-                <Field label="Select Branch Manager" hint="Optional ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â defaults to branch manager">
+                <Field label="Select Branch Manager" hint="Optional — defaults to branch manager">
                   <Select value={form.bmId} onValueChange={(v) => setField('bmId', v)}>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select BM" />
@@ -1903,7 +1886,7 @@ function StepAssignment({
         </CardContent>
       </Card>
 
-      {/* Uploads card ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â v41: real file uploads persisted via /api/customer/kyc-upload */}
+      {/* Uploads card — v41: real file uploads persisted via /api/customer/kyc-upload */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -1919,7 +1902,7 @@ function StepAssignment({
             {/* Passport Photo */}
             <DocUploadField
               label="Passport Photo *"
-              hint="150ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â180px, clear face shot"
+              hint="150×180px, clear face shot"
               accept="image/*"
               value={form.passportPhoto}
               uploading={uploadingDoc === 'passport'}
@@ -1928,7 +1911,7 @@ function StepAssignment({
             />
             {/* ID Card Front */}
             <DocUploadField
-              label="ID Card ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Front *"
+              label="ID Card — Front *"
               hint="Front of National ID / Driver's License / Voter's Card"
               accept="image/*,application/pdf"
               value={form.idCardPhoto}
@@ -1936,7 +1919,7 @@ function StepAssignment({
               onChange={(file) => uploadDoc('id_front', 'idCardPhoto', file)}
               onClear={() => setField('idCardPhoto', '')}
             />
-            {/* Means of ID ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â separate from ID card photos */}
+            {/* Means of ID — separate from ID card photos */}
             <DocUploadField
               label="Acceptable Means of Identification *"
               hint="National ID, International Passport, Driver's License, or Voter's Card"
@@ -1972,8 +1955,8 @@ function StepAssignment({
               hint="Any other supporting documents (optional)"
               accept="image/*,application/pdf"
               value={form.additionalDocs}
-              uploading={uploadingDoc === 'additional_docs'}
-              onChange={(file) => uploadDoc('additional_docs', 'additionalDocs', file)}
+              uploading={false}
+              onChange={(file) => setField('additionalDocs', file.name)}
               onClear={() => setField('additionalDocs', '')}
             />
           </div>
@@ -1990,11 +1973,11 @@ function StepAssignment({
             return uploaded.length > 0 ? (
               <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3">
                 <p className="text-xs font-semibold text-emerald-700 mb-1">
-                  ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“ {uploaded.length} document(s) uploaded:
+                  ✓ {uploaded.length} document(s) uploaded:
                 </p>
                 <ul className="text-xs text-slate-700 space-y-0.5">
                   {uploaded.map((name, i) => (
-                    <li key={i}>ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ {name}</li>
+                    <li key={i}>• {name}</li>
                   ))}
                 </ul>
               </div>
@@ -2072,7 +2055,7 @@ function Field({
 }
 
 // ---------------------------------------------------------------------------
-// v41: Document Upload Field ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â real file upload with progress + preview
+// v41: Document Upload Field — real file upload with progress + preview
 // ---------------------------------------------------------------------------
 
 function DocUploadField({
@@ -2109,7 +2092,7 @@ function DocUploadField({
         {uploading ? (
           <div className="py-4">
             <Loader2 className="h-6 w-6 text-emerald-600 animate-spin mx-auto mb-2" />
-            <p className="text-xs text-slate-600">UploadingÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦</p>
+            <p className="text-xs text-slate-600">Uploading…</p>
           </div>
         ) : value ? (
           <div className="py-2">
@@ -2150,8 +2133,3 @@ function DocUploadField({
     </div>
   );
 }
-
-
-
-
-
