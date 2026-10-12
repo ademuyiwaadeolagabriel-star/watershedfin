@@ -3,6 +3,7 @@ import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { createNotification } from '@/lib/notifications';
 
+import { safeError } from '@/lib/security/errors';
 // ============================================================================
 // /api/admin/chat
 // GET  ?adminId=          — returns all chat conversations for this admin
@@ -93,7 +94,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ conversations });
   } catch (e: any) {
     console.error('Admin chat GET error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -137,6 +138,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: msg });
   } catch (e: any) {
     console.error('Admin chat POST error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

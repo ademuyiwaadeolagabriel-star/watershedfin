@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireCustomerAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 
+import { safeError } from '@/lib/security/errors';
 // ============================================================================
 // /api/customer/tickets
 // GET  ?userId=     — returns the customer's tickets (with replies)
@@ -50,7 +51,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ tickets });
   } catch (e: any) {
     console.error('Tickets list error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -98,6 +99,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (e: any) {
     console.error('Ticket create error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

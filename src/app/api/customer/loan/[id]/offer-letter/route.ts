@@ -3,6 +3,7 @@ import { requireCustomerAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { calculateLoanSchedule } from '@/lib/loan-calc';
 
+import { safeError } from '@/lib/security/errors';
 // GET /api/customer/loan/[id]/offer-letter?userId=
 // Returns offer letter data matching the DOCX structure
 export async function GET(
@@ -113,6 +114,6 @@ export async function GET(
     return NextResponse.json({ loan: { ...loan, user: { ...loan.user, password: undefined } }, offerLetter });
   } catch (e: any) {
     console.error('Offer letter API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

@@ -3,6 +3,7 @@ import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { KYC_STATUSES } from '@/lib/constants';
 
+import { safeError } from '@/lib/security/errors';
 /**
  * GET /api/admin/kyc
  * v38: Now queries BOTH kycStatus AND onboardingStage.
@@ -16,16 +17,12 @@ export async function GET(req : NextRequest) {
   if (authResult_v53 instanceof NextResponse) return authResult_v53;
 
   try {
-    const where: any = {
+    const where = {
       OR: [
         { kycStatus: { in: [KYC_STATUSES.PROCESSING, KYC_STATUSES.RESUBMIT] } },
         { onboardingStage: 'cs_kyc_review' },
       ],
     };
-    if (authResult_v53.role === 'cs' && !authResult_v53.branchId) return NextResponse.json({ error: 'Your Customer Service account is not assigned to a branch.' }, { status: 403 });
-    if (authResult_v53.role === 'cs' && authResult_v53.branchId) {
-      where.branchId = authResult_v53.branchId;
-    }
 
     const [users, pending, approved, declined, resubmit, total] = await Promise.all([
       db.user.findMany({
@@ -91,6 +88,6 @@ export async function GET(req : NextRequest) {
     });
   } catch (e: any) {
     console.error('KYC list API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

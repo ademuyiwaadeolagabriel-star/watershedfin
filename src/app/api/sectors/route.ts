@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireRole } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 // ============================================================================
 // /api/sectors
 //   GET  — public: list all sectors (used by CAM UI + customer onboarding form)
@@ -28,7 +29,7 @@ export async function GET() {
     return NextResponse.json({ sectors });
   } catch (e: any) {
     console.error('List sectors API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -40,35 +41,17 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}));
     if (!body.name) return NextResponse.json({ error: 'Name is required' }, { status: 400 });
-    const margin = body.benchmarkedMargin !== undefined ? Number(body.benchmarkedMargin) : null;
-    const riskScore = body.riskScore !== undefined ? Number(body.riskScore) : 0.5;
-    if (margin != null && (!Number.isFinite(margin) || margin < 0)) {
-      return NextResponse.json({ error: 'benchmarkedMargin must be a finite non-negative percentage.' }, { status: 400 });
-    }
-    if (!Number.isFinite(riskScore) || riskScore < 0) {
-      return NextResponse.json({ error: 'riskScore must be a finite non-negative number.' }, { status: 400 });
-    }
     const sector = await db.sector.create({
       data: {
-        name: String(body.name).trim(),
-        riskScore,
+        name: body.name,
+        riskScore: body.riskScore !== undefined ? Number(body.riskScore) : 0.5,
         riskScoreInt: body.riskScoreInt !== undefined ? Number(body.riskScoreInt) : null,
-        benchmarkedMargin: margin,
-      },
-    });
-    await db.auditLog.create({
-      data: {
-        adminId: authResult.id,
-        action: 'sector_created',
-        module: 'settings',
-        description: `Created sector ${sector.name}; benchmark margin=${sector.benchmarkedMargin ?? 'unset'}`,
-        severity: 'info',
-        metadata: JSON.stringify({ sectorId: sector.id, benchmarkedMargin: sector.benchmarkedMargin }),
+        benchmarkedMargin: body.benchmarkedMargin !== undefined ? Number(body.benchmarkedMargin) : null,
       },
     });
     return NextResponse.json({ sector });
   } catch (e: any) {
     console.error('Create sector API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

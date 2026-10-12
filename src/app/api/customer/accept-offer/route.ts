@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { createNotification } from '@/lib/notifications';
 import crypto from 'crypto';
 
+import { safeError } from '@/lib/security/errors';
 // ============================================================================
 // POST /api/customer/accept-offer
 // Authorization: Bearer <customer-jwt>
@@ -394,6 +395,6 @@ export async function POST(req: NextRequest) {
         { status: 200 },
       );
     }
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

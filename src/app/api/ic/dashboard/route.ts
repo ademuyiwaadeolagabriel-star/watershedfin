@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireRole } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 export async function GET(req: NextRequest) {
   // v51 — auth gate.
   const authResult_v51 = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'ic']);
@@ -53,6 +54,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (e: any) {
     console.error('IC dashboard API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

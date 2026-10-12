@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { calculateLoanSchedule } from '@/lib/loan-calc';
 
+import { safeError } from '@/lib/security/errors';
 // POST /api/customer/loan-calculator
 // Body: { amount, rate, tenor, method, ccd, upfront }
 // Returns calculated schedule + cost breakdown (no DB writes)
@@ -41,6 +42,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ calculation });
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

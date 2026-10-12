@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requireRole } from '@/lib/auth';
+import { getAuthFromRequest } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 /**
  * /api/admin/blog
  *
@@ -78,15 +79,14 @@ export async function GET(req: NextRequest) {
     });
   } catch (e: any) {
     console.error('Admin blog list API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const authResult = await requireRole(req, ['super', 'admin']);
-    if (authResult instanceof NextResponse) return authResult;
-    const authPayload = authResult;
+    const authPayload = await getAuthFromRequest(req);
+    if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     const body = await req.json();
 
     if (!body.title || !body.body) {
@@ -172,6 +172,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ post }, { status: 201 });
   } catch (e: any) {
     console.error('Create blog post API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

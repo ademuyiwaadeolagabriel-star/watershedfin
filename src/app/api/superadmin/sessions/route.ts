@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireRole, getAuthFromRequest } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 export async function GET(req: NextRequest) {
   const auth = await requireRole(req, ['super']);
   if (auth instanceof NextResponse) return auth;
@@ -48,7 +49,8 @@ export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const sessionId = searchParams.get('sessionId');
-    const adminId = searchParams.get('adminId');
+    // v5 — adminId from JWT, not query string
+    const adminId = (auth as any).id;
 
     let count = 0;
     if (sessionId) {
@@ -80,6 +82,6 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ revoked: count });
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

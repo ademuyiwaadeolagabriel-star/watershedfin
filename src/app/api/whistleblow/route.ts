@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireRole } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 // POST /api/whistleblow — submit a whistleblower report (anonymous or named)
 export async function POST(req: NextRequest) {
   try {
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (e: any) {
     console.error('Whistleblower error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -108,6 +109,6 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ reports: parsed });
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

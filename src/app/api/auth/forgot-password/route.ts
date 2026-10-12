@@ -1,64 +1,61 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import crypto from 'crypto';
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/security/rate-limit';
+import { safeError } from '@/lib/security/errors';
 
-// v49: Rate limiting for forgot-password (3 per IP per 15 minutes)
-const fpAttempts = new Map<string, { count: number; firstAttempt: number }>();
-const MAX_FP = 3;
-const FP_WINDOW = 15 * 60 * 1000;
+// ============================================================================
+// POST /api/auth/forgot-password
+// Body: { email }
+//
+// v5.1 — P0 #1: Password reset token is now HASHED before storage.
+// The raw token is only in the email link. The DB stores SHA-256(token).
+// This prevents a DB dump from exposing valid reset tokens.
+//
+// v5.1 — P0 #4: Uses distributed rate limiting via enforceRateLimit().
+// ============================================================================
 
-/**
- * POST /api/auth/forgot-password
- * Body: { email }
- * Generates a reset token + sends email with reset link
- */
 export async function POST(req: NextRequest) {
   try {
-    // v49: Rate limiting
-    const clientIp = req.headers.get('x-forwarded-for') || 'unknown';
-    const now = Date.now();
-    const attempts = fpAttempts.get(clientIp);
-    if (attempts && now - attempts.firstAttempt < FP_WINDOW && attempts.count >= MAX_FP) {
-      return NextResponse.json(
-        { error: 'Too many password reset requests. Please try again later.' },
-        { status: 429 }
-      );
-    }
-    // Update attempt counter
-    if (attempts && now - attempts.firstAttempt < FP_WINDOW) {
-      fpAttempts.set(clientIp, { count: attempts.count + 1, firstAttempt: attempts.firstAttempt });
-    } else {
-      fpAttempts.set(clientIp, { count: 1, firstAttempt: now });
-    }
+    // v5.1 — Distributed rate limiting (replaces in-memory Map)
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const rateLimitResult = await enforceRateLimit(
+      `forgot-password:${clientIp}`,
+      RATE_LIMITS.PASSWORD_RESET.max,
+      RATE_LIMITS.PASSWORD_RESET.windowMs,
+    );
+    if (rateLimitResult !== true) return rateLimitResult as NextResponse;
 
-    const { email } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { email } = body || {};
     if (!email) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
     }
 
-    const admin = await db.admin.findUnique({ where: { email } });
+    const admin = await db.admin.findUnique({ where: { email: String(email).toLowerCase() } });
     if (!admin) {
       // Don't reveal whether the email exists
       return NextResponse.json({ ok: true, message: 'If the email exists, a reset link has been sent.' });
     }
 
-    // Generate reset token (32 bytes = 64 hex chars)
-    const token = crypto.randomBytes(32).toString('hex');
+    // Generate reset token (32 bytes = 64 hex chars) — cryptographically secure
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    // v5.1 — Hash the token before storing. Only the raw token goes in the email.
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
     await db.admin.update({
       where: { id: admin.id },
       data: {
-        passwordResetToken: token,
+        passwordResetToken: tokenHash, // v5.1 — store HASH, not raw token
         passwordResetExpires: expires,
       },
     });
 
-    // v54 (audit #12): Never log raw reset tokens / OTPs / credentials.
-    // Send reset email via Resend (falls back to console log message WITHOUT the token)
+    // Never log raw reset tokens
     console.log(`Password reset link sent for ${admin.email}`);
 
-    const resetUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
+    const resetUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/reset-password?token=${rawToken}`;
     try {
       const { Resend } = await import('resend');
       const resend = new Resend(process.env.RESEND_API_KEY);
@@ -87,13 +84,13 @@ export async function POST(req: NextRequest) {
         description: `Password reset requested for ${admin.email}`,
         module: 'auth',
         severity: 'warning',
-        ipAddress: req.headers.get('x-forwarded-for') || undefined,
+        ipAddress: clientIp,
       },
     });
 
     return NextResponse.json({ ok: true, message: 'If the email exists, a reset link has been sent.' });
   } catch (e: any) {
     console.error('Forgot password error:', e);
-    return NextResponse.json({ error: 'Failed to process request' }, { status: 500 });
+    return safeError('Failed to process request.', 500);
   }
 }

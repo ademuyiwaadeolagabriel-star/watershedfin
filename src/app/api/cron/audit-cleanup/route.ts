@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireCronAuth } from '@/lib/cron-auth';
 
+import { safeError } from '@/lib/security/errors';
 // ============================================================================
 // CRON — AUDIT LOG RETENTION PURGE
 // ============================================================================
@@ -38,6 +39,6 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

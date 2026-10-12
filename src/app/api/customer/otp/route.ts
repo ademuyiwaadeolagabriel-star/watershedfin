@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/security/rate-limit";
 import crypto from 'crypto';
 import { requireCustomerAuth } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 // ============================================================================
 // POST /api/customer/otp
 // Authorization: Bearer <customer-jwt>
@@ -38,6 +40,9 @@ export async function POST(req: NextRequest) {
     if (authResult instanceof NextResponse) return authResult;
     const authPayload = authResult as { id: string; type: string };
     const userId = authPayload.id; // v50 — derived from JWT
+    // v5.1 — Distributed rate limiting
+    const rlResult = await enforceRateLimit(`otp:${userId}`, RATE_LIMITS.OTP_REQUEST.max, RATE_LIMITS.OTP_REQUEST.windowMs);
+    if (rlResult !== true) return rlResult as NextResponse;
 
     // Rate limiting
     const now = Date.now();
@@ -92,7 +97,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (e: any) {
     console.error('OTP generate error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 

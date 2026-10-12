@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
+import { randomInt } from 'node:crypto';
 import { db } from '@/lib/db';
 import { sendSms } from '@/lib/sms-service';
 import { requireCustomerAuth } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 // ============================================================================
 // POST /api/customer/verify-phone
 // Authorization: Bearer <customer-jwt>
@@ -13,18 +15,17 @@ import { requireCustomerAuth } from '@/lib/auth';
 // because `user.verificationCode` was null/empty.
 //
 // Now:
-//   1. Customer identity comes from the JWT — `userId` no longer accepted
+//   1. Customer identity comes from the JWT â€” `userId` no longer accepted
 //      from request body (IDOR fix).
 //   2. The generated code is persisted to `user.verificationCode` with a
 //      fresh `phoneTime` timestamp.
 //   3. The SMS is actually sent via `sendSms(...)`.
-//   4. The code is NEVER returned in the API response — only `sentTo`
+//   4. The code is NEVER returned in the API response â€” only `sentTo`
 //      (masked) is returned so the caller knows which number to check.
 // ============================================================================
 
 function generateCode(): string {
-  // v50 — cryptographically secure code generation.
-  const { randomInt } = require('crypto');
+  // v50 â€” cryptographically secure code generation.
   return randomInt(100000, 1000000).toString();
 }
 
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (e: any) {
     console.error('Verify-phone send error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -87,3 +88,6 @@ function maskPhone(phone: string): string {
   if (phone.length <= 4) return phone;
   return `${phone.slice(0, 4)}${'*'.repeat(Math.min(phone.length - 4, 6))}`;
 }
+
+
+

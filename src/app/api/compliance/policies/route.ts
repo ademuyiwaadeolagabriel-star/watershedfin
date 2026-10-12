@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 
+import { safeError } from '@/lib/security/errors';
 export async function GET(req: NextRequest) {
   // v53 — auth gate: least-privilege role check.
   const authResult_v53 = await requireRole(req, ['super', 'md', 'compliance']);
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ policies });
   } catch (e: any) {
     console.error('List policies API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -73,6 +74,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ policy });
   } catch (e: any) {
     console.error('Create policy API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

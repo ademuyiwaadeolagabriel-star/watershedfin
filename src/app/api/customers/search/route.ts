@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requireRole } from '@/lib/auth';
+import { getAuthFromRequest } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 /**
  * GET /api/customers/search?q=<query>
  * Universal client search by email, phone, BVN, NIN, account number, or name.
@@ -9,9 +10,10 @@ import { requireRole } from '@/lib/auth';
  */
 export async function GET(req: NextRequest) {
   try {
-    const authResult = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'credit', 'loan', 'lo', 'bm', 'analyst', 'cs', 'frontdesk']);
-    if (authResult instanceof NextResponse) return authResult;
-    const authPayload = authResult;
+    const authPayload = await getAuthFromRequest(req);
+    if (!authPayload) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
 
     const { searchParams } = new URL(req.url);
     const q = (searchParams.get('q') || '').trim().toLowerCase();
@@ -21,10 +23,8 @@ export async function GET(req: NextRequest) {
     }
 
     // Search across multiple fields
-    const branchScoped = ['bm', 'loan', 'lo', 'frontdesk'].includes(authPayload.role);
     const users = await db.user.findMany({
       where: {
-        ...(branchScoped && authPayload.branchId ? { branchId: authPayload.branchId } : {}),
         OR: [
           { email: { contains: q, mode: 'insensitive' } },
           { phone: { contains: q } },
@@ -53,6 +53,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ users: safe });
   } catch (e: any) {
     console.error('Customer search error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

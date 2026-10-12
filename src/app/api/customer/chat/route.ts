@@ -3,6 +3,7 @@ import { requireCustomerAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { createNotification } from '@/lib/notifications';
 
+import { safeError } from '@/lib/security/errors';
 // ============================================================================
 // /api/customer/chat
 // GET  ?userId=   — returns chat messages between customer and their Loan Officer
@@ -77,7 +78,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (e: any) {
     console.error('Customer chat GET error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -138,6 +139,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: msg });
   } catch (e: any) {
     console.error('Customer chat POST error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

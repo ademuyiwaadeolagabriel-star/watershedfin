@@ -3,6 +3,7 @@ import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { createNotification } from '@/lib/notifications';
 
+import { safeError } from '@/lib/security/errors';
 // ============================================================================
 // POST /api/loans/[id]/verify
 // Authorization: Bearer <admin-jwt>
@@ -208,6 +209,6 @@ export async function POST(
     return NextResponse.json({ error: 'Unknown type or action' }, { status: 400 });
   } catch (e: any) {
     console.error('Verification error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

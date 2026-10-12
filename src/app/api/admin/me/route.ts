@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 
+import { safeError } from '@/lib/security/errors';
 export async function GET(req: NextRequest) {
   // v53 — auth gate: least-privilege role check.
   const authResult_v53 = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'cfo', 'cs', 'compliance', 'bm', 'lo', 'legal', 'credit', 'analyst', 'treasury', 'ic', 'loan']);
@@ -25,6 +26,6 @@ export async function GET(req: NextRequest) {
     const { password, ...safe } = admin as any;
     return NextResponse.json({ admin: safe });
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

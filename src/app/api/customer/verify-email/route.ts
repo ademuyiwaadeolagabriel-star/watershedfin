@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
+import { randomInt } from 'node:crypto';
 import { db } from '@/lib/db';
 import { sendEmail } from '@/lib/email-service';
 import { requireCustomerAuth } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 // ============================================================================
 // POST /api/customer/verify-email
 // Authorization: Bearer <customer-jwt>
@@ -13,22 +15,21 @@ import { requireCustomerAuth } from '@/lib/auth';
 // because `user.verificationCode` was null/empty.
 //
 // Now:
-//   1. Customer identity comes from the JWT — `userId` is no longer
+//   1. Customer identity comes from the JWT â€” `userId` is no longer
 //      accepted from the request body (IDOR fix, Issue #9).
 //   2. The generated code is persisted to `user.verificationCode` with
 //      a fresh `emailTime` timestamp.
 //   3. The email is actually sent via `sendEmail(...)` (fire-and-forget
 //      but we await the call so the response reflects delivery status).
-//   4. The code is NEVER returned in the API response — only `sentTo`
+//   4. The code is NEVER returned in the API response â€” only `sentTo`
 //      (masked) is returned so the caller knows which inbox to check.
 // ============================================================================
 
 function generateCode(): string {
-  // v50 — use crypto.randomInt for cryptographically secure codes (vs the
+  // v50 â€” use crypto.randomInt for cryptographically secure codes (vs the
   // previous Math.random() which is not uniform and not secure).
   // Math.random() returns floats that may be biased toward certain ranges
   // when truncated; crypto.randomInt is the correct primitive.
-  const { randomInt } = require('crypto');
   return randomInt(100000, 1000000).toString();
 }
 
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
     const authResult = await requireCustomerAuth(req);
     if (authResult instanceof NextResponse) return authResult;
     const authPayload = authResult as { id: string; type: string };
-    const userId = authPayload.id; // v50 — derived from JWT
+    const userId = authPayload.id; // v50 â€” derived from JWT
 
     const user = await db.user.findUnique({ where: { id: userId } });
     if (!user) {
@@ -63,7 +64,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Actually send the email. We attempt delivery and surface a failure
-    // as a 502 (so the client can retry) — but we do NOT leak the code.
+    // as a 502 (so the client can retry) â€” but we do NOT leak the code.
     const maskedEmail = maskEmail(user.email);
     try {
       await sendEmail({
@@ -73,9 +74,9 @@ export async function POST(req: NextRequest) {
 
 Your Watershed Capital verification code is: ${code}
 
-This code will expire in 10 minutes. If you did not request a verification code, please ignore this email — no changes will be made to your account.
+This code will expire in 10 minutes. If you did not request a verification code, please ignore this email â€” no changes will be made to your account.
 
-— Watershed Capital`,
+â€” Watershed Capital`,
       });
     } catch (sendErr: any) {
       console.error('[verify-email] sendEmail failed:', sendErr?.message);
@@ -91,7 +92,7 @@ This code will expire in 10 minutes. If you did not request a verification code,
     });
   } catch (e: any) {
     console.error('Verify-email send error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -100,3 +101,6 @@ function maskEmail(email: string): string {
   if (!domain || local.length <= 2) return email;
   return `${local.slice(0, 2)}${'*'.repeat(Math.min(local.length - 2, 4))}@${domain}`;
 }
+
+
+

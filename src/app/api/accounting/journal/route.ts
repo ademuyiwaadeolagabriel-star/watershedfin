@@ -3,6 +3,7 @@ import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { postJournal } from '@/lib/accounting';
 
+import { safeError } from '@/lib/security/errors';
 export async function GET(req: NextRequest) {
   // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
   const authResult_v51 = await requireRole(req, ['super', 'md', 'cfo', 'hoc', 'cro', 'finance', 'accountant']);
@@ -37,7 +38,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ entries });
   } catch (e: any) {
     console.error('Journal GET error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -76,6 +77,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ entry }, { status: 201 });
   } catch (e: any) {
     console.error('Journal POST error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

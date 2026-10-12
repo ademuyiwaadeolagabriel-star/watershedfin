@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireRole, getAuthFromRequest } from '@/lib/auth';
+import { safeError } from '@/lib/security/errors';
 import {
   CP_CHECKLIST_ITEMS,
   CP_CHECKLIST_TOTAL,
@@ -95,7 +96,7 @@ export async function GET(
     );
   } catch (e: any) {
     console.error('MCC checklist GET error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -497,6 +498,6 @@ export async function POST(
     });
   } catch (e: any) {
     console.error('MCC checklist POST error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

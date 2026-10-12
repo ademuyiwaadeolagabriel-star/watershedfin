@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 
+import { safeError } from '@/lib/security/errors';
 // GET: list investor profiles (with user) OR search users by query (?q=)
 export async function GET(req: NextRequest) {
   // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ profiles });
   } catch (e: any) {
     console.error('Investors GET error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -100,6 +101,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ profile }, { status: 201 });
   } catch (e: any) {
     console.error('Investor POST error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getAuthFromRequest } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -38,6 +39,6 @@ export async function POST(
     return NextResponse.json({ acknowledgment });
   } catch (e: any) {
     console.error('Acknowledge policy API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

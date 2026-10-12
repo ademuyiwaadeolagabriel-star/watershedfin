@@ -102,7 +102,7 @@ function expectFalsy(name: string, actual: any): void {
 // ============================================================================
 (function testRejectionReasonMandatory() {
   const decisionType = 'rejected';
-  const comment = '';
+  const comment: string = '';
   const requiresReason = (decisionType === 'rejected' || decisionType === 'deferred');
   const hasReason = !!(comment && comment.trim().length > 0);
   const isAllowed = !(requiresReason && !hasReason);
@@ -311,8 +311,8 @@ function expectFalsy(name: string, actual: any): void {
 // ============================================================================
 (function testConsentFeeServerAuthoritative() {
   // Simulate: caller claims ₦1, server configured ₦5000.
-  const callerClaimedAmount = 1;
-  const serverConfiguredAmount = 5000;
+  const callerClaimedAmount: number = 1;
+  const serverConfiguredAmount: number = 5000;
   const authoritativeAmount = serverConfiguredAmount; // server wins
   expectEqual('test10: server fee is authoritative', 5000, authoritativeAmount);
   expectEqual('test10: caller claim rejected', 1, callerClaimedAmount);

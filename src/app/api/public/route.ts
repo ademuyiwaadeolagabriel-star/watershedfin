@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
+import { safeError } from '@/lib/security/errors';
 // GET /api/public — returns all public-facing content from the database
 export async function GET() {
   try {
@@ -34,6 +35,6 @@ export async function GET() {
     });
   } catch (e: any) {
     console.error('Public API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

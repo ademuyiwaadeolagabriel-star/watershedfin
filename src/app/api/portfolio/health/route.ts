@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getAuthFromRequest } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 /**
  * GET /api/portfolio/health
  * Returns portfolio health metrics:
@@ -99,6 +100,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (e: any) {
     console.error('Portfolio health error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

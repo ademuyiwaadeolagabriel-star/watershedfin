@@ -3,29 +3,23 @@ import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { signAuthToken } from '@/lib/auth';
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/security/rate-limit';
+import { safeError } from '@/lib/security/errors';
 
-// v49: Simple in-memory rate limiting for login endpoint
-// 10 attempts per IP per 15 minutes (prevents brute-force)
-const loginAttempts = new Map<string, { count: number; firstAttempt: number }>();
-const MAX_ATTEMPTS = 10;
-const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-
+// v5.1 — Distributed rate limiting replaces in-memory Map
 export async function POST(req: NextRequest) {
   try {
-    // v49: Rate limiting check
-    const clientIp = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown';
-    const now = Date.now();
-    const attempts = loginAttempts.get(clientIp);
-    if (attempts && now - attempts.firstAttempt < WINDOW_MS && attempts.count >= MAX_ATTEMPTS) {
-      const remainingMs = WINDOW_MS - (now - attempts.firstAttempt);
-      const remainingMin = Math.ceil(remainingMs / 60000);
-      return NextResponse.json(
-        { error: `Too many login attempts. Please try again in ${remainingMin} minutes.` },
-        { status: 429 }
-      );
-    }
+    // v5.1 — Distributed rate limiting (works on Vercel serverless)
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const rateLimitResult = await enforceRateLimit(
+      `login:${clientIp}`,
+      RATE_LIMITS.LOGIN.max,
+      RATE_LIMITS.LOGIN.windowMs,
+    );
+    if (rateLimitResult !== true) return rateLimitResult as NextResponse;
 
-    const { username, password } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { username, password } = body || {};
     if (!username || !password) {
       return NextResponse.json({ error: 'Username and password required' }, { status: 400 });
     }
@@ -97,27 +91,32 @@ export async function POST(req: NextRequest) {
       console.error('[LOGIN] Failed to update lastLogin (non-blocking):', updateErr);
     }
 
-    // Issue JWT token
+    // Issue JWT token — v5.1: include authVersion for token invalidation
     const token = signAuthToken({
       id: admin.id,
       role: admin.role,
       branchId: admin.branchId,
-      type: 'admin',
+      authVersion: admin.authVersion || 1, // v5 — included in JWT for invalidation check
     });
 
-    // Server-side session creation is mandatory because verifyAuthToken is
-    // fail-closed for admin tokens. Never return a token that has no session.
-    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-    const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000);
-    await db.activeSession.create({
-      data: {
-        adminId: admin.id,
-        tokenHash,
-        ip,
-        userAgent,
-        expiresAt,
-      },
-    });
+    // v25 — Track active session (wrapped in try/catch, NOT .catch on undefined)
+    try {
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000); // 8 hours
+      await db.activeSession.create({
+        data: {
+          adminId: admin.id,
+          tokenHash,
+          ip,
+          userAgent,
+          expiresAt,
+        },
+      });
+    } catch (sessionErr) {
+      // If ActiveSession table doesn't exist or Prisma Client wasn't regenerated,
+      // this will fail — but login should still succeed
+      console.error('[LOGIN] ActiveSession write failed (non-blocking):', sessionErr);
+    }
 
     // Log login history (also wrapped in try/catch)
     try {

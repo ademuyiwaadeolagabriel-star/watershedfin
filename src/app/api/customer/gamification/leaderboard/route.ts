@@ -3,6 +3,7 @@ import { requireCustomerAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { TIER_THRESHOLDS } from '@/lib/gamification';
 
+import { safeError } from '@/lib/security/errors';
 // ============================================================================
 // /api/customer/gamification/leaderboard
 // GET — admin view: top 20 customers by total loyalty points
@@ -68,6 +69,6 @@ export async function GET(req : NextRequest) {
     return NextResponse.json({ leaderboard, total: leaderboard.length });
   } catch (e: any) {
     console.error('Leaderboard GET error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

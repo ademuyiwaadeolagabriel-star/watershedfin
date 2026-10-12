@@ -3,6 +3,7 @@ import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { MCC_ROLES, ROLE_TO_MCC, LOAN_STATUS_LABELS, LOAN_STEP_LABELS } from '@/lib/constants';
 
+import { safeError } from '@/lib/security/errors';
 // ============================================================================
 // MCC EXPORT — server-side JSON payload for PDF rendering on the client.
 // Returns the same MCC paper data plus a serialised snapshot suitable for
@@ -134,6 +135,6 @@ export async function GET(
     return NextResponse.json(payload);
   } catch (e: any) {
     console.error('MCC export API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

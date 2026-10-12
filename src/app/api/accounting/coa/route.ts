@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 
+import { safeError } from '@/lib/security/errors';
 export async function GET(req: NextRequest) {
   // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
   const authResult_v51 = await requireRole(req, ['super', 'md', 'cfo', 'hoc', 'cro', 'finance', 'accountant']);
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ accounts });
   } catch (e: any) {
     console.error('COA GET error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -60,6 +61,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ account }, { status: 201 });
   } catch (e: any) {
     console.error('COA POST error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

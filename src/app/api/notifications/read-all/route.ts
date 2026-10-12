@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getAuthFromRequest } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 /**
  * POST /api/notifications/read-all
  * Body: { userId? OR adminId? }
@@ -32,6 +33,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, updated: result.count });
   } catch (e: any) {
     console.error('[api/notifications/read-all] error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

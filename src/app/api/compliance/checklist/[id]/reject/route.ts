@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { getAuthFromRequest } from '@/lib/auth';
 import { createNotification } from '@/lib/notifications';
 
+import { safeError } from '@/lib/security/errors';
 // ============================================================================
 // POST /api/compliance/checklist/[id]/reject
 // v44: Added authentication + role check (was completely unauthenticated).
@@ -91,6 +92,6 @@ export async function POST(
     return NextResponse.json({ checklist: updated });
   } catch (e: any) {
     console.error('Reject checklist API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

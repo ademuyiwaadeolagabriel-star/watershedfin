@@ -3,6 +3,7 @@ import { requireCustomerAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { MCC_ROLES } from '@/lib/constants';
 
+import { safeError } from '@/lib/security/errors';
 // GET /api/customer/loan/[id]/decision?userId=
 // Returns the 8-gate decision timeline (customer-facing, sanitized)
 export async function GET(
@@ -114,6 +115,6 @@ export async function GET(
     });
   } catch (e: any) {
     console.error('Decision timeline error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

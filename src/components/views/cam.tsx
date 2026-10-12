@@ -1,12 +1,13 @@
-'use client';
+﻿'use client';
 
 import { useAppStore } from '@/lib/store';
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   CAM_TABS, LOAN_STEP_LABELS, hasPermission, FORMULA_LIMITS,
   DEFAULT_SECTORS, LOCATION_RATINGS, lookupLocationRating, LOAN_STATUS_TAXONOMY,
-  // v42 — Excel parity constants
+  // v42 â€” Excel parity constants
   LOAN_PRODUCT_LABELS, lookupRateTier,
+  SECTOR_BENCHMARK_MARGINS, lookupSectorMargin,
   COLLATERAL_DEPRECIATION, CRC_LOAN_STATUSES,
   COLLATERAL_OWNERSHIP_TYPES, MOVABLE_COLLATERAL_TITLES, IMMOVABLE_COLLATERAL_TITLES,
   LoanProductKey, LoanCycleGrade,
@@ -31,7 +32,7 @@ import {
 import { cn } from '@/lib/utils';
 import {
   executeFullAppraisal, EngineInput, EngineResult,
-  // v42 — Excel parity functions
+  // v42 â€” Excel parity functions
   computeMarginSummaryBase,
   calculateCollateralItem,
   calculateExtendedCollateralMix,
@@ -51,21 +52,21 @@ interface CamData {
 }
 
 const INITIAL_DATA: CamData = {
-  // v45: Sales — null defaults (shows empty in UI, user types real values)
+  // v45: Sales â€” null defaults (shows empty in UI, user types real values)
   salesClientEstimate: null as any,
   salesSpotCheck: null as any,
   salesBankStatement: null as any,
   salesBookRecords: null as any,
-  // Inventory — empty array (LO adds items)
+  // Inventory â€” empty array (LO adds items)
   inventory: [],
-  // Expenses (monthly) — ZERO defaults
+  // Expenses (monthly) â€” ZERO defaults
   businessRegular: 0,
   businessIrregular: 0,
   familyRegular: 0,
   familyIrregular: 0,
   otherLoanInstallments: 0,
   bufferRate: 0.20,
-  // Structured business expenses (11 categories from Excel) — all zero
+  // Structured business expenses (11 categories from Excel) â€” all zero
   businessExpenses: [
     { category: 'Salary and fee', amount: 0 },
     { category: 'Rent', amount: 0 },
@@ -79,7 +80,7 @@ const INITIAL_DATA: CamData = {
     { category: 'Overdraft Charges', amount: 0 },
     { category: 'Other Expenses', amount: 0 },
   ],
-  // Structured family expenses (9 regular + 5 irregular) — all zero
+  // Structured family expenses (9 regular + 5 irregular) â€” all zero
   familyExpensesRegular: [
     { category: 'Feeding', amount: 0 },
     { category: 'Rent', amount: 0 },
@@ -98,7 +99,7 @@ const INITIAL_DATA: CamData = {
     { category: 'Contribution', amount: 0 },
     { category: 'Others', amount: 0 },
   ],
-  // v45: Balance sheet — null defaults (shows empty in UI)
+  // v45: Balance sheet â€” null defaults (shows empty in UI)
   cashAtHand: null as any,
   cashInBanks: null as any,
   receivables: null as any,
@@ -107,13 +108,13 @@ const INITIAL_DATA: CamData = {
   shortTermLiabilities: null as any,
   longTermLiabilities: null as any,
   payables: null as any,
-  // Structured business assets — empty arrays
+  // Structured business assets â€” empty arrays
   businessAssets: {
     equipment: [],
     vehicles: [],
     houseLand: [],
   },
-  // Structured family assets — empty arrays
+  // Structured family assets â€” empty arrays
   familyAssets: {
     equipment: [],
     vehicles: [],
@@ -130,24 +131,24 @@ const INITIAL_DATA: CamData = {
     installmentsPaid: 0,
     balance: 0,
   },
-  // Other lender loans — empty array
+  // Other lender loans â€” empty array
   otherLenderLoans: [],
-  // References (4 reference persons) — empty templates
+  // References (4 reference persons) â€” empty templates
   references: [
     { type: 'Family Reference 1', fullName: '', sex: '', homeAddress: '', businessName: '', businessNature: '', businessAddress: '', yearsKnown: 0, maritalStatus: '', relationship: '', phone: '', comment: '' },
     { type: 'Family Reference 2', fullName: '', sex: '', homeAddress: '', businessName: '', businessNature: '', businessAddress: '', yearsKnown: 0, maritalStatus: '', relationship: '', phone: '', comment: '' },
     { type: 'Commercial Reference', fullName: '', sex: '', homeAddress: '', businessName: '', businessNature: '', businessAddress: '', yearsKnown: 0, maritalStatus: '', relationship: '', phone: '', comment: '' },
     { type: 'Neighbourhood Reference', fullName: '', sex: '', homeAddress: '', businessName: '', businessNature: '', businessAddress: '', yearsKnown: 0, maritalStatus: '', relationship: '', phone: '', comment: '' },
   ],
-  // Structured LO visitation report (7 sections) — empty
+  // Structured LO visitation report (7 sections) â€” empty
   loVisitation: {
     businessDynamics: '', location: '', capacity: '', character: '', ownership: '', collateral: '', guarantors: '',
   },
-  // Structured BM visitation report (7 sections) — empty
+  // Structured BM visitation report (7 sections) â€” empty
   bmVisitation: {
     businessDynamics: '', location: '', capacity: '', character: '', ownership: '', collateral: '', guarantors: '',
   },
-  // Photo evidence (6 categories) — empty
+  // Photo evidence (6 categories) â€” empty
   photoEvidence: [
     { type: 'Movable Collateral Pictures', fileName: '', dateTaken: '', geoNote: 'Take picture with GEO location camera' },
     { type: 'Immovable Collateral Pictures', fileName: '', dateTaken: '', geoNote: 'Take picture with GEO location camera' },
@@ -156,7 +157,7 @@ const INITIAL_DATA: CamData = {
     { type: 'Guarantor 1 Business + House Verification Pictures', fileName: '', dateTaken: '', geoNote: 'Take picture with GEO location camera' },
     { type: 'Guarantor 2 Business + House Verification Pictures', fileName: '', dateTaken: '', geoNote: 'Take picture with GEO location camera' },
   ],
-  // Weekly sales breakdown (Mon-Sun) — all zero
+  // Weekly sales breakdown (Mon-Sun) â€” all zero
   weeklySales: [
     { day: 'Monday', type: 'Good', amount: 0 },
     { day: 'Tuesday', type: 'Good', amount: 0 },
@@ -166,17 +167,17 @@ const INITIAL_DATA: CamData = {
     { day: 'Saturday', type: 'Good', amount: 0 },
     { day: 'Sunday', type: 'Closed', amount: 0 },
   ],
-  // v45: Loan — null defaults (user enters real values, not pre-filled zeros)
+  // v45: Loan â€” null defaults (user enters real values, not pre-filled zeros)
   loanPrincipal: null as any,
   loanInterestRate: null as any,
   loanTenorMonths: null as any,
   repaymentMethod: 'REDUCING',
   ccdPercent: null as any,
   upfrontFeePercent: null as any,
-  // Collateral — empty array (LO adds)
+  // Collateral â€” empty array (LO adds)
   collaterals: [],
   loanBaseAmount: 0,
-  // v45: Guarantor — null defaults
+  // v45: Guarantor â€” null defaults
   guarantorIncome: null as any,
   guarantorCogs: null as any,
   guarantorOperationExpenses: null as any,
@@ -184,13 +185,12 @@ const INITIAL_DATA: CamData = {
   // Risk
   sectorRiskScore: 0.5,
   sectorBenchmarkMargin: 0,
-  selectedSectorId: null,
   selectedSectorName: '',
   businessLocation: '',
   previousDefault: false,
   successionPlanVerified: false,
   bankAccountVerified: false,
-  // v45: Stress — null defaults
+  // v45: Stress â€” null defaults
   stressSalesHaircut: null as any,
   stressMarginCompression: null as any,
   stressOpexIncrease: null as any,
@@ -207,9 +207,9 @@ const INITIAL_DATA: CamData = {
   // Previous balance sheet (G2)
   previousBalanceSheet: { periodDate: '', totalAssets: 0, totalLiabilities: 0, equity: 0 },
 
-  // ═══ v42 — EXCEL PARITY FIELDS ══════════════════════════════════════════
+  // â•â•â• v42 â€” EXCEL PARITY FIELDS â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-  // v42-P1: Rate tier lookup (product × grade)
+  // v42-P1: Rate tier lookup (product Ã— grade)
   loanProduct: 'sme' as 'micro' | 'sme' | 'sme_plus' | 'lpo' | 'asset_finance' | 'exception',
   loanCycleGrade: 'NEW' as 'A' | 'B' | 'C' | 'D' | 'NEW',
   rateTierAutoApplied: false,
@@ -365,7 +365,7 @@ export function CamView() {
           setLoan(loanRes.loan);
           const ln = loanRes.loan;
 
-          // ── AUTO-POPULATE from onboarding/loan data (eliminate duplication) ──
+          // â”€â”€ AUTO-POPULATE from onboarding/loan data (eliminate duplication) â”€â”€
           const biz = ln.user?.business;
           const sectorObj = biz?.sectorRef || biz?.sector;
           const yearsInOp = biz?.dateEstablished
@@ -374,7 +374,7 @@ export function CamView() {
 
           setData((prev: CamData) => ({
             ...prev,
-            // ═══ v45: Auto-populate from loan record ════════════════════════
+            // â•â•â• v45: Auto-populate from loan record â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
             loanPrincipal: ln.amount || prev.loanPrincipal,
             loanInterestRate: ln.percent || prev.loanInterestRate,
             loanTenorMonths: ln.duration || prev.loanTenorMonths,
@@ -385,34 +385,33 @@ export function CamView() {
             ccdPercent: ln.plan?.ccdPercent || ln.finalCcdFeePercent || prev.ccdPercent,
             upfrontFeePercent: ln.plan?.upfrontFeePercent || ln.finalUpfrontFeePercent || prev.upfrontFeePercent,
 
-            // ═══ v45: Auto-populate from user record (onboarding data) ══════
+            // â•â•â• v45: Auto-populate from user record (onboarding data) â•â•â•â•â•â•
             applicantAge: ln.user?.dob
               ? Math.floor((Date.now() - new Date(ln.user.dob).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
               : prev.applicantAge,
             yearsAtAddress: ln.user?.yearsAtResidence || prev.yearsAtAddress,
             businessLocation: biz?.state || biz?.shopAddress || prev.businessLocation,
-            selectedSectorId: sectorObj?.id || prev.selectedSectorId,
             selectedSectorName: sectorObj?.name || prev.selectedSectorName,
             sectorRiskScore: sectorObj?.riskScore ?? prev.sectorRiskScore,
             sectorBenchmarkMargin: sectorObj?.benchmarkedMargin ?? prev.sectorBenchmarkMargin,
             yearsInOperation: yearsInOp || prev.yearsInOperation,
 
-            // ═══ v45: Auto-populate business financials from onboarding ═════
+            // â•â•â• v45: Auto-populate business financials from onboarding â•â•â•â•â•
             // These come from the Business record captured during onboarding
             businessWorth: biz?.businessWorth || prev.businessWorth,
             stockValue: biz?.stockValue || prev.stockValue,
             monthlySales: biz?.monthlySales || prev.monthlySales,
 
-            // ═══ v45: Auto-populate family/business expense defaults from user ═══
-            // (only if not already set — don't override saved CAM data)
+            // â•â•â• v45: Auto-populate family/business expense defaults from user â•â•â•
+            // (only if not already set â€” don't override saved CAM data)
             familyIncome: ln.user?.monthlyIncome || prev.familyIncome,
 
-            // ═══ v45: Auto-populate risk flags from user record ═════════════
+            // â•â•â• v45: Auto-populate risk flags from user record â•â•â•â•â•â•â•â•â•â•â•â•â•
             previousDefault: ln.user?.previousDefault ?? prev.previousDefault,
             successionPlanVerified: ln.user?.successionPlanVerified ?? prev.successionPlanVerified,
             bankAccountVerified: ln.user?.bankAccountVerified ?? prev.bankAccountVerified,
 
-            // ═══ v45: Auto-populate running WFL loan from user's active loan ═══
+            // â•â•â• v45: Auto-populate running WFL loan from user's active loan â•â•â•
             runningWflLoan: ln.user?.loans?.some((l: any) => l.status === 'running')
               ? (() => {
                   const runningLoan = ln.user.loans.find((l: any) => l.status === 'running');
@@ -429,7 +428,7 @@ export function CamView() {
                 })()
               : prev.runningWflLoan,
 
-            // ═══ v45: Auto-populate other lender loans from CRC bureau data ═══
+            // â•â•â• v45: Auto-populate other lender loans from CRC bureau data â•â•â•
             // (if the user has other lender loans captured during onboarding)
             otherLenderLoans: ln.user?.otherLenderLoans
               ? (typeof ln.user.otherLenderLoans === 'string'
@@ -464,7 +463,7 @@ export function CamView() {
           const hasSavedData = ap.salesClientEstimate !== null || ap.engineDump !== null || ap.camFormData !== null;
 
           if (hasSavedData) {
-            // v47: Parse camFormData JSON blob — this restores ALL structured fields
+            // v47: Parse camFormData JSON blob â€” this restores ALL structured fields
             const savedFormData = safeParse(ap.camFormData, null);
             setData((prev: CamData) => ({
               ...prev,
@@ -537,7 +536,7 @@ export function CamView() {
       };
       const fixedBusinessAssets = sumAssetGroup(data.businessAssets);
       const fixedFamilyAssets = sumAssetGroup(data.familyAssets);
-      // Derive sales client estimate from weekly sales (GAP 8): monthly = weekly × 4
+      // Derive sales client estimate from weekly sales (GAP 8): monthly = weekly Ã— 4
       const weeklySalesTotal = (data.weeklySales || []).reduce(
         (s: number, d: any) => s + (Number(d.amount) || 0), 0
       );
@@ -555,7 +554,7 @@ export function CamView() {
           cost: Number(i.cost) || 0,
           sell: Number(i.sell) || 0,
         })),
-        // v53 — P3 #35: REMOVE the || 20 fallback. If the admin-configured
+        // v53 â€” P3 #35: REMOVE the || 20 fallback. If the admin-configured
         // sector benchmark is missing/zero, the engine will return
         // marginUsed=0 + sourceUsed='none', and downstream verifyPurchases
         // will fall back to the least valid sales source. The CAM
@@ -645,16 +644,16 @@ export function CamView() {
     }
   }, [data]);
 
-  // ── L7: Stage-based edit restrictions (MUST be declared before useEffects that use canEdit) ──
+  // â”€â”€ L7: Stage-based edit restrictions (MUST be declared before useEffects that use canEdit) â”€â”€
   const isLocked = appraisal?.isSnapshotLocked;
   const currentStep = loan?.currentStep || '';
 
-  // v47: Edit permission checks — updated to use CURRENT workflow steps
+  // v47: Edit permission checks â€” updated to use CURRENT workflow steps
   const canEdit = (() => {
     if (!currentAdmin) return false;
     if (currentAdmin.role === 'super') return !isLocked || true; // v47: super can always edit (even locked, with override)
 
-    // LO GUARD — LO can only edit if assigned AND at LO step OR query response
+    // LO GUARD â€” LO can only edit if assigned AND at LO step OR query response
     if (currentAdmin.role === 'loan' || currentAdmin.loanOrigination) {
       const isAssignedToMe = loan?.staffId === currentAdmin.id || loan?.user?.staffId === currentAdmin.id;
       if (!isAssignedToMe) return false;
@@ -673,12 +672,12 @@ export function CamView() {
       return currentStep === 'ANALYST_STRUCTURING';
     }
 
-    // v47: BM, CRO, CFO, Legal, MD — can NEVER edit LO data (read-only + create own snapshot)
+    // v47: BM, CRO, CFO, Legal, MD â€” can NEVER edit LO data (read-only + create own snapshot)
     return false;
   })();
 
-  // ── REAL-TIME AUTO-RECALCULATION (debounced 800ms) ──
-  // Engine recalculates automatically as the LO types — no need to click "Recalculate"
+  // â”€â”€ REAL-TIME AUTO-RECALCULATION (debounced 800ms) â”€â”€
+  // Engine recalculates automatically as the LO types â€” no need to click "Recalculate"
   useEffect(() => {
     if (loading) return;
     const timer = setTimeout(() => {
@@ -696,7 +695,7 @@ export function CamView() {
         handleSave();
       }
       // Ctrl+Enter = Submit CAM
-      // Compute validationErrors inline — the const is declared later in render
+      // Compute validationErrors inline â€” the const is declared later in render
       // but we can recompute here to avoid TDZ issues.
       const currentErrors = engineResult ? validateBeforeSubmit() : [];
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && canEdit && currentErrors.length === 0) {
@@ -721,7 +720,7 @@ export function CamView() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [canEdit, isLocked, saved]);
 
-  // v47: AUTOSAVE — automatically save draft every 30 seconds if there are unsaved changes
+  // v47: AUTOSAVE â€” automatically save draft every 30 seconds if there are unsaved changes
   useEffect(() => {
     if (!canEdit || loading) return;
     if (saved) return; // No unsaved changes
@@ -750,7 +749,7 @@ export function CamView() {
       if (!result) throw new Error('Engine failed');
 
       // v47: Save ALL form data in a single camFormData JSON blob
-      // This ensures every field is persisted and restorable — fixes the
+      // This ensures every field is persisted and restorable â€” fixes the
       // "~70% of fields not persisted" bug from the audit.
       const camFormData = JSON.stringify({
         // All structured data
@@ -784,7 +783,6 @@ export function CamView() {
         guarantorExistingInstallment: data.guarantorExistingInstallment,
         sectorRiskScore: data.sectorRiskScore,
         sectorBenchmarkMargin: data.sectorBenchmarkMargin,
-        selectedSectorId: data.selectedSectorId,
         selectedSectorName: data.selectedSectorName,
         businessLocation: data.businessLocation,
         yearsInOperation: data.yearsInOperation,
@@ -901,41 +899,41 @@ export function CamView() {
     }
   };
 
-  // ── L1/L2/L6/L9: MANDATORY SUBMISSION VALIDATION ──────────────────────
+  // â”€â”€ L1/L2/L6/L9: MANDATORY SUBMISSION VALIDATION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Validates 20+ CBN mandatory conditions before allowing CAM submission.
-  // Returns array of error strings — empty = all checks passed.
+  // Returns array of error strings â€” empty = all checks passed.
   const validateBeforeSubmit = (): string[] => {
     const errors: string[] = [];
     const d = data;
 
-    // ── L6: Mandatory document / data completeness checks ──
+    // â”€â”€ L6: Mandatory document / data completeness checks â”€â”€
     // 1. Loan parameters
     if (!d.loanPrincipal || Number(d.loanPrincipal) <= 0) errors.push('Loan Principal must be set');
     if (!d.loanInterestRate || Number(d.loanInterestRate) <= 0) errors.push('Interest Rate must be set');
     if (!d.loanTenorMonths || Number(d.loanTenorMonths) <= 0) errors.push('Loan Tenor must be set');
     if (!d.repaymentMethod) errors.push('Repayment Method must be selected');
 
-    // 2. Sales forensics — at least 2 of 4 sources must have data
+    // 2. Sales forensics â€” at least 2 of 4 sources must have data
     const salesSources = [d.salesClientEstimate, d.salesSpotCheck, d.salesBankStatement, d.salesBookRecords]
       .filter(v => Number(v) > 0);
     if (salesSources.length < 2) errors.push('At least 2 of 4 sales sources must be populated (Client Estimate, Spot Check, Bank Statement, Book Records)');
 
-    // 3. Inventory — at least 1 item
+    // 3. Inventory â€” at least 1 item
     if (!d.inventory || d.inventory.length === 0) errors.push('At least 1 inventory item must be added');
     if (d.inventory && d.inventory.some((i: any) => !i.description || Number(i.qty) <= 0 || Number(i.cost) <= 0 || Number(i.sell) <= 0)) {
       errors.push('All inventory items must have description, qty, cost, and sell price');
     }
 
-    // 4. Expenses — business + family
+    // 4. Expenses â€” business + family
     const bizExp = Number(d.businessRegular) + Number(d.businessIrregular);
     const famExp = Number(d.familyRegular) + Number(d.familyIrregular);
     if (bizExp <= 0) errors.push('Business expenses must be captured');
     if (famExp <= 0) errors.push('Family expenses must be captured');
 
-    // 5. Balance sheet — assets
+    // 5. Balance sheet â€” assets
     if (!d.cashAtHand && !d.cashInBanks && !d.receivables) errors.push('At least one liquid asset must be captured (cash, bank, or receivables)');
 
-    // 6. Collateral — L9: minimum 100% coverage
+    // 6. Collateral â€” L9: minimum 100% coverage
     const collaterals = d.collaterals || [];
     if (collaterals.length === 0) errors.push('At least 1 collateral must be pledged');
     const fsvMult = (type: string) => type === 'MOVABLE' ? 0.8 : type === 'IMMOVABLE' ? 0.6 : 1.0;
@@ -943,29 +941,29 @@ export function CamView() {
     const stockCollateral = (Number(d.totalStockValue) || 0) * 0.1;
     const totalCollateral = totalFsv + stockCollateral;
     const coveragePct = Number(d.loanPrincipal) > 0 ? (totalCollateral / Number(d.loanPrincipal)) * 100 : 0;
-    if (coveragePct < 100) errors.push(`Collateral coverage is ${coveragePct.toFixed(1)}% — minimum 100% FSV coverage required (CBN standard). Current: ₦${totalCollateral.toLocaleString()} vs Loan ₦${Number(d.loanPrincipal).toLocaleString()}`);
+    if (coveragePct < 100) errors.push(`Collateral coverage is ${coveragePct.toFixed(1)}% â€” minimum 100% FSV coverage required (CBN standard). Current: â‚¦${totalCollateral.toLocaleString()} vs Loan â‚¦${Number(d.loanPrincipal).toLocaleString()}`);
 
-    // 7. Guarantors — at least 1
+    // 7. Guarantors â€” at least 1
     const guarantors = d.guarantors || [];
     if (guarantors.length === 0) errors.push('At least 1 guarantor must be added');
     if (guarantors.some((g: any) => !g.guarantorName || !g.phone)) {
       errors.push('All guarantors must have name and phone number');
     }
 
-    // 8. Visitation report — at least LO report
+    // 8. Visitation report â€” at least LO report
     const lo = d.loVisitation || {};
     const requiredVisitSections = ['businessDynamics', 'location', 'capacity', 'character', 'ownership', 'collateral', 'guarantors'];
     const missingVisit = requiredVisitSections.filter(k => !lo[k] || String(lo[k]).trim().length < 10);
-    if (missingVisit.length > 0) errors.push(`LO Visitation report incomplete — fill: ${missingVisit.join(', ')}`);
+    if (missingVisit.length > 0) errors.push(`LO Visitation report incomplete â€” fill: ${missingVisit.join(', ')}`);
 
-    // 9. Photos — at least 3 categories
+    // 9. Photos â€” at least 3 categories
     const photos = d.photoEvidence || [];
     if (photos.length < 3) errors.push('At least 3 photo evidence items required (Shop Front, Stock, Customer)');
 
     // 10. GPS coordinates
     if (!d.appraisalGpsLat || !d.appraisalGpsLong) errors.push('GPS coordinates for business location must be captured');
 
-    // 11. References — at least 2
+    // 11. References â€” at least 2
     const refs = d.references || [];
     if (refs.length < 2) errors.push('At least 2 references must be captured');
 
@@ -975,32 +973,32 @@ export function CamView() {
     // 13. Fraud check
     if (!d.physicalStockMatches) errors.push('Physical stock verification (fraud check) must be confirmed');
 
-    // ── C1: Single obligor limit check (CBN) ──
+    // â”€â”€ C1: Single obligor limit check (CBN) â”€â”€
     const loanAmount = Number(d.loanPrincipal) || 0;
     const otherLenderLoans: any[] = d.otherLenderLoans || [];
     const otherLenderExposure = otherLenderLoans.reduce((s: number, l: any) => s + (Number(l.balance) || 0), 0);
     const runningWflBalance = Number(d.runningWflLoan?.balance) || 0;
     const totalExposure = loanAmount + otherLenderExposure + runningWflBalance;
     if (totalExposure > FORMULA_LIMITS.SINGLE_OBLIGOR_LIMIT) {
-      errors.push(`⚠️ Single obligor limit breached: Total exposure ₦${totalExposure.toLocaleString()} exceeds CBN limit of ₦${FORMULA_LIMITS.SINGLE_OBLIGOR_LIMIT.toLocaleString()}. MD/CEO waiver required.`);
+      errors.push(`âš ï¸ Single obligor limit breached: Total exposure â‚¦${totalExposure.toLocaleString()} exceeds CBN limit of â‚¦${FORMULA_LIMITS.SINGLE_OBLIGOR_LIMIT.toLocaleString()}. MD/CEO waiver required.`);
     } else if (totalExposure > FORMULA_LIMITS.SINGLE_OBLIGOR_WARN) {
-      errors.push(`⚠️ Single obligor warning: Total exposure ₦${totalExposure.toLocaleString()} exceeds warning threshold of ₦${FORMULA_LIMITS.SINGLE_OBLIGOR_WARN.toLocaleString()}. HOC review required.`);
+      errors.push(`âš ï¸ Single obligor warning: Total exposure â‚¦${totalExposure.toLocaleString()} exceeds warning threshold of â‚¦${FORMULA_LIMITS.SINGLE_OBLIGOR_WARN.toLocaleString()}. HOC review required.`);
     }
 
-    // ── L2: Engine verdict hard gate ──
+    // â”€â”€ L2: Engine verdict hard gate â”€â”€
     const result = engineResult;
     if (result) {
       if (result.engineVerdict === 'REJECT') {
-        errors.push(`⚠️ ENGINE REJECT: ${result.riskGrade.label}. Hard blocker detected. CAM cannot be submitted without MD/CEO override.`);
+        errors.push(`âš ï¸ ENGINE REJECT: ${result.riskGrade.label}. Hard blocker detected. CAM cannot be submitted without MD/CEO override.`);
       }
       if (result.ratios.dsr > 0.45) {
-        errors.push(`⚠️ DSR ${((result.ratios.dsr) * 100).toFixed(1)}% exceeds CBN hard gate of 45%. Submission blocked.`);
+        errors.push(`âš ï¸ DSR ${((result.ratios.dsr) * 100).toFixed(1)}% exceeds CBN hard gate of 45%. Submission blocked.`);
       }
       if (result.ratios.gearingRatio > 0.35) {
-        errors.push(`⚠️ Gearing ${((result.ratios.gearingRatio) * 100).toFixed(1)}% exceeds CBN hard gate of 35%. Submission blocked.`);
+        errors.push(`âš ï¸ Gearing ${((result.ratios.gearingRatio) * 100).toFixed(1)}% exceeds CBN hard gate of 35%. Submission blocked.`);
       }
       if (!result.isSolvent) {
-        errors.push('⚠️ 12-month projection shows insolvency (negative cash). Submission blocked.');
+        errors.push('âš ï¸ 12-month projection shows insolvency (negative cash). Submission blocked.');
       }
     }
 
@@ -1021,7 +1019,7 @@ export function CamView() {
 
     const errors = validateBeforeSubmit();
     if (errors.length > 0) {
-      setError(`Cannot submit — ${errors.length} issue(s) found:\n\n• ${errors.join('\n• ')}\n\nFix all issues then click Submit again.`);
+      setError(`Cannot submit â€” ${errors.length} issue(s) found:\n\nâ€¢ ${errors.join('\nâ€¢ ')}\n\nFix all issues then click Submit again.`);
       return;
     }
 
@@ -1048,7 +1046,7 @@ export function CamView() {
         }
       }
     } catch {
-      // non-blocking — if the pre-check fails, let the transition API catch it
+      // non-blocking â€” if the pre-check fails, let the transition API catch it
     }
 
     if (!confirm('Locking the LO snapshot will freeze this appraisal. The data becomes immutable for audit. Continue?')) return;
@@ -1093,7 +1091,7 @@ export function CamView() {
         throw new Error(err.error || 'Lock failed');
       }
 
-      // Transition loan forward (LO_ASSESSMENT → LEGAL_CAC_CHECK or BM_QC)
+      // Transition loan forward (LO_ASSESSMENT â†’ LEGAL_CAC_CHECK or BM_QC)
       const transRes = await authFetch(`/api/loans/${loanId}/transition`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1116,7 +1114,7 @@ export function CamView() {
         throw new Error(err.error || 'Transition failed');
       }
 
-      alert('✅ CAM submitted and locked! Loan forwarded to next gate.');
+      alert('âœ… CAM submitted and locked! Loan forwarded to next gate.');
       setView('loan-detail', { loanId });
     } catch (e: any) {
       setError(e.message);
@@ -1125,7 +1123,7 @@ export function CamView() {
     }
   };
 
-  // ── L4: Role-specific snapshot creation ──
+  // â”€â”€ L4: Role-specific snapshot creation â”€â”€
   // BM, HOC, CRO, CFO, Legal, MD each create their own frozen snapshot
   // at their designated workflow step. This preserves the "Triple Lock" audit trail.
   const [snapshotSubmitting, setSnapshotSubmitting] = useState(false);
@@ -1175,7 +1173,7 @@ export function CamView() {
         throw new Error(err.error || 'Snapshot creation failed');
       }
 
-      alert(`✅ ${role.toUpperCase()} snapshot created and frozen for audit.`);
+      alert(`âœ… ${role.toUpperCase()} snapshot created and frozen for audit.`);
       setView('loan-detail', { loanId });
     } catch (e: any) {
       setError(e.message);
@@ -1195,7 +1193,7 @@ export function CamView() {
   // G2: Show warning if LO is not assigned to this client
   const isLONotAssigned = currentAdmin?.role === 'loan' && loan && loan.staffId !== currentAdmin.id && loan.user?.staffId !== currentAdmin.id;
 
-  // v47: Role-specific snapshot creation — fixed step names + allow when locked
+  // v47: Role-specific snapshot creation â€” fixed step names + allow when locked
   const canCreateSnapshot = (() => {
     if (!currentAdmin) return false;
     const role = currentAdmin.role;
@@ -1214,7 +1212,7 @@ export function CamView() {
     return targetSteps ? targetSteps.includes(currentStep) : false;
   })();
 
-  const fmtNaira = (n: number) => '₦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
+  const fmtNaira = (n: number) => 'â‚¦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
   const fmtPct = (n: number) => (n || 0).toFixed(2) + '%';
 
   return (
@@ -1238,7 +1236,7 @@ export function CamView() {
             )}
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Borrower: {loan.user?.firstName} {loan.user?.lastName} · {loan.user?.business?.name || '—'}
+            Borrower: {loan.user?.firstName} {loan.user?.lastName} Â· {loan.user?.business?.name || 'â€”'}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -1260,7 +1258,7 @@ export function CamView() {
                 <div className="mr-2 flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5">
                   <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
                   <span className="text-[11px] text-amber-800">
-                    Account number not assigned ({loan.user.accountNumberStatus || 'pending'}) — CAM cannot be submitted until Legal CAC approval.
+                    Account number not assigned ({loan.user.accountNumberStatus || 'pending'}) â€” CAM cannot be submitted until Legal CAC approval.
                   </span>
                 </div>
               )}
@@ -1287,13 +1285,13 @@ export function CamView() {
               disabled={snapshotSubmitting}
               className="bg-blue-600 hover:bg-blue-700"
               size="sm"
-              title={`Create ${(currentAdmin?.role || '').toUpperCase()} snapshot — freezes your assessment for audit`}
+              title={`Create ${(currentAdmin?.role || '').toUpperCase()} snapshot â€” freezes your assessment for audit`}
             >
               <Lock className="h-4 w-4 mr-1" />
               {snapshotSubmitting ? 'Creating...' : `Create ${(currentAdmin?.role || '').toUpperCase()} Snapshot`}
             </Button>
           )}
-          {/* L5: CAM PDF Download — CBN standard Credit Appraisal Memorandum */}
+          {/* L5: CAM PDF Download â€” CBN standard Credit Appraisal Memorandum */}
           {isLocked && engineResult && (
             <PDFDownloadLink
               document={
@@ -1311,11 +1309,11 @@ export function CamView() {
                     { label: 'Net Profit', value: engineResult.pnl.netProfit },
                   ]}
                   riskRatios={[
-                    { label: 'DSR (Debt Service Ratio)', value: `${(engineResult.ratios.dsr * 100).toFixed(1)}%`, benchmark: '≤ 45%', verdict: engineResult.ratios.dsr > 0.45 ? 'fail' : engineResult.ratios.dsr > 0.35 ? 'review' : 'pass' },
-                    { label: 'DSCR (Coverage)', value: `${engineResult.ratios.dscr.toFixed(2)}x`, benchmark: '≥ 1.25x', verdict: engineResult.ratios.dscr >= 1.25 ? 'pass' : 'review' },
-                    { label: 'Gearing Ratio', value: `${(engineResult.ratios.gearingRatio * 100).toFixed(1)}%`, benchmark: '≤ 35%', verdict: engineResult.ratios.gearingRatio > 0.35 ? 'fail' : 'pass' },
-                    { label: 'Current Ratio', value: engineResult.ratios.currentRatio.toFixed(2), benchmark: '≥ 1.0', verdict: engineResult.ratios.currentRatio >= 1 ? 'pass' : 'fail' },
-                    { label: 'Collateral Coverage', value: `${engineResult.collateralCoverage.coveragePercent.toFixed(0)}%`, benchmark: '≥ 100%', verdict: engineResult.collateralCoverage.coveragePercent >= 100 ? 'pass' : 'fail' },
+                    { label: 'DSR (Debt Service Ratio)', value: `${(engineResult.ratios.dsr * 100).toFixed(1)}%`, benchmark: 'â‰¤ 45%', verdict: engineResult.ratios.dsr > 0.45 ? 'fail' : engineResult.ratios.dsr > 0.35 ? 'review' : 'pass' },
+                    { label: 'DSCR (Coverage)', value: `${engineResult.ratios.dscr.toFixed(2)}x`, benchmark: 'â‰¥ 1.25x', verdict: engineResult.ratios.dscr >= 1.25 ? 'pass' : 'review' },
+                    { label: 'Gearing Ratio', value: `${(engineResult.ratios.gearingRatio * 100).toFixed(1)}%`, benchmark: 'â‰¤ 35%', verdict: engineResult.ratios.gearingRatio > 0.35 ? 'fail' : 'pass' },
+                    { label: 'Current Ratio', value: engineResult.ratios.currentRatio.toFixed(2), benchmark: 'â‰¥ 1.0', verdict: engineResult.ratios.currentRatio >= 1 ? 'pass' : 'fail' },
+                    { label: 'Collateral Coverage', value: `${engineResult.collateralCoverage.coveragePercent.toFixed(0)}%`, benchmark: 'â‰¥ 100%', verdict: engineResult.collateralCoverage.coveragePercent >= 100 ? 'pass' : 'fail' },
                   ]}
                   riskGrade={engineResult.riskGrade.grade}
                   riskGradeLabel={engineResult.riskGrade.label}
@@ -1325,7 +1323,7 @@ export function CamView() {
                     value: Number(c.marketValue) || 0,
                     fsv: (Number(c.marketValue) || 0) * (c.type === 'MOVABLE' ? 0.8 : c.type === 'IMMOVABLE' ? 0.6 : 1.0),
                   }))}
-                  recommendation={`${engineResult.engineVerdict} — ${engineResult.riskGrade.label}. Score: ${engineResult.finalScore}/100.`}
+                  recommendation={`${engineResult.engineVerdict} â€” ${engineResult.riskGrade.label}. Score: ${engineResult.finalScore}/100.`}
                   recommendedAmount={Number(data.loanPrincipal) || null}
                   recommendedTenor={Number(data.loanTenorMonths) || null}
                   recommendedRate={Number(data.loanInterestRate) || null}
@@ -1347,7 +1345,7 @@ export function CamView() {
         </div>
       </div>
 
-      {/* ── LIVE RISK DASHBOARD — updates in real-time as LO types ── */}
+      {/* â”€â”€ LIVE RISK DASHBOARD â€” updates in real-time as LO types â”€â”€ */}
       {engineResult && !isLocked && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
           {/* Risk Grade */}
@@ -1381,7 +1379,7 @@ export function CamView() {
               engineResult.ratios.dsr > 0.35 ? 'text-amber-600' :
               'text-emerald-600'
             )}>{(engineResult.ratios.dsr * 100).toFixed(1)}%</p>
-            <p className="text-[8px] text-slate-400">Limit: ≤45%</p>
+            <p className="text-[8px] text-slate-400">Limit: â‰¤45%</p>
           </div>
 
           {/* Gearing */}
@@ -1396,7 +1394,7 @@ export function CamView() {
               engineResult.ratios.gearingRatio > 0.25 ? 'text-amber-600' :
               'text-emerald-600'
             )}>{(engineResult.ratios.gearingRatio * 100).toFixed(1)}%</p>
-            <p className="text-[8px] text-slate-400">Limit: ≤35%</p>
+            <p className="text-[8px] text-slate-400">Limit: â‰¤35%</p>
           </div>
 
           {/* Collateral Coverage */}
@@ -1411,7 +1409,7 @@ export function CamView() {
               engineResult.collateralCoverage.coveragePercent < 150 ? 'text-amber-600' :
               'text-emerald-600'
             )}>{engineResult.collateralCoverage.coveragePercent.toFixed(0)}%</p>
-            <p className="text-[8px] text-slate-400">Min: ≥100%</p>
+            <p className="text-[8px] text-slate-400">Min: â‰¥100%</p>
           </div>
 
           {/* Net Profit */}
@@ -1422,7 +1420,7 @@ export function CamView() {
             <p className="text-[9px] uppercase text-slate-500 dark:text-slate-400 font-semibold">Net Profit/mo</p>
             <p className={cn('text-lg font-bold',
               engineResult.pnl.netProfit < 0 ? 'text-red-600' : 'text-emerald-600'
-            )}>₦{(engineResult.pnl.netProfit || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p>
+            )}>â‚¦{(engineResult.pnl.netProfit || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p>
             <p className="text-[8px] text-slate-400">After all expenses</p>
           </div>
 
@@ -1443,19 +1441,19 @@ export function CamView() {
         </div>
       )}
 
-      {/* L1: Validation errors panel — shows all blocking issues */}
+      {/* L1: Validation errors panel â€” shows all blocking issues */}
       {canEdit && validationErrors.length > 0 && !isLocked && (
         <div className="rounded-md bg-red-50 border border-red-200 px-4 py-3">
           <div className="flex items-start gap-2">
             <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-xs font-bold text-red-800">
-                CBN Compliance Check — {validationErrors.length} issue(s) must be resolved before submission:
+                CBN Compliance Check â€” {validationErrors.length} issue(s) must be resolved before submission:
               </p>
               <ul className="mt-2 space-y-1 text-xs text-red-700">
                 {validationErrors.map((err, i) => (
                   <li key={i} className="flex items-start gap-1">
-                    <span className="text-red-400">•</span>
+                    <span className="text-red-400">â€¢</span>
                     <span>{err}</span>
                   </li>
                 ))}
@@ -1482,7 +1480,7 @@ export function CamView() {
         </div>
       )}
 
-      {/* Engine HUD — always visible at top */}
+      {/* Engine HUD â€” always visible at top */}
       {engineResult && (
         <EngineHud result={engineResult} />
       )}
@@ -1556,7 +1554,7 @@ export function CamView() {
 }
 
 // ============================================================================
-// ENGINE HUD — sticky ratio display at top of CAM
+// ENGINE HUD â€” sticky ratio display at top of CAM
 // ============================================================================
 
 function EngineHud({ result }: { result: EngineResult }) {
@@ -1572,7 +1570,7 @@ function EngineHud({ result }: { result: EngineResult }) {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Cpu className="h-4 w-4 text-emerald-400" />
-          <h3 className="text-sm font-bold">Credit Engine — Live</h3>
+          <h3 className="text-sm font-bold">Credit Engine â€” Live</h3>
           <Badge className="bg-emerald-500/20 text-emerald-300 text-[9px]">
             {result.policyVersion}
           </Badge>
@@ -1590,7 +1588,7 @@ function EngineHud({ result }: { result: EngineResult }) {
             result.riskGrade.grade === 'D' && 'bg-orange-500 text-white',
             result.riskGrade.grade === 'F' && 'bg-red-500 text-white',
           )}>
-            Grade {result.riskGrade.grade} — {result.riskGrade.label}
+            Grade {result.riskGrade.grade} â€” {result.riskGrade.label}
           </Badge>
           <Badge className={cn(
             'text-xs px-3 py-1',
@@ -1604,12 +1602,12 @@ function EngineHud({ result }: { result: EngineResult }) {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 text-xs">
-        <RatioCard label="DSR" value={fmtPct(result.ratios.dsr)} target="≤45%" status={dsrStatus} />
-        <RatioCard label="DSCR" value={fmtX(result.ratios.dscr)} target="≥1.25x" status={dscrStatus} />
-        <RatioCard label="Gearing" value={fmtPct(result.ratios.gearingRatio)} target="≤35%" status={gearingStatus} />
-        <RatioCard label="Equity %" value={result.ratios.equityRatio.toFixed(1) + '%'} target="≥20%" status={result.ratios.equityRatio < 20 ? 'warning' : 'good'} />
-        <RatioCard label="Coverage" value={result.collateralCoverage.coveragePercent.toFixed(0) + '%'} target="≥100%" status={result.collateralCoverage.coveragePercent < 75 ? 'critical' : result.collateralCoverage.coveragePercent < 100 ? 'warning' : 'good'} />
-        <RatioCard label="Net Yield" value={result.bankYield.netYieldPercent.toFixed(1) + '%'} target="≥15%" status={result.bankYield.netYieldPercent < 0 ? 'critical' : result.bankYield.netYieldPercent < 15 ? 'warning' : 'good'} />
+        <RatioCard label="DSR" value={fmtPct(result.ratios.dsr)} target="â‰¤45%" status={dsrStatus} />
+        <RatioCard label="DSCR" value={fmtX(result.ratios.dscr)} target="â‰¥1.25x" status={dscrStatus} />
+        <RatioCard label="Gearing" value={fmtPct(result.ratios.gearingRatio)} target="â‰¤35%" status={gearingStatus} />
+        <RatioCard label="Equity %" value={result.ratios.equityRatio.toFixed(1) + '%'} target="â‰¥20%" status={result.ratios.equityRatio < 20 ? 'warning' : 'good'} />
+        <RatioCard label="Coverage" value={result.collateralCoverage.coveragePercent.toFixed(0) + '%'} target="â‰¥100%" status={result.collateralCoverage.coveragePercent < 75 ? 'critical' : result.collateralCoverage.coveragePercent < 100 ? 'warning' : 'good'} />
+        <RatioCard label="Net Yield" value={result.bankYield.netYieldPercent.toFixed(1) + '%'} target="â‰¥15%" status={result.bankYield.netYieldPercent < 0 ? 'critical' : result.bankYield.netYieldPercent < 15 ? 'warning' : 'good'} />
       </div>
 
       {result.redFlags.length > 0 && (
@@ -1637,7 +1635,7 @@ function EngineHud({ result }: { result: EngineResult }) {
       <div className="mt-3 pt-3 border-t border-slate-700 grid grid-cols-3 gap-3 text-xs">
         <div>
           <p className="text-[10px] text-slate-400 uppercase">Considered Sales</p>
-          <p className="font-bold">₦{result.forensics.consideredSales.toLocaleString()}</p>
+          <p className="font-bold">â‚¦{result.forensics.consideredSales.toLocaleString()}</p>
           <p className="text-[9px] text-slate-500 dark:text-slate-400">Source: {result.forensics.sourceUsed}</p>
         </div>
         <div>
@@ -1672,39 +1670,22 @@ function RatioCard({ label, value, target, status }: { label: string; value: str
 }
 
 // ============================================================================
-// G4 + G5: SECTOR AUTO-LOOKUP — dropdown of 60+ business natures from Excel
+// G4 + G5: SECTOR AUTO-LOOKUP â€” dropdown of 60+ business natures from Excel
 // When selected, auto-fills sectorRiskScore + sectorBenchmarkMargin
 // ============================================================================
 
 function SectorAutoLookupSection({ data, update }: any) {
-  const [liveSectors, setLiveSectors] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [overrideMode, setOverrideMode] = useState(false);
+  const selectedSector = DEFAULT_SECTORS.find((s) => s.name === data.selectedSectorName);
 
-  useEffect(() => {
-    let cancelled = false;
-    void authFetch('/api/sectors')
-      .then(async (res) => {
-        if (!res.ok) throw new Error('Unable to load sectors');
-        const json = await res.json();
-        if (!cancelled && Array.isArray(json.sectors)) setLiveSectors(json.sectors);
-      })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, []);
-
-  const sectors = liveSectors.length > 0 ? liveSectors : DEFAULT_SECTORS;
-  const selectedSector =
-    sectors.find((s) => s.id === data.selectedSectorId) ||
-    sectors.find((s) => s.name === data.selectedSectorName);
-
-  const handleSelect = (idOrName: string) => {
-    const sector = sectors.find((s) => String(s.id || s.name) === idOrName);
-    if (!sector) return;
-    update('selectedSectorId', sector.id || null);
-    update('selectedSectorName', sector.name);
-    update('sectorRiskScore', Number(sector.riskScore ?? 0));
-    update('sectorBenchmarkMargin', Number(sector.benchmarkedMargin ?? 0));
+  const handleSelect = (name: string) => {
+    const sector = DEFAULT_SECTORS.find((s) => s.name === name);
+    if (sector) {
+      update('selectedSectorName', name);
+      update('sectorRiskScore', sector.riskScore);
+      update('sectorBenchmarkMargin', sector.benchmarkedMargin);
+      setOverrideMode(false);
+    }
   };
 
   return (
@@ -1714,37 +1695,55 @@ function SectorAutoLookupSection({ data, update }: any) {
           <Boxes className="h-4 w-4 text-emerald-700" />
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Sector &amp; Business Nature Lookup</h3>
         </div>
-        <Badge className="bg-emerald-100 text-emerald-700 text-[10px]">
-          {loading ? 'Loading…' : `${sectors.length} sectors`}
-        </Badge>
+        <Badge className="bg-emerald-100 text-emerald-700 text-[10px]">{DEFAULT_SECTORS.length} sectors</Badge>
       </div>
       <p className="text-xs text-slate-600 mb-3">
-        Sector risk and benchmark margin are loaded from the current server-configured sector record.
+        Select a business nature from the Excel Sheet1 reference (60+ entries). Risk score and benchmark margin auto-populate.
       </p>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="md:col-span-1">
           <Label className="text-xs text-slate-600">Business Nature / Sector</Label>
           <select
-            value={selectedSector?.id || selectedSector?.name || ''}
+            value={data.selectedSectorName || ''}
             onChange={(e) => handleSelect(e.target.value)}
             className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500"
           >
-            <option value="">— Select business nature —</option>
-            {sectors.map((sector) => (
-              <option key={sector.id || sector.name} value={sector.id || sector.name}>
-                {sector.name} (margin: {sector.benchmarkedMargin ?? '—'}%)
+            <option value="">â€” Select business nature â€”</option>
+            {DEFAULT_SECTORS.map((s) => (
+              <option key={s.name} value={s.name}>
+                {s.name} (margin: {s.benchmarkedMargin}%)
               </option>
             ))}
           </select>
         </div>
-        <Field label="Sector Risk Score (auto)" type="number" value={data.sectorRiskScore} onChange={() => {}} readOnly />
-        <Field label="Sector Benchmark Margin % (auto)" type="number" value={data.sectorBenchmarkMargin} onChange={() => {}} readOnly />
+        <Field
+          label="Sector Risk Score (auto)"
+          type="number"
+          value={data.sectorRiskScore}
+          onChange={(v: any) => update('sectorRiskScore', Number(v))}
+          readOnly={!overrideMode}
+        />
+        <Field
+          label="Sector Benchmark Margin % (auto)"
+          type="number"
+          value={data.sectorBenchmarkMargin}
+          onChange={(v: any) => update('sectorBenchmarkMargin', Number(v))}
+          readOnly={!overrideMode}
+        />
       </div>
       {selectedSector && (
         <div className="mt-3 flex items-center justify-between text-xs">
           <p className="text-slate-600">
-            <strong>Selected:</strong> {selectedSector.name} · Risk: {selectedSector.riskScore} · Margin: {selectedSector.benchmarkedMargin}%
+            <strong>Selected:</strong> {selectedSector.name} Â· Risk: {selectedSector.riskScore} Â· Margin: {selectedSector.benchmarkedMargin}%
           </p>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 text-[10px] text-amber-700"
+            onClick={() => setOverrideMode(!overrideMode)}
+          >
+            {overrideMode ? 'ðŸ”’ Lock' : 'âœï¸ Override'}
+          </Button>
         </div>
       )}
     </Card>
@@ -1752,7 +1751,7 @@ function SectorAutoLookupSection({ data, update }: any) {
 }
 
 // ============================================================================
-// G13: ZONIFICATION LOOKUP — location rating from Excel Sheet1 (60+ locations)
+// G13: ZONIFICATION LOOKUP â€” location rating from Excel Sheet1 (60+ locations)
 // ============================================================================
 
 function ZonificationLookupSection({ data, update }: any) {
@@ -1791,22 +1790,22 @@ function ZonificationLookupSection({ data, update }: any) {
           <datalist id="location-list">
             {LOCATION_RATINGS.map((l) => (
               <option key={l.name} value={l.name}>
-                {l.name} — {l.state} (Rating {l.rating})
+                {l.name} â€” {l.state} (Rating {l.rating})
               </option>
             ))}
           </datalist>
         </div>
-        <Field label="Matched State" value={lookup?.state || '—'} readOnly />
+        <Field label="Matched State" value={lookup?.state || 'â€”'} readOnly />
         <Field label="Rating (0-9, lower=safer)" type="number" value={lookup?.rating ?? 0} readOnly />
       </div>
       {lookup && (
         <p className="mt-3 text-xs text-slate-600">
           <strong>Decision:</strong>{' '}
           {lookup.rating <= 2
-            ? '✅ Approve (low-risk zone, well-served by branch network)'
+            ? 'âœ… Approve (low-risk zone, well-served by branch network)'
             : lookup.rating <= 6
-              ? '⚠️ Review (medium-risk zone, requires BM validation)'
-              : '🚫 Decline (high-risk zone, refer to supervisor)'}
+              ? 'âš ï¸ Review (medium-risk zone, requires BM validation)'
+              : 'ðŸš« Decline (high-risk zone, refer to supervisor)'}
         </p>
       )}
     </Card>
@@ -1814,7 +1813,7 @@ function ZonificationLookupSection({ data, update }: any) {
 }
 
 // ============================================================================
-// G1: CASHFLOW INPUTS — feeds the Monthly Cashflow Test (22 rows × 12 months)
+// G1: CASHFLOW INPUTS â€” feeds the Monthly Cashflow Test (22 rows Ã— 12 months)
 // ============================================================================
 
 function CashflowInputsSection({ data, update }: any) {
@@ -1825,24 +1824,24 @@ function CashflowInputsSection({ data, update }: any) {
         <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Cashflow Test Inputs (G1)</h3>
       </div>
       <p className="text-xs text-slate-600 mb-3">
-        These inputs feed the 22-row × 12-month Monthly Cashflow Test in the Engine tab (Excel MONTHLY CASHFLOW TEST sheet parity).
+        These inputs feed the 22-row Ã— 12-month Monthly Cashflow Test in the Engine tab (Excel MONTHLY CASHFLOW TEST sheet parity).
       </p>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Field label="Family Income (₦/mo)" type="number" value={data.familyIncome} onChange={(v: any) => update('familyIncome', Number(v))} />
-        <Field label="Family Loan Installment (₦/mo)" type="number" value={data.familyLoanInstallment} onChange={(v: any) => update('familyLoanInstallment', Number(v))} />
-        <Field label="Other Loans Installment (₦/mo)" type="number" value={data.otherLoanInstallments} onChange={(v: any) => update('otherLoanInstallments', Number(v))} />
-        <Field label="Opening Cash (₦)" type="number" value={data.openingCash} onChange={(v: any) => update('openingCash', Number(v))} />
+        <Field label="Family Income (â‚¦/mo)" type="number" value={data.familyIncome} onChange={(v: any) => update('familyIncome', Number(v))} />
+        <Field label="Family Loan Installment (â‚¦/mo)" type="number" value={data.familyLoanInstallment} onChange={(v: any) => update('familyLoanInstallment', Number(v))} />
+        <Field label="Other Loans Installment (â‚¦/mo)" type="number" value={data.otherLoanInstallments} onChange={(v: any) => update('otherLoanInstallments', Number(v))} />
+        <Field label="Opening Cash (â‚¦)" type="number" value={data.openingCash} onChange={(v: any) => update('openingCash', Number(v))} />
       </div>
     </Card>
   );
 }
 
 // ============================================================================
-// G2: PREVIOUS BALANCE SHEET — for current vs previous comparison
+// G2: PREVIOUS BALANCE SHEET â€” for current vs previous comparison
 // ============================================================================
 
 function PreviousBalanceSheetSection({ data, update }: any) {
-  const fmtNaira = (n: number) => '₦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
+  const fmtNaira = (n: number) => 'â‚¦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
   const prev = data.previousBalanceSheetFull || {
     periodDate: '',
     cashAtHand: 0, cashInBanks: 0, wflBalance: 0,
@@ -1889,11 +1888,11 @@ function PreviousBalanceSheetSection({ data, update }: any) {
     <Card className="p-4 bg-gradient-to-br from-purple-50 to-pink-50 border-purple-200">
       <div className="flex items-center gap-2 mb-3">
         <TrendingDown className="h-4 w-4 text-purple-700" />
-        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Previous Period Balance Sheet (Full Snapshot — G2)</h3>
+        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Previous Period Balance Sheet (Full Snapshot â€” G2)</h3>
       </div>
       <p className="text-xs text-slate-600 mb-3">
         Captures the previous reporting period's full line-item balance sheet. The engine computes differences
-        (current − previous) and the capitalization cross-check (equity variation vs accrued profit).
+        (current âˆ’ previous) and the capitalization cross-check (equity variation vs accrued profit).
       </p>
 
       <div className="mb-3">
@@ -1951,20 +1950,20 @@ function PreviousBalanceSheetSection({ data, update }: any) {
 }
 
 // ============================================================================
-// TAB 1 — PROFILE / KYC
+// TAB 1 â€” PROFILE / KYC
 // ============================================================================
 
 function ProfileTab({ data, update, loan }: any) {
   const u = loan?.user;
   const b = u?.business;
-  const fmtDate = (d: any) => d ? new Date(d).toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  const fmtDate = (d: any) => d ? new Date(d).toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric' }) : 'â€”';
 
   return (
     <div className="space-y-6">
-      {/* v45: Client Identity — from onboarding (read-only) */}
+      {/* v45: Client Identity â€” from onboarding (read-only) */}
       <div>
         <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Client Identity (from Onboarding)</h3>
-        <p className="text-xs text-slate-400 mb-3">Auto-populated from onboarding — read only</p>
+        <p className="text-xs text-slate-400 mb-3">Auto-populated from onboarding â€” read only</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Field label="First Name" value={u?.firstName} readOnly />
           <Field label="Last Name" value={u?.lastName} readOnly />
@@ -1985,7 +1984,7 @@ function ProfileTab({ data, update, loan }: any) {
         </div>
       </div>
 
-      {/* v45: Residential Address — from onboarding (read-only) */}
+      {/* v45: Residential Address â€” from onboarding (read-only) */}
       <div>
         <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">Residential Address</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1996,7 +1995,7 @@ function ProfileTab({ data, update, loan }: any) {
         </div>
       </div>
 
-      {/* v45: Loan Cycle Info — from onboarding (read-only) */}
+      {/* v45: Loan Cycle Info â€” from onboarding (read-only) */}
       <div>
         <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">Loan Cycle & History</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -2007,7 +2006,7 @@ function ProfileTab({ data, update, loan }: any) {
         </div>
       </div>
 
-      {/* v42-P1: Rate Tier Lookup — product × grade → auto rate/fee */}
+      {/* v42-P1: Rate Tier Lookup â€” product Ã— grade â†’ auto rate/fee */}
       <div>
         <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1 flex items-center gap-2">
           <Calculator className="h-4 w-4 text-emerald-600" />
@@ -2074,39 +2073,68 @@ function ProfileTab({ data, update, loan }: any) {
         </div>
         {data.rateTierAutoApplied && (
           <p className="text-[10px] text-emerald-600 mt-2">
-            ✓ Rate, upfront fee, and CCD auto-applied from tier matrix. You can still override in the Loan Terms section below.
+            âœ“ Rate, upfront fee, and CCD auto-applied from tier matrix. You can still override in the Loan Terms section below.
           </p>
         )}
       </div>
 
-      {/* v46: Loan Terms — LOCKED for non-HOC roles. Only HOC/super can adjust. */}
+      {/* v46: Loan Terms â€” LOCKED for non-HOC roles. Only HOC/super can adjust. */}
       <div>
         <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Loan Terms (Requested)</h3>
         <p className="text-xs text-slate-400 mb-3">
-          Auto-populated from customer application — {useAppStore.getState().currentAdmin?.role === 'hoc' || useAppStore.getState().currentAdmin?.role === 'super'
+          Auto-populated from customer application â€” {useAppStore.getState().currentAdmin?.role === 'hoc' || useAppStore.getState().currentAdmin?.role === 'super'
             ? 'you can adjust as HOC/Super Admin'
-            : 'LOCKED — only HOC can adjust during structuring'}
+            : 'LOCKED â€” only HOC can adjust during structuring'}
         </p>
         {(() => {
           const canAdjust = useAppStore.getState().currentAdmin?.role === 'hoc' || useAppStore.getState().currentAdmin?.role === 'super';
           return (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <Field label="Loan Principal (₦)" type="number" value={data.loanPrincipal} onChange={canAdjust ? (v: any) => update('loanPrincipal', Number(v)) : undefined} readOnly={!canAdjust} />
+              <Field label="Loan Principal (â‚¦)" type="number" value={data.loanPrincipal} onChange={canAdjust ? (v: any) => update('loanPrincipal', Number(v)) : undefined} readOnly={!canAdjust} />
               <Field label="Interest Rate (% p.a.)" type="number" value={data.loanInterestRate} onChange={canAdjust ? (v: any) => update('loanInterestRate', Number(v)) : undefined} readOnly={!canAdjust} />
               <Field label="Tenor (months)" type="number" value={data.loanTenorMonths} onChange={canAdjust ? (v: any) => update('loanTenorMonths', Number(v)) : undefined} readOnly={!canAdjust} />
               <SelectField label="Repayment Method" value={data.repaymentMethod} onChange={canAdjust ? (v: any) => update('repaymentMethod', v) : undefined} options={['REDUCING', 'FLAT']} />
               <Field label="CCD (%)" type="number" value={data.ccdPercent} onChange={canAdjust ? (v: any) => update('ccdPercent', Number(v)) : undefined} readOnly={!canAdjust} />
               <Field label="Upfront Fee (%)" type="number" value={data.upfrontFeePercent} onChange={canAdjust ? (v: any) => update('upfrontFeePercent', Number(v)) : undefined} readOnly={!canAdjust} />
-              <Field label="Loan Purpose" value={data.loanPurpose || '—'} readOnly />
+              <Field label="Loan Purpose" value={data.loanPurpose || 'â€”'} readOnly />
               <div>
             <Label className="text-xs font-semibold">Sector Benchmark Margin</Label>
-            <Input
-              type="number"
-              value={data.sectorBenchmarkMargin ?? 0}
-              readOnly
-              className="text-xs mt-1"
-              aria-label="Admin-configured sector benchmark margin"
-            />
+            <div className="mt-1 flex items-center gap-2">
+              <Input
+                type="number"
+                value={data.sectorBenchmarkMargin || 0}
+                onChange={(e) => update('sectorBenchmarkMargin', Number(e.target.value))}
+                className="text-xs"
+                placeholder="0.00"
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  // v50 â€” fetch the AUTHORITATIVE benchmarked margin from the
+                  // DB via the sectors API. The static lookupSectorMargin()
+                  // in constants.ts is no longer used as a runtime source.
+                  const sectorName = data.selectedSectorName || data.businessSector || '';
+                  if (!sectorName) return;
+                  try {
+                    const res = await fetch('/api/sectors');
+                    const json = await res.json();
+                    const match = (json.sectors || []).find(
+                      (s: any) => (s.name || '').toLowerCase() === sectorName.toLowerCase(),
+                    );
+                    if (match && typeof match.benchmarkedMargin === 'number') {
+                      update('sectorBenchmarkMargin', match.benchmarkedMargin);
+                    }
+                  } catch (err) {
+                    console.error('[cam] failed to fetch sector benchmark:', err);
+                  }
+                }}
+                title="Fetch admin-configured sector benchmark from DB"
+              >
+                Fetch from DB
+              </Button>
+            </div>
             {data.selectedSectorName && (
               <p className="text-[10px] text-slate-400 mt-1">Sector: {data.selectedSectorName}</p>
             )}
@@ -2119,7 +2147,7 @@ function ProfileTab({ data, update, loan }: any) {
       {/* CAM-Specific Risk Assessment Fields */}
       <div>
         <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">CAM Risk Assessment</h3>
-        <p className="text-xs text-slate-400 mb-3">Fields specific to credit appraisal — completed by Loan Officer</p>
+        <p className="text-xs text-slate-400 mb-3">Fields specific to credit appraisal â€” completed by Loan Officer</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Field label="Applicant Age" type="number" value={data.applicantAge} onChange={(v: any) => update('applicantAge', Number(v))} />
           <Field label="Years at Address (auto)" type="number" value={data.yearsAtAddress} readOnly />
@@ -2137,15 +2165,15 @@ function ProfileTab({ data, update, loan }: any) {
         </div>
       </div>
 
-      {/* Sector & Zonification — auto-populated, read-only */}
+      {/* Sector & Zonification â€” auto-populated, read-only */}
       <div>
         <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Sector & Zonification (Auto)</h3>
         <p className="text-xs text-slate-400 mb-3">Auto-populated from business sector and location</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Field label="Sector Risk Score (auto)" type="number" value={data.sectorRiskScore} readOnly />
           <Field label="Benchmark Margin % (auto)" type="number" value={data.sectorBenchmarkMargin} readOnly />
-          <Field label="Business Location" value={data.businessLocation || '—'} readOnly />
-          <Field label="Zonification Rating" value={lookupLocationRating(data.businessLocation)?.rating?.toString() || '—'} readOnly />
+          <Field label="Business Location" value={data.businessLocation || 'â€”'} readOnly />
+          <Field label="Zonification Rating" value={lookupLocationRating(data.businessLocation)?.rating?.toString() || 'â€”'} readOnly />
         </div>
       </div>
 
@@ -2170,7 +2198,7 @@ function ProfileTab({ data, update, loan }: any) {
 
 // ---- Running WFL Loan section (GAP 3) -------------------------------------
 function RunningWflLoanSection({ data, update }: any) {
-  const fmtNaira = (n: number) => '₦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
+  const fmtNaira = (n: number) => 'â‚¦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
   const r = data.runningWflLoan || {
     isActive: false, disbursementDate: '', maturityDate: '', amount: 0,
     duration: 0, installment: 0, installmentsPaid: 0, balance: 0,
@@ -2179,7 +2207,7 @@ function RunningWflLoanSection({ data, update }: any) {
 
   // "Can Customer Get Another Loan?" indicator
   let pctPaid = 0;
-  let verdict: { label: string; color: string } = { label: '—', color: 'bg-slate-100 dark:bg-slate-800 text-slate-700' };
+  let verdict: { label: string; color: string } = { label: 'â€”', color: 'bg-slate-100 dark:bg-slate-800 text-slate-700' };
   if (r.isActive && r.amount > 0) {
     const paid = Math.max(0, r.amount - (Number(r.balance) || 0));
     pctPaid = (paid / r.amount) * 100;
@@ -2202,11 +2230,11 @@ function RunningWflLoanSection({ data, update }: any) {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Field label="Disbursement Date" type="date" value={r.disbursementDate} onChange={(v: any) => upd('disbursementDate', v)} />
             <Field label="Maturity Date" type="date" value={r.maturityDate} onChange={(v: any) => upd('maturityDate', v)} />
-            <Field label="Loan Amount (₦)" type="number" value={r.amount} onChange={(v: any) => upd('amount', Number(v))} />
+            <Field label="Loan Amount (â‚¦)" type="number" value={r.amount} onChange={(v: any) => upd('amount', Number(v))} />
             <Field label="Duration (months)" type="number" value={r.duration} onChange={(v: any) => upd('duration', Number(v))} />
-            <Field label="Monthly Installment (₦)" type="number" value={r.installment} onChange={(v: any) => upd('installment', Number(v))} />
+            <Field label="Monthly Installment (â‚¦)" type="number" value={r.installment} onChange={(v: any) => upd('installment', Number(v))} />
             <Field label="Installments Paid" type="number" value={r.installmentsPaid} onChange={(v: any) => upd('installmentsPaid', Number(v))} />
-            <Field label="Loan Balance (₦)" type="number" value={r.balance} onChange={(v: any) => upd('balance', Number(v))} />
+            <Field label="Loan Balance (â‚¦)" type="number" value={r.balance} onChange={(v: any) => upd('balance', Number(v))} />
           </div>
           <div className="mt-4 p-3 rounded-md bg-slate-50 dark:bg-slate-900 border border-slate-200 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -2219,12 +2247,12 @@ function RunningWflLoanSection({ data, update }: any) {
               </div>
             </div>
             <Badge className={cn('text-sm font-bold px-4 py-1.5', verdict.color)}>
-              {verdict.label} · {pctPaid.toFixed(1)}% paid
+              {verdict.label} Â· {pctPaid.toFixed(1)}% paid
             </Badge>
           </div>
           <p className="text-[10px] text-slate-400 mt-2">
-            Rule: ≤45% paid → NO (Red) · ≥55% paid → YES (Green) · otherwise → MAYBE (Amber).
-            Paid = Loan Amount − Balance = {fmtNaira(Math.max(0, r.amount - (Number(r.balance) || 0)))}.
+            Rule: â‰¤45% paid â†’ NO (Red) Â· â‰¥55% paid â†’ YES (Green) Â· otherwise â†’ MAYBE (Amber).
+            Paid = Loan Amount âˆ’ Balance = {fmtNaira(Math.max(0, r.amount - (Number(r.balance) || 0)))}.
           </p>
         </>
       ) : (
@@ -2236,9 +2264,9 @@ function RunningWflLoanSection({ data, update }: any) {
 
 // ---- Other lender loans section (GAP 3) -----------------------------------
 function OtherLenderLoansSection({ data, update }: any) {
-  const fmtNaira = (n: number) => '₦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
+  const fmtNaira = (n: number) => 'â‚¦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
   const rows: any[] = data.otherLenderLoans || [];
-  // G12: Expanded to 8 statuses — matches Excel Sheet1 loan status taxonomy
+  // G12: Expanded to 8 statuses â€” matches Excel Sheet1 loan status taxonomy
   const statuses = [...LOAN_STATUS_TAXONOMY];
   const updateRow = (idx: number, key: string, val: any) => {
     const newArr = [...rows];
@@ -2357,18 +2385,18 @@ function ReferencesSection({ data, update }: any) {
 }
 
 // ============================================================================
-// TAB 2 — BUSINESS
+// TAB 2 â€” BUSINESS
 // ============================================================================
 
 function BusinessTab({ data, update, loan }: any) {
   const b = loan?.user?.business;
-  const fmtDate = (d: any) => d ? new Date(d).toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  const fmtDate = (d: any) => d ? new Date(d).toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric' }) : 'â€”';
   return (
     <div className="space-y-6">
-      {/* v45: Business Profile — from onboarding (read-only) */}
+      {/* v45: Business Profile â€” from onboarding (read-only) */}
       <div>
         <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Business Profile (from Onboarding)</h3>
-        <p className="text-xs text-slate-400 mb-3">Auto-populated from customer onboarding — verify during field visitation</p>
+        <p className="text-xs text-slate-400 mb-3">Auto-populated from customer onboarding â€” verify during field visitation</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Field label="Business Name" value={b?.name} readOnly />
           <Field label="Sector" value={b?.sectorRef?.name || b?.sector} readOnly />
@@ -2381,7 +2409,7 @@ function BusinessTab({ data, update, loan }: any) {
         </div>
       </div>
 
-      {/* v45: Business Location — from onboarding (read-only) */}
+      {/* v45: Business Location â€” from onboarding (read-only) */}
       <div>
         <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">Business Location</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -2396,9 +2424,9 @@ function BusinessTab({ data, update, loan }: any) {
         </div>
       </div>
 
-      {/* v45: Business Financials — from onboarding (read-only, for reference) */}
+      {/* v45: Business Financials â€” from onboarding (read-only, for reference) */}
       <div>
-        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">Business Financials (from Onboarding — for reference)</h3>
+        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">Business Financials (from Onboarding â€” for reference)</h3>
         <p className="text-xs text-slate-400 mb-2">These are from onboarding. Capture verified figures in the Sales, Expenses, and Assets tabs.</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Field label="Declared Business Worth" type="number" value={b?.businessWorth} readOnly />
@@ -2421,14 +2449,14 @@ function BusinessTab({ data, update, loan }: any) {
 }
 
 // ============================================================================
-// TAB 3 — SALES FORENSICS
+// TAB 3 â€” SALES FORENSICS
 // ============================================================================
 
 function SalesTab({ data, update, engineResult }: any) {
-  const fmtNaira = (n: number) => '₦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
+  const fmtNaira = (n: number) => 'â‚¦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
 
-  // ── SECTION 1: Weekly Sales per Client Estimation (Excel rows 88-99) ──
-  // Grid: Good/Average/Bad rows × Monday-Sunday columns
+  // â”€â”€ SECTION 1: Weekly Sales per Client Estimation (Excel rows 88-99) â”€â”€
+  // Grid: Good/Average/Bad rows Ã— Monday-Sunday columns
   const weeklyGrid = data.weeklyGrid || {
     good:  { monday: 0, tuesday: 0, wednesday: 0, thursday: 0, friday: 0, saturday: 0, sunday: 0 },
     average: { monday: 0, tuesday: 0, wednesday: 0, thursday: 0, friday: 0, saturday: 0, sunday: 0 },
@@ -2442,14 +2470,14 @@ function SalesTab({ data, update, engineResult }: any) {
   const weeklyTotalGrid = days.reduce((s, d) => s + (Number(weeklyGrid.good[d]) || 0) + (Number(weeklyGrid.average[d]) || 0) + (Number(weeklyGrid.bad[d]) || 0), 0);
   const monthlyClientEstimate = weeklyTotalGrid * 4;
 
-  // ── SECTION 2: 3-Day Sales (Excel rows 101-108) ──
+  // â”€â”€ SECTION 2: 3-Day Sales (Excel rows 101-108) â”€â”€
   const threeDaySales = data.threeDaySales || { day1: 0, day2: 0, day3: 0 };
   const upd3Day = (k: string, v: number) => update('threeDaySales', { ...threeDaySales, [k]: v });
   const threeDayTotal = (Number(threeDaySales.day1) || 0) + (Number(threeDaySales.day2) || 0) + (Number(threeDaySales.day3) || 0);
-  const monthly3Day = threeDayTotal * 8; // × 8 extrapolation factor per Excel
+  const monthly3Day = threeDayTotal * 8; // Ã— 8 extrapolation factor per Excel
 
-  // ── SECTION 3: Account Statement Credit Side (Excel rows 110-119) ──
-  // v46: REMOVED preloaded figures — start with empty array, user enters real data
+  // â”€â”€ SECTION 3: Account Statement Credit Side (Excel rows 110-119) â”€â”€
+  // v46: REMOVED preloaded figures â€” start with empty array, user enters real data
   const bankMonths = data.salesBankMonths || [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   const updBankMonth = (idx: number, val: number) => {
     const newArr = [...bankMonths];
@@ -2459,7 +2487,7 @@ function SalesTab({ data, update, engineResult }: any) {
   const bankSubTotal = bankMonths.reduce((s: number, v: number) => s + (Number(v) || 0), 0);
   const bankAverage = bankSubTotal / 12;
 
-  // ── SECTION 4: Sales Records / Invoice (Excel rows 121-125) ──
+  // â”€â”€ SECTION 4: Sales Records / Invoice (Excel rows 121-125) â”€â”€
   const invoiceMonths = data.salesInvoiceMonths || [0, 0, 0, 0, 0, 0];
   const updInvMonth = (idx: number, val: number) => {
     const newArr = [...invoiceMonths];
@@ -2468,7 +2496,7 @@ function SalesTab({ data, update, engineResult }: any) {
   };
   const invoiceAvg = invoiceMonths.reduce((s: number, v: number) => s + (Number(v) || 0), 0) / 6;
 
-  // ── Sales Summary Base (Excel rows 128-135) ──
+  // â”€â”€ Sales Summary Base (Excel rows 128-135) â”€â”€
   const salesSources = [
     { label: 'On Client Estimation', value: monthlyClientEstimate },
     { label: 'On the last 3 Days sales', value: monthly3Day },
@@ -2477,7 +2505,7 @@ function SalesTab({ data, update, engineResult }: any) {
   ];
   const validSources = salesSources.filter((s) => s.value > 0);
   const consideredSales = validSources.length > 0 ? Math.min(...validSources.map((s) => s.value)) : 0;
-  const consideredSource = validSources.find((s) => s.value === consideredSales)?.label || '—';
+  const consideredSource = validSources.find((s) => s.value === consideredSales)?.label || 'â€”';
 
   // Auto-update the engine input fields
   useEffect(() => {
@@ -2489,7 +2517,7 @@ function SalesTab({ data, update, engineResult }: any) {
     update('selectedSalesSource', consideredSource);
   }, [monthlyClientEstimate, monthly3Day, bankAverage, invoiceAvg, consideredSales]);
 
-  // ── PURCHASE SECTION (Excel rows 138-172) ──
+  // â”€â”€ PURCHASE SECTION (Excel rows 138-172) â”€â”€
   // P1: Purchase per Client Estimation (supplier table)
   const purchaseSuppliers = data.purchaseSuppliers || [];
   const updSupplier = (idx: number, key: string, val: any) => {
@@ -2502,7 +2530,7 @@ function SalesTab({ data, update, engineResult }: any) {
   const purchaseClientTotal = purchaseSuppliers.reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
 
   // P2: Purchase from Account Statement (debit side, 12 months)
-  // v46: REMOVED preloaded figures — start with empty array, user enters real data
+  // v46: REMOVED preloaded figures â€” start with empty array, user enters real data
   const purchaseBankMonths = data.purchaseBankMonths || [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   const updPurchBankMonth = (idx: number, val: number) => {
     const newArr = [...purchaseBankMonths];
@@ -2549,15 +2577,15 @@ function SalesTab({ data, update, engineResult }: any) {
     : 0;
 
   // 3. Sector Benchmark Margin (from admin-configured sector, NOT hardcoded)
-  // v50 — DB Sector.benchmarkedMargin is the SOLE LIVE source. The static
+  // v50 â€” DB Sector.benchmarkedMargin is the SOLE LIVE source. The static
   // lookupSectorMargin() in constants.ts is ONLY for seed/default data and
   // is no longer used as a runtime fallback. If the admin sets Electronics
-  // to 25%, CAM must use 25% — not a hard-coded 20.13% or whatever the
+  // to 25%, CAM must use 25% â€” not a hard-coded 20.13% or whatever the
   // static table has.
   const sectorBenchmark = Number(data.sectorBenchmarkMargin) || 0;
   const sectorBenchmarkMargin = sectorBenchmark / 100; // Convert % to decimal
 
-  // 4. Inventory margin used = MIN(average, weighted) — this is Excel's G21
+  // 4. Inventory margin used = MIN(average, weighted) â€” this is Excel's G21
   const inventoryMarginUsed = (() => {
     const candidates = [averageMargin, weightedMargin].filter(v => v > 0);
     return candidates.length > 0 ? Math.min(...candidates) : 0;
@@ -2578,12 +2606,12 @@ function SalesTab({ data, update, engineResult }: any) {
   const purchaseFromMargin = consideredSales * (1 - marginUsed);
   const gwm = marginUsed; // The winning margin IS the gross weighted margin used for all calculations
 
-  // Purchase Summary Base — uses the margin-derived purchase
+  // Purchase Summary Base â€” uses the margin-derived purchase
   const purchaseSources = [
     { label: 'On Client Estimation', value: purchaseClientTotal },
     { label: 'Debit side of Bank Statement (Avg)', value: purchaseBankAvg },
     { label: 'On Purchases Invoice (Avg)', value: purchaseInvoiceAvg },
-    { label: `Purchases from margin (P=S×(1-${(marginUsed * 100).toFixed(2)}%))`, value: purchaseFromMargin },
+    { label: `Purchases from margin (P=SÃ—(1-${(marginUsed * 100).toFixed(2)}%))`, value: purchaseFromMargin },
   ];
   const validPurchSources = purchaseSources.filter((s) => s.value > 0);
   // v48: Use margin-derived purchase (this is the correct rule per Excel spec)
@@ -2599,21 +2627,21 @@ function SalesTab({ data, update, engineResult }: any) {
 
   return (
     <div className="space-y-6">
-      {/* ════════════════════════════════════════════════════════════════════ */}
-      {/* MONTHLY SALES — 4 Methods (Excel FINANCIAL ANALYSIS rows 86-135)     */}
-      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+      {/* MONTHLY SALES â€” 4 Methods (Excel FINANCIAL ANALYSIS rows 86-135)     */}
+      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
       <div className="p-4 bg-gradient-to-r from-emerald-600 to-teal-600 rounded-t-lg">
-        <h2 className="text-lg font-bold text-white">MONTHLY SALES — 4-Source Triangulation</h2>
+        <h2 className="text-lg font-bold text-white">MONTHLY SALES â€” 4-Source Triangulation</h2>
         <p className="text-xs text-emerald-100">Excel FINANCIAL ANALYSIS sheet (rows 86-135). The least figure is considered as the accepted monthly sales.</p>
       </div>
 
-      {/* ── METHOD 1: Sales According to Client's Estimation (Weekly Grid) ── */}
+      {/* â”€â”€ METHOD 1: Sales According to Client's Estimation (Weekly Grid) â”€â”€ */}
       <Card className="p-4 border-2 border-emerald-200">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">1. Sales According to Client&apos;s Estimation</h3>
           <Badge className="bg-emerald-100 text-emerald-700 text-[10px]">Source 1</Badge>
         </div>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Weekly grid: capture Good / Average / Bad day amounts for each day of the week. Monthly = Weekly Total × 4.</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Weekly grid: capture Good / Average / Bad day amounts for each day of the week. Monthly = Weekly Total Ã— 4.</p>
         <div className="overflow-x-auto">
           <table className="w-full text-xs border-collapse">
             <thead>
@@ -2651,25 +2679,25 @@ function SalesTab({ data, update, engineResult }: any) {
           </table>
         </div>
         <div className="mt-3 p-3 bg-emerald-50 rounded border border-emerald-200 flex items-center justify-between">
-          <span className="text-xs font-bold text-emerald-800">TOTAL MONTHLY SALES = WEEKLY TOTAL × 4</span>
+          <span className="text-xs font-bold text-emerald-800">TOTAL MONTHLY SALES = WEEKLY TOTAL Ã— 4</span>
           <span className="text-lg font-bold font-mono text-emerald-700">{fmtNaira(monthlyClientEstimate)}</span>
         </div>
       </Card>
 
-      {/* ── METHOD 2: Monthly Sales According to 3-Day Sales ── */}
+      {/* â”€â”€ METHOD 2: Monthly Sales According to 3-Day Sales â”€â”€ */}
       <Card className="p-4 border-2 border-amber-200">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">2. Monthly Sales According to 3-Day Sales</h3>
           <Badge className="bg-amber-100 text-amber-700 text-[10px]">Source 2</Badge>
         </div>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Capture sales for the last 3 observed days. Monthly = Total × 8 (extrapolation factor).</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Capture sales for the last 3 observed days. Monthly = Total Ã— 8 (extrapolation factor).</p>
         <div className="overflow-x-auto">
           <table className="w-full text-xs border-collapse">
             <thead>
               <tr className="bg-slate-100 dark:bg-slate-800">
                 <th className="px-2 py-2 border text-left text-[10px] uppercase text-slate-600">Sales for the last 3 days</th>
-                <th className="px-2 py-2 border text-right text-[10px] uppercase text-slate-600">Cash Sales (₦)</th>
-                <th className="px-2 py-2 border text-right text-[10px] uppercase text-slate-600">Total (₦)</th>
+                <th className="px-2 py-2 border text-right text-[10px] uppercase text-slate-600">Cash Sales (â‚¦)</th>
+                <th className="px-2 py-2 border text-right text-[10px] uppercase text-slate-600">Total (â‚¦)</th>
               </tr>
             </thead>
             <tbody>
@@ -2695,24 +2723,24 @@ function SalesTab({ data, update, engineResult }: any) {
           </table>
         </div>
         <div className="mt-3 p-3 bg-amber-50 rounded border border-amber-200 flex items-center justify-between">
-          <span className="text-xs font-bold text-amber-800">TOTAL MONTHLY SALES = 3-DAY TOTAL × 8</span>
+          <span className="text-xs font-bold text-amber-800">TOTAL MONTHLY SALES = 3-DAY TOTAL Ã— 8</span>
           <span className="text-lg font-bold font-mono text-amber-700">{fmtNaira(monthly3Day)}</span>
         </div>
       </Card>
 
-      {/* ── METHOD 3: Monthly Sales from Account Statement (12 months) ── */}
+      {/* â”€â”€ METHOD 3: Monthly Sales from Account Statement (12 months) â”€â”€ */}
       <Card className="p-4 border-2 border-blue-200">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">3. Monthly Sales from Account Statement</h3>
           <Badge className="bg-blue-100 text-blue-700 text-[10px]">Source 3</Badge>
         </div>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Credit side of bank account statement — 12 months of inflow data.</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Credit side of bank account statement â€” 12 months of inflow data.</p>
         <div className="overflow-x-auto">
           <table className="w-full text-xs border-collapse">
             <thead>
               <tr className="bg-slate-100 dark:bg-slate-800">
                 <th className="px-2 py-2 border text-left text-[10px] uppercase text-slate-600">Period</th>
-                <th className="px-2 py-2 border text-right text-[10px] uppercase text-slate-600">Amount (₦)</th>
+                <th className="px-2 py-2 border text-right text-[10px] uppercase text-slate-600">Amount (â‚¦)</th>
               </tr>
             </thead>
             <tbody>
@@ -2739,13 +2767,13 @@ function SalesTab({ data, update, engineResult }: any) {
         </div>
       </Card>
 
-      {/* ── METHOD 4: Monthly Sales from Sales Records / Invoice (6 months) ── */}
+      {/* â”€â”€ METHOD 4: Monthly Sales from Sales Records / Invoice (6 months) â”€â”€ */}
       <Card className="p-4 border-2 border-purple-200">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">4. Monthly Sales from Sales Records / Invoice</h3>
           <Badge className="bg-purple-100 text-purple-700 text-[10px]">Source 4</Badge>
         </div>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Sales records or invoice books — 6 months of data, averaged.</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Sales records or invoice books â€” 6 months of data, averaged.</p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {invoiceMonths.map((val: number, i: number) => (
             <div key={i}>
@@ -2760,9 +2788,9 @@ function SalesTab({ data, update, engineResult }: any) {
         </div>
       </Card>
 
-      {/* ── SALES SUMMARY BASE (Excel rows 128-135) ── */}
+      {/* â”€â”€ SALES SUMMARY BASE (Excel rows 128-135) â”€â”€ */}
       <Card className="p-4 bg-slate-900 text-white">
-        <h3 className="text-sm font-bold mb-3">📊 Sales Summary Base — Least Figure Rule</h3>
+        <h3 className="text-sm font-bold mb-3">ðŸ“Š Sales Summary Base â€” Least Figure Rule</h3>
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-slate-600">
@@ -2791,15 +2819,15 @@ function SalesTab({ data, update, engineResult }: any) {
         </table>
       </Card>
 
-      {/* ════════════════════════════════════════════════════════════════════ */}
-      {/* PURCHASE — 4 Methods (Excel FINANCIAL ANALYSIS rows 138-172)        */}
-      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+      {/* PURCHASE â€” 4 Methods (Excel FINANCIAL ANALYSIS rows 138-172)        */}
+      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
       <div className="p-4 bg-gradient-to-r from-amber-600 to-orange-600 rounded-t-lg">
-        <h2 className="text-lg font-bold text-white">PURCHASE — 4-Source Verification</h2>
-        <p className="text-xs text-amber-100">Excel FINANCIAL ANALYSIS sheet (rows 138-172). P = S × (1 − GWM) is the margin-derived truth source.</p>
+        <h2 className="text-lg font-bold text-white">PURCHASE â€” 4-Source Verification</h2>
+        <p className="text-xs text-amber-100">Excel FINANCIAL ANALYSIS sheet (rows 138-172). P = S Ã— (1 âˆ’ GWM) is the margin-derived truth source.</p>
       </div>
 
-      {/* ── P1: Purchase According to Client Estimation (Supplier table) ── */}
+      {/* â”€â”€ P1: Purchase According to Client Estimation (Supplier table) â”€â”€ */}
       <Card className="p-4 border-2 border-orange-200">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">1. Purchase According to Client Estimation</h3>
@@ -2812,7 +2840,7 @@ function SalesTab({ data, update, engineResult }: any) {
                 <th className="px-2 py-2">Supplier</th>
                 <th className="px-2 py-2">Location / Town / Country</th>
                 <th className="px-2 py-2 text-center">Frequency</th>
-                <th className="px-2 py-2 text-right">Amount (₦)</th>
+                <th className="px-2 py-2 text-right">Amount (â‚¦)</th>
                 <th className="px-2 py-2"></th>
               </tr>
             </thead>
@@ -2839,13 +2867,13 @@ function SalesTab({ data, update, engineResult }: any) {
         </div>
       </Card>
 
-      {/* ── P2: Purchase from Account Statement (Debit side, 12 months) ── */}
+      {/* â”€â”€ P2: Purchase from Account Statement (Debit side, 12 months) â”€â”€ */}
       <Card className="p-4 border-2 border-red-200">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">2. Purchase According to Account Statement (Debit Side)</h3>
           <Badge className="bg-red-100 text-red-700 text-[10px]">Source 2</Badge>
         </div>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Debit side of bank account statement — 12 months of outflow data.</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Debit side of bank account statement â€” 12 months of outflow data.</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {purchaseBankMonths.map((val: number, i: number) => (
             <div key={i}>
@@ -2866,13 +2894,13 @@ function SalesTab({ data, update, engineResult }: any) {
         </div>
       </Card>
 
-      {/* ── P3: Purchase from Receipts/Invoices (6 months) ── */}
+      {/* â”€â”€ P3: Purchase from Receipts/Invoices (6 months) â”€â”€ */}
       <Card className="p-4 border-2 border-cyan-200">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">3. Purchase from Purchase Receipts / Invoices</h3>
           <Badge className="bg-cyan-100 text-cyan-700 text-[10px]">Source 3</Badge>
         </div>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Documented purchase invoices — 6 months, averaged.</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Documented purchase invoices â€” 6 months, averaged.</p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {purchaseInvoiceMonths.map((val: number, i: number) => (
             <div key={i}>
@@ -2887,13 +2915,13 @@ function SalesTab({ data, update, engineResult }: any) {
         </div>
       </Card>
 
-      {/* ── P4: Purchase Verification from Margin ── */}
+      {/* â”€â”€ P4: Purchase Verification from Margin â”€â”€ */}
       <Card className="p-4 border-2 border-green-300 bg-green-50">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">4. Purchase Verification from Margin</h3>
           <Badge className="bg-green-200 text-green-800 text-[10px]">Source 4 (Truth)</Badge>
         </div>
-        <p className="text-xs text-slate-600 mb-3">Formula: P = S × (1 − GWM) where S = considered sales and GWM = weighted margin.</p>
+        <p className="text-xs text-slate-600 mb-3">Formula: P = S Ã— (1 âˆ’ GWM) where S = considered sales and GWM = weighted margin.</p>
         <div className="grid grid-cols-3 gap-3 text-center">
           <div className="p-2 bg-white rounded border">
             <p className="text-[10px] uppercase text-slate-500 dark:text-slate-400">Considered Sales (S)</p>
@@ -2910,9 +2938,9 @@ function SalesTab({ data, update, engineResult }: any) {
         </div>
       </Card>
 
-      {/* ── PURCHASE SUMMARY BASE ── */}
+      {/* â”€â”€ PURCHASE SUMMARY BASE â”€â”€ */}
       <Card className="p-4 bg-slate-900 text-white">
-        <h3 className="text-sm font-bold mb-3">📊 Purchase Summary Base — Least Figure Rule</h3>
+        <h3 className="text-sm font-bold mb-3">ðŸ“Š Purchase Summary Base â€” Least Figure Rule</h3>
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-slate-600">
@@ -2937,7 +2965,7 @@ function SalesTab({ data, update, engineResult }: any) {
         </table>
       </Card>
 
-      {/* ── Engine Result Card ── */}
+      {/* â”€â”€ Engine Result Card â”€â”€ */}
       {engineResult && (
         <Card className="p-4 bg-emerald-50 border-emerald-200">
           <h4 className="text-sm font-bold text-emerald-900 mb-2">Engine Result</h4>
@@ -2966,7 +2994,7 @@ function SalesTab({ data, update, engineResult }: any) {
         </Card>
       )}
 
-      {/* ── Stress Test Simulator ── */}
+      {/* â”€â”€ Stress Test Simulator â”€â”€ */}
       <Card className="p-4">
         <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-3">Stress Test Simulator</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -3000,7 +3028,7 @@ function SalesTab({ data, update, engineResult }: any) {
 }
 
 // ============================================================================
-// TAB 4 — INVENTORY
+// TAB 4 â€” INVENTORY
 // ============================================================================
 
 function InventoryTab({ data, update, engineResult }: any) {
@@ -3029,8 +3057,8 @@ function InventoryTab({ data, update, engineResult }: any) {
             <tr className="text-left text-[10px] uppercase text-slate-500 dark:text-slate-400">
               <th className="px-2 py-2">Description</th>
               <th className="px-2 py-2 text-right">Qty</th>
-              <th className="px-2 py-2 text-right">Cost (₦)</th>
-              <th className="px-2 py-2 text-right">Sell (₦)</th>
+              <th className="px-2 py-2 text-right">Cost (â‚¦)</th>
+              <th className="px-2 py-2 text-right">Sell (â‚¦)</th>
               <th className="px-2 py-2 text-right">Margin %</th>
               <th className="px-2 py-2 text-right">Total Value</th>
               <th className="px-2 py-2"></th>
@@ -3047,8 +3075,8 @@ function InventoryTab({ data, update, engineResult }: any) {
                   <td className="px-2 py-2"><Input type="number" value={item.cost} onChange={(e) => updateItem(idx, 'cost', Number(e.target.value))} className="h-8 w-28 text-right" /></td>
                   <td className="px-2 py-2"><Input type="number" value={item.sell} onChange={(e) => updateItem(idx, 'sell', Number(e.target.value))} className="h-8 w-28 text-right" /></td>
                   <td className="px-2 py-2 text-right font-mono text-xs">{margin.toFixed(1)}%</td>
-                  <td className="px-2 py-2 text-right font-mono text-xs">₦{total.toLocaleString()}</td>
-                  <td className="px-2 py-2"><Button size="sm" variant="ghost" onClick={() => removeItem(idx)}>✕</Button></td>
+                  <td className="px-2 py-2 text-right font-mono text-xs">â‚¦{total.toLocaleString()}</td>
+                  <td className="px-2 py-2"><Button size="sm" variant="ghost" onClick={() => removeItem(idx)}>âœ•</Button></td>
                 </tr>
               );
             })}
@@ -3060,7 +3088,7 @@ function InventoryTab({ data, update, engineResult }: any) {
         <Card className="p-4 bg-emerald-50">
           <h4 className="text-sm font-bold text-emerald-900 mb-2">Margin Analysis</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Total Stock Value</p><p className="font-bold">₦{engineResult.weightedMargin.totalStockCostValue.toLocaleString()}</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Total Stock Value</p><p className="font-bold">â‚¦{engineResult.weightedMargin.totalStockCostValue.toLocaleString()}</p></div>
             <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Weighted Margin</p><p className="font-bold text-emerald-700">{(engineResult.weightedMargin.weightedMargin * 100).toFixed(2)}%</p></div>
             <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Simple Average</p><p className="font-bold">{(engineResult.weightedMargin.simpleAverage * 100).toFixed(2)}%</p></div>
             <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Sector Benchmark</p><p className="font-bold">{data.sectorBenchmarkMargin}%</p></div>
@@ -3072,14 +3100,14 @@ function InventoryTab({ data, update, engineResult }: any) {
 }
 
 // ============================================================================
-// TAB 5 — EXPENSES
+// TAB 5 â€” EXPENSES
 // ============================================================================
 
 function ExpensesTab({ data, update, engineResult }: any) {
-  const fmtNaira = (n: number) => '₦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
+  const fmtNaira = (n: number) => 'â‚¦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
   const bufferRate = Number(data.bufferRate) || 0.2;
 
-  // Business expenses — 11 categories
+  // Business expenses â€” 11 categories
   const businessExpenses: any[] = data.businessExpenses || [];
   const updateBusinessExpense = (idx: number, amount: number) => {
     const newArr = [...businessExpenses];
@@ -3090,7 +3118,7 @@ function ExpensesTab({ data, update, engineResult }: any) {
   const businessBuffer = businessSubtotal * bufferRate;
   const businessTotal = businessSubtotal + businessBuffer;
 
-  // Family regular — 9 categories
+  // Family regular â€” 9 categories
   const familyRegular: any[] = data.familyExpensesRegular || [];
   const updateFamilyRegular = (idx: number, amount: number) => {
     const newArr = [...familyRegular];
@@ -3101,7 +3129,7 @@ function ExpensesTab({ data, update, engineResult }: any) {
   const familyRegBuffer = familyRegSubtotal * bufferRate;
   const familyRegTotal = familyRegSubtotal + familyRegBuffer;
 
-  // Family irregular — 5 categories (no buffer)
+  // Family irregular â€” 5 categories (no buffer)
   const familyIrregular: any[] = data.familyExpensesIrregular || [];
   const updateFamilyIrregular = (idx: number, amount: number) => {
     const newArr = [...familyIrregular];
@@ -3113,7 +3141,7 @@ function ExpensesTab({ data, update, engineResult }: any) {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Monthly Expenses — Categorized</h3>
+        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Monthly Expenses â€” Categorized</h3>
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
           Subtotal of each group gets a {(bufferRate * 100).toFixed(0)}% unforeseen buffer added. Irregular categories do not receive a buffer.
         </p>
@@ -3155,7 +3183,7 @@ function ExpensesTab({ data, update, engineResult }: any) {
             </div>
             <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
               <div>
-                <p className="text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1">Regular (9 categories — buffered)</p>
+                <p className="text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1">Regular (9 categories â€” buffered)</p>
                 <div className="space-y-2">
                   {familyRegular.map((e: any, idx: number) => (
                     <div key={idx} className="grid grid-cols-12 gap-2 items-center">
@@ -3178,7 +3206,7 @@ function ExpensesTab({ data, update, engineResult }: any) {
                 </div>
               </div>
               <div>
-                <p className="text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1">Irregular (5 categories — no buffer)</p>
+                <p className="text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1">Irregular (5 categories â€” no buffer)</p>
                 <div className="space-y-2">
                   {familyIrregular.map((e: any, idx: number) => (
                     <div key={idx} className="grid grid-cols-12 gap-2 items-center">
@@ -3203,7 +3231,7 @@ function ExpensesTab({ data, update, engineResult }: any) {
         </div>
 
         <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-          {/* v46: Other Loan Installments — auto-generated from family loan + other lenders */}
+          {/* v46: Other Loan Installments â€” auto-generated from family loan + other lenders */}
           {(() => {
             const familyLoan = Number(data.familyLoanInstallment) || 0;
             const lenderInstallments = (data.otherLenderLoans || []).reduce(
@@ -3213,14 +3241,14 @@ function ExpensesTab({ data, update, engineResult }: any) {
             return (
               <div>
                 <Label className="text-xs text-slate-600">
-                  Other Loan Installments (monthly ₦)
+                  Other Loan Installments (monthly â‚¦)
                   <span className="text-[9px] text-emerald-600 ml-1">auto-generated</span>
                 </Label>
                 <div className="mt-1 rounded-md border border-slate-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700">
-                  ₦{autoTotal.toLocaleString('en-NG', { maximumFractionDigits: 0 })}
+                  â‚¦{autoTotal.toLocaleString('en-NG', { maximumFractionDigits: 0 })}
                 </div>
                 <p className="text-[9px] text-slate-400 mt-0.5">
-                  = Family Loan (₦{familyLoan.toLocaleString()}) + Other Lenders (₦{lenderInstallments.toLocaleString()})
+                  = Family Loan (â‚¦{familyLoan.toLocaleString()}) + Other Lenders (â‚¦{lenderInstallments.toLocaleString()})
                 </p>
               </div>
             );
@@ -3233,12 +3261,12 @@ function ExpensesTab({ data, update, engineResult }: any) {
         <Card className="p-4 bg-blue-50">
           <h4 className="text-sm font-bold text-blue-900 mb-2">P&L Summary (Monthly)</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Gross Profit</p><p className="font-bold">₦{engineResult.pnl.grossProfit.toLocaleString()}</p></div>
-            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Opex (buffered)</p><p className="font-bold text-red-600">₦{engineResult.pnl.opex.toLocaleString()}</p></div>
-            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Living (buffered)</p><p className="font-bold text-red-600">₦{engineResult.pnl.living.toLocaleString()}</p></div>
-            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Repayment Capacity</p><p className="font-bold text-emerald-700">₦{engineResult.pnl.netCashflowAvailable.toLocaleString()}</p></div>
-            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">New Loan Installment</p><p className="font-bold">₦{engineResult.pnl.installment.toLocaleString()}</p></div>
-            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Net Profit (after loan)</p><p className={cn('font-bold', engineResult.pnl.netProfit < 0 ? 'text-red-600' : 'text-emerald-700')}>₦{engineResult.pnl.netProfit.toLocaleString()}</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Gross Profit</p><p className="font-bold">â‚¦{engineResult.pnl.grossProfit.toLocaleString()}</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Opex (buffered)</p><p className="font-bold text-red-600">â‚¦{engineResult.pnl.opex.toLocaleString()}</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Living (buffered)</p><p className="font-bold text-red-600">â‚¦{engineResult.pnl.living.toLocaleString()}</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Repayment Capacity</p><p className="font-bold text-emerald-700">â‚¦{engineResult.pnl.netCashflowAvailable.toLocaleString()}</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">New Loan Installment</p><p className="font-bold">â‚¦{engineResult.pnl.installment.toLocaleString()}</p></div>
+            <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Net Profit (after loan)</p><p className={cn('font-bold', engineResult.pnl.netProfit < 0 ? 'text-red-600' : 'text-emerald-700')}>â‚¦{engineResult.pnl.netProfit.toLocaleString()}</p></div>
             <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Net Profit Margin</p><p className="font-bold">{engineResult.pnl.netProfitMargin.toFixed(2)}%</p></div>
           </div>
         </Card>
@@ -3248,11 +3276,11 @@ function ExpensesTab({ data, update, engineResult }: any) {
 }
 
 // ============================================================================
-// TAB 6 — ASSETS / BALANCE SHEET
+// TAB 6 â€” ASSETS / BALANCE SHEET
 // ============================================================================
 
 function AssetsTab({ data, update, engineResult }: any) {
-  const fmtNaira = (n: number) => '₦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
+  const fmtNaira = (n: number) => 'â‚¦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
   const conditions = ['Very Good', 'Good', 'OK', 'Poor'];
 
   const ba = data.businessAssets || { equipment: [], vehicles: [], houseLand: [] };
@@ -3459,7 +3487,7 @@ function AssetsTab({ data, update, engineResult }: any) {
 
   return (
     <div className="space-y-6">
-      {/* G11: Bank/IMF Balances Register — up to 6 banks (Excel FINANCIAL ANALYSIS rows 35-42) */}
+      {/* G11: Bank/IMF Balances Register â€” up to 6 banks (Excel FINANCIAL ANALYSIS rows 35-42) */}
       <Card className="p-4 bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-200">
         <div className="flex justify-between items-center mb-3">
           <div>
@@ -3481,7 +3509,7 @@ function AssetsTab({ data, update, engineResult }: any) {
                 <th className="px-2 py-2">Bank Name</th>
                 <th className="px-2 py-2">Account Name</th>
                 <th className="px-2 py-2">Account Number</th>
-                <th className="px-2 py-2 text-right">Balance (₦)</th>
+                <th className="px-2 py-2 text-right">Balance (â‚¦)</th>
                 <th className="px-2 py-2"></th>
               </tr>
             </thead>
@@ -3517,30 +3545,30 @@ function AssetsTab({ data, update, engineResult }: any) {
           className="mt-2 text-[10px] text-blue-700"
           onClick={() => update('cashInBanks', totalBankBalance)}
         >
-          ↓ Sync total to "Cash in Banks" field below
+          â†“ Sync total to "Cash in Banks" field below
         </Button>
       </Card>
 
       <div>
-        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-3">Balance Sheet — Liquid Assets &amp; Liabilities</h3>
+        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-3">Balance Sheet â€” Liquid Assets &amp; Liabilities</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card className="p-4">
             <h4 className="text-sm font-bold text-emerald-700 mb-3">Liquid Assets</h4>
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <div className="flex-1"><Field label="Cash at Hand (₦)" type="number" value={data.cashAtHand} onChange={(v: any) => update('cashAtHand', Number(v))} /></div>
+                <div className="flex-1"><Field label="Cash at Hand (â‚¦)" type="number" value={data.cashAtHand} onChange={(v: any) => update('cashAtHand', Number(v))} /></div>
                 <Badge className={cn('text-[10px] mt-5', pctColor(pctOfTotal(Number(data.cashAtHand) || 0)))}>
                   {pctOfTotal(Number(data.cashAtHand) || 0).toFixed(1)}% of total
                 </Badge>
               </div>
               <div className="flex items-center gap-2">
-                <div className="flex-1"><Field label="Cash in Banks (₦)" type="number" value={data.cashInBanks} onChange={(v: any) => update('cashInBanks', Number(v))} /></div>
+                <div className="flex-1"><Field label="Cash in Banks (â‚¦)" type="number" value={data.cashInBanks} onChange={(v: any) => update('cashInBanks', Number(v))} /></div>
                 <Badge className={cn('text-[10px] mt-5', pctColor(pctOfTotal(Number(data.cashInBanks) || 0)))}>
                   {pctOfTotal(Number(data.cashInBanks) || 0).toFixed(1)}% of total
                 </Badge>
               </div>
               <div className="flex items-center gap-2">
-                <div className="flex-1"><Field label="Receivables (₦)" type="number" value={data.receivables} onChange={(v: any) => update('receivables', Number(v))} /></div>
+                <div className="flex-1"><Field label="Receivables (â‚¦)" type="number" value={data.receivables} onChange={(v: any) => update('receivables', Number(v))} /></div>
                 <Badge className={cn('text-[10px] mt-5', pctColor(pctOfTotal(Number(data.receivables) || 0)))}>
                   {pctOfTotal(Number(data.receivables) || 0).toFixed(1)}% of total
                 </Badge>
@@ -3549,9 +3577,9 @@ function AssetsTab({ data, update, engineResult }: any) {
           </Card>
           <Card className="p-4">
             <h4 className="text-sm font-bold text-red-700 mb-3">Liabilities</h4>
-            <Field label="Short-Term Liabilities (₦)" type="number" value={data.shortTermLiabilities} onChange={(v: any) => update('shortTermLiabilities', Number(v))} />
-            <div className="mt-2"><Field label="Long-Term Liabilities (₦)" type="number" value={data.longTermLiabilities} onChange={(v: any) => update('longTermLiabilities', Number(v))} /></div>
-            <div className="mt-2"><Field label="Payables (₦)" type="number" value={data.payables} onChange={(v: any) => update('payables', Number(v))} /></div>
+            <Field label="Short-Term Liabilities (â‚¦)" type="number" value={data.shortTermLiabilities} onChange={(v: any) => update('shortTermLiabilities', Number(v))} />
+            <div className="mt-2"><Field label="Long-Term Liabilities (â‚¦)" type="number" value={data.longTermLiabilities} onChange={(v: any) => update('longTermLiabilities', Number(v))} /></div>
+            <div className="mt-2"><Field label="Payables (â‚¦)" type="number" value={data.payables} onChange={(v: any) => update('payables', Number(v))} /></div>
           </Card>
         </div>
         {/* G3: Total assets summary */}
@@ -3561,7 +3589,7 @@ function AssetsTab({ data, update, engineResult }: any) {
         </div>
       </div>
 
-      {/* BUSINESS ASSETS — structured tables */}
+      {/* BUSINESS ASSETS â€” structured tables */}
       <Card className="p-4">
         <div className="flex justify-between items-center mb-3">
           <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Business Fixed Assets (Structured)</h4>
@@ -3592,7 +3620,7 @@ function AssetsTab({ data, update, engineResult }: any) {
         </div>
       </Card>
 
-      {/* FAMILY ASSETS — structured tables */}
+      {/* FAMILY ASSETS â€” structured tables */}
       <Card className="p-4">
         <div className="flex justify-between items-center mb-3">
           <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Family Fixed Assets (Structured)</h4>
@@ -3628,7 +3656,7 @@ function AssetsTab({ data, update, engineResult }: any) {
           <h4 className="text-sm font-bold text-purple-900 mb-2">Computed Ratios</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
             {(() => {
-              // v46: Fix null values — use Number() || 0 for all balance sheet fields
+              // v46: Fix null values â€” use Number() || 0 for all balance sheet fields
               const cash = Number(data.cashAtHand) || 0;
               const banks = Number(data.cashInBanks) || 0;
               const recv = Number(data.receivables) || 0;
@@ -3637,7 +3665,7 @@ function AssetsTab({ data, update, engineResult }: any) {
               const netWorth = (cash + banks + recv + baGrand + faGrand) - (stl + ltl);
               return (
                 <>
-                  <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Net Worth</p><p className="font-bold">₦{netWorth.toLocaleString()}</p></div>
+                  <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Net Worth</p><p className="font-bold">â‚¦{netWorth.toLocaleString()}</p></div>
                   <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Current Ratio</p><p className="font-bold">{engineResult.ratios.currentRatio.toFixed(2)}</p></div>
                   <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Quick Ratio</p><p className="font-bold">{engineResult.ratios.quickRatio.toFixed(2)}</p></div>
                   <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Equity Ratio</p><p className="font-bold">{engineResult.ratios.equityRatio.toFixed(1)}%</p></div>
@@ -3654,7 +3682,7 @@ function AssetsTab({ data, update, engineResult }: any) {
 }
 
 // ============================================================================
-// TAB 7 — SECURITY & GUARANTORS
+// TAB 7 â€” SECURITY & GUARANTORS
 // ============================================================================
 
 function SecurityTab({ data, update, engineResult }: any) {
@@ -3680,14 +3708,14 @@ function SecurityTab({ data, update, engineResult }: any) {
 }
 
 // ============================================================================
-// G6: COLLATERAL REGISTER — full Excel COLLATERAL PLEDGE sheet fields
+// G6: COLLATERAL REGISTER â€” full Excel COLLATERAL PLEDGE sheet fields
 // Per collateral: type, name, description, year, market value, FSV (auto),
 // % coverage, chassis (movable), address+land measurement+title (immovable),
 // ownership (Borrower/Guarantor), document type, expiry date
 // ============================================================================
 
 function CollateralRegisterSection({ data, update }: any) {
-  const fmtNaira = (n: number) => '₦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
+  const fmtNaira = (n: number) => 'â‚¦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
   const collaterals: any[] = data.collaterals || [];
   const loanPrincipal = data.loanPrincipal || 0;
   // v42: Use centralized constants for document types + ownership
@@ -3739,7 +3767,7 @@ function CollateralRegisterSection({ data, update }: any) {
         <div>
           <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Collateral Registry (Excel Parity)</h3>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Full collateral detail per Excel COLLATERAL PLEDGE sheet. FSV haircuts: MOVABLE × {(1-movDep).toFixed(2)}, IMMOVABLE × {(1-immovDep).toFixed(2)}, CASH × 1.00.
+            Full collateral detail per Excel COLLATERAL PLEDGE sheet. FSV haircuts: MOVABLE Ã— {(1-movDep).toFixed(2)}, IMMOVABLE Ã— {(1-immovDep).toFixed(2)}, CASH Ã— 1.00.
             Coverage % auto-computed against loan principal.
           </p>
         </div>
@@ -3795,7 +3823,7 @@ function CollateralRegisterSection({ data, update }: any) {
                   {ownershipTypes.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
-              <Field label="Estimated Market Value (₦)" type="number" value={c.marketValue} onChange={(v: any) => updateColl(idx, 'marketValue', Number(v))} />
+              <Field label="Estimated Market Value (â‚¦)" type="number" value={c.marketValue} onChange={(v: any) => updateColl(idx, 'marketValue', Number(v))} />
               <Field label="Forced Sale Value (auto)" type="number" value={computeFsv(c)} readOnly />
               <Field label="% Coverage (auto)" type="number" value={computeCoverage(c).toFixed(1)} readOnly />
               <Field label="Document Expiry Date" type="date" value={c.expiryDate} onChange={(v: any) => updateColl(idx, 'expiryDate', v)} />
@@ -3850,12 +3878,12 @@ function CollateralRegisterSection({ data, update }: any) {
 }
 
 // ============================================================================
-// G7: COLLATERAL MIX — summary table showing each type's contribution
+// G7: COLLATERAL MIX â€” summary table showing each type's contribution
 // Mirrors Excel COLLATERAL PLEDGE sheet rows 28-35
 // ============================================================================
 
 function CollateralMixSection({ data, update }: any) {
-  const fmtNaira = (n: number) => '₦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
+  const fmtNaira = (n: number) => 'â‚¦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
   const collaterals: any[] = data.collaterals || [];
   const loanPrincipal = data.loanPrincipal || 0;
 
@@ -3896,7 +3924,7 @@ function CollateralMixSection({ data, update }: any) {
             <tr className="text-left text-[10px] uppercase text-slate-500 dark:text-slate-400">
               <th className="px-2 py-2">S/N</th>
               <th className="px-2 py-2">Type</th>
-              <th className="px-2 py-2 text-right">Total FSV Value (₦)</th>
+              <th className="px-2 py-2 text-right">Total FSV Value (â‚¦)</th>
               <th className="px-2 py-2 text-right">% Mix</th>
             </tr>
           </thead>
@@ -3920,7 +3948,7 @@ function CollateralMixSection({ data, update }: any) {
             </tr>
             <tr className="bg-slate-900 text-white">
               <td colSpan={2} className="px-2 py-2 text-right text-[10px] uppercase">Loan Principal</td>
-              <td colSpan={2} className="px-2 py-2 text-right font-mono">{fmtNaira(loanPrincipal)} → Coverage {coveragePercent.toFixed(1)}%</td>
+              <td colSpan={2} className="px-2 py-2 text-right font-mono">{fmtNaira(loanPrincipal)} â†’ Coverage {coveragePercent.toFixed(1)}%</td>
             </tr>
           </tfoot>
         </table>
@@ -3930,7 +3958,7 @@ function CollateralMixSection({ data, update }: any) {
 }
 
 // ============================================================================
-// G9: GUARANTOR REGISTER — full Excel GUARANTORS' INFO sheet (up to 2)
+// G9: GUARANTOR REGISTER â€” full Excel GUARANTORS' INFO sheet (up to 2)
 // ============================================================================
 
 function GuarantorRegisterSection({ data, update }: any) {
@@ -3970,7 +3998,7 @@ function GuarantorRegisterSection({ data, update }: any) {
       <div className="flex justify-between items-center mb-3">
         <div className="flex items-center gap-2">
           <Users className="h-4 w-4 text-emerald-700" />
-          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Guarantor Register (Full Info — up to 2)</h3>
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Guarantor Register (Full Info â€” up to 2)</h3>
         </div>
         <Button size="sm" variant="outline" onClick={addG} disabled={guarantors.length >= 2}>
           <Plus className="h-3.5 w-3.5 mr-1" />Add Guarantor
@@ -4042,19 +4070,19 @@ function GuarantorRegisterSection({ data, update }: any) {
               </div>
             </div>
 
-            {/* v42-P6: Extended Financial — mirrors Excel GUARANTORS' INFO rows 21-24 */}
+            {/* v42-P6: Extended Financial â€” mirrors Excel GUARANTORS' INFO rows 21-24 */}
             <p className="text-[10px] uppercase text-slate-500 dark:text-slate-400 font-semibold mt-3 mb-1">
               Business Financials (Excel GUARANTORS&apos; INFO rows 21-24)
             </p>
             <div className="grid grid-cols-2 gap-2">
-              <Field label="Business Worth (₦)" type="number" value={g.businessWorth || 0} onChange={(v: any) => updateG(idx, 'businessWorth', Number(v))} />
-              <Field label="Stock of Goods (₦)" type="number" value={g.stockOfGoods || 0} onChange={(v: any) => updateG(idx, 'stockOfGoods', Number(v))} />
-              <Field label="Monthly Sales (₦)" type="number" value={g.monthlySales || 0} onChange={(v: any) => updateG(idx, 'monthlySales', Number(v))} />
-              <Field label="Cost of Goods Sold (₦)" type="number" value={g.costOfGoodsSold || 0} onChange={(v: any) => updateG(idx, 'costOfGoodsSold', Number(v))} />
-              <Field label="Operation/Family Expenses (₦)" type="number" value={g.operationExpenses} onChange={(v: any) => updateG(idx, 'operationExpenses', Number(v))} />
+              <Field label="Business Worth (â‚¦)" type="number" value={g.businessWorth || 0} onChange={(v: any) => updateG(idx, 'businessWorth', Number(v))} />
+              <Field label="Stock of Goods (â‚¦)" type="number" value={g.stockOfGoods || 0} onChange={(v: any) => updateG(idx, 'stockOfGoods', Number(v))} />
+              <Field label="Monthly Sales (â‚¦)" type="number" value={g.monthlySales || 0} onChange={(v: any) => updateG(idx, 'monthlySales', Number(v))} />
+              <Field label="Cost of Goods Sold (â‚¦)" type="number" value={g.costOfGoodsSold || 0} onChange={(v: any) => updateG(idx, 'costOfGoodsSold', Number(v))} />
+              <Field label="Operation/Family Expenses (â‚¦)" type="number" value={g.operationExpenses} onChange={(v: any) => updateG(idx, 'operationExpenses', Number(v))} />
               {/* v46: WFL Installment is auto-computed if guarantor is a WFL client */}
               <Field
-                label="Existing Installment (₦) — auto if WFL client"
+                label="Existing Installment (â‚¦) â€” auto if WFL client"
                 type="number"
                 value={g.wflInstallmentAmount || 0}
                 onChange={(v: any) => updateG(idx, 'wflInstallmentAmount', Number(v))}
@@ -4064,7 +4092,7 @@ function GuarantorRegisterSection({ data, update }: any) {
             {/* v46: Auto-compute note */}
             {g.isWflClient && (
               <p className="text-[10px] text-emerald-600 mt-1">
-                ✓ Guarantor is a WFL client — installment auto-factors their WFL loan + any loans they're guaranteeing.
+                âœ“ Guarantor is a WFL client â€” installment auto-factors their WFL loan + any loans they're guaranteeing.
                 Override above if the auto-figure needs adjustment.
               </p>
             )}
@@ -4079,15 +4107,15 @@ function GuarantorRegisterSection({ data, update }: any) {
                 <div className="mt-2 grid grid-cols-4 gap-2 p-2 bg-emerald-50 rounded">
                   <div className="text-center">
                     <p className="text-[9px] uppercase text-slate-500">Monthly Income</p>
-                    <p className="text-xs font-bold text-emerald-700">₦{(Number(g.monthlySales) || 0).toLocaleString()}</p>
+                    <p className="text-xs font-bold text-emerald-700">â‚¦{(Number(g.monthlySales) || 0).toLocaleString()}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-[9px] uppercase text-slate-500">Gross Profit</p>
-                    <p className="text-xs font-bold text-emerald-700">₦{(grossProfit || 0).toLocaleString()}</p>
+                    <p className="text-xs font-bold text-emerald-700">â‚¦{(grossProfit || 0).toLocaleString()}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-[9px] uppercase text-slate-500">Repayment Capacity</p>
-                    <p className="text-xs font-bold text-emerald-700">₦{(repaymentCapacity || 0).toLocaleString()}</p>
+                    <p className="text-xs font-bold text-emerald-700">â‚¦{(repaymentCapacity || 0).toLocaleString()}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-[9px] uppercase text-slate-500">DSR</p>
@@ -4111,7 +4139,7 @@ function GuarantorRegisterSection({ data, update }: any) {
 }
 
 // ============================================================================
-// v46: SUPPORT DOCUMENT UPLOAD — replaces guarantor business verification
+// v46: SUPPORT DOCUMENT UPLOAD â€” replaces guarantor business verification
 // Upload area for statement of account, cheque leaflet, letter of non-
 // indebtedness, and other relevant documents used for the analysis.
 // ============================================================================
@@ -4167,7 +4195,7 @@ function SupportDocumentUploadSection({ data, update }: any) {
                   onChange={(e) => updateDoc(idx, 'type', e.target.value)}
                   className="mt-1 w-full rounded border border-slate-300 px-2 py-2 text-xs"
                 >
-                  <option value="">— Select —</option>
+                  <option value="">â€” Select â€”</option>
                   {docTypes.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
@@ -4220,14 +4248,14 @@ function GuarantorDsrAnalysisSection({ data, update, engineResult }: any) {
     <Card className="p-4">
       <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-3">Guarantor DSR Analysis (Legacy)</h3>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Field label="Monthly Income (₦)" type="number" value={data.guarantorIncome} onChange={(v: any) => update('guarantorIncome', Number(v))} />
-        <Field label="Monthly COGS (₦)" type="number" value={data.guarantorCogs} onChange={(v: any) => update('guarantorCogs', Number(v))} />
-        <Field label="Operation Expenses (₦)" type="number" value={data.guarantorOperationExpenses} onChange={(v: any) => update('guarantorOperationExpenses', Number(v))} />
-        <Field label="Existing Installment (₦)" type="number" value={data.guarantorExistingInstallment} onChange={(v: any) => update('guarantorExistingInstallment', Number(v))} />
+        <Field label="Monthly Income (â‚¦)" type="number" value={data.guarantorIncome} onChange={(v: any) => update('guarantorIncome', Number(v))} />
+        <Field label="Monthly COGS (â‚¦)" type="number" value={data.guarantorCogs} onChange={(v: any) => update('guarantorCogs', Number(v))} />
+        <Field label="Operation Expenses (â‚¦)" type="number" value={data.guarantorOperationExpenses} onChange={(v: any) => update('guarantorOperationExpenses', Number(v))} />
+        <Field label="Existing Installment (â‚¦)" type="number" value={data.guarantorExistingInstallment} onChange={(v: any) => update('guarantorExistingInstallment', Number(v))} />
       </div>
       {engineResult && (
         <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Total FSV</p><p className="font-bold">₦{engineResult.collateralCoverage?.totalFSV?.toLocaleString() || 0}</p></div>
+          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Total FSV</p><p className="font-bold">â‚¦{engineResult.collateralCoverage?.totalFSV?.toLocaleString() || 0}</p></div>
           <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Coverage %</p><p className="font-bold">{engineResult.collateralCoverage?.coveragePercent?.toFixed(0) || 0}%</p></div>
           <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Status</p>
             <Badge className={
@@ -4235,7 +4263,7 @@ function GuarantorDsrAnalysisSection({ data, update, engineResult }: any) {
               engineResult.collateralCoverage?.status === 'GOOD' ? 'bg-green-100 text-green-700' :
               engineResult.collateralCoverage?.status === 'MODERATE' ? 'bg-amber-100 text-amber-700' :
               'bg-red-100 text-red-700'
-            }>{engineResult.collateralCoverage?.status || '—'}</Badge>
+            }>{engineResult.collateralCoverage?.status || 'â€”'}</Badge>
           </div>
           <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Guarantor DSR</p><p className={cn('font-bold', (engineResult.guarantorDSR || 0) > 45 ? 'text-red-600' : 'text-emerald-700')}>{(engineResult.guarantorDSR || 0).toFixed(1)}%</p></div>
         </div>
@@ -4245,7 +4273,7 @@ function GuarantorDsrAnalysisSection({ data, update, engineResult }: any) {
 }
 
 // ============================================================================
-// TAB 8 — VISITATION
+// TAB 8 â€” VISITATION
 // ============================================================================
 
 function VisitationTab({ data, update, loan }: any) {
@@ -4266,13 +4294,13 @@ function VisitationTab({ data, update, loan }: any) {
   };
 
   const sections = [
-    { key: 'businessDynamics', label: '1. Business Dynamics', placeholder: 'Nature of business · Business structure (Shop/Office) · Business scale (Large/Medium/Small)' },
-    { key: 'location', label: '2. Location', placeholder: 'How to navigate · Closest bus-stop · Landmark · Customer\'s alias at business environs · GPS coordinates' },
-    { key: 'capacity', label: '3. Capacity', placeholder: 'Estimated stock · Samples of products seen · Level of patronage' },
-    { key: 'character', label: '4. Character', placeholder: 'Reception (friendly/hostile/carefree) · Responsiveness · Composure' },
-    { key: 'ownership', label: '5. Ownership', placeholder: 'Ownership structure (Sole prop/Partner/Joint) · Registration status' },
-    { key: 'collateral', label: '6. Collateral', placeholder: 'Type of collaterals · FSV value · Ownership status · Title documents' },
-    { key: 'guarantors', label: '7. Guarantors', placeholder: 'Visit made to guarantors\' business · Rate their capacity · Suitability' },
+    { key: 'businessDynamics', label: '1. Business Dynamics', placeholder: 'Nature of business Â· Business structure (Shop/Office) Â· Business scale (Large/Medium/Small)' },
+    { key: 'location', label: '2. Location', placeholder: 'How to navigate Â· Closest bus-stop Â· Landmark Â· Customer\'s alias at business environs Â· GPS coordinates' },
+    { key: 'capacity', label: '3. Capacity', placeholder: 'Estimated stock Â· Samples of products seen Â· Level of patronage' },
+    { key: 'character', label: '4. Character', placeholder: 'Reception (friendly/hostile/carefree) Â· Responsiveness Â· Composure' },
+    { key: 'ownership', label: '5. Ownership', placeholder: 'Ownership structure (Sole prop/Partner/Joint) Â· Registration status' },
+    { key: 'collateral', label: '6. Collateral', placeholder: 'Type of collaterals Â· FSV value Â· Ownership status Â· Title documents' },
+    { key: 'guarantors', label: '7. Guarantors', placeholder: 'Visit made to guarantors\' business Â· Rate their capacity Â· Suitability' },
   ];
 
   const renderVisitationReport = (
@@ -4303,7 +4331,7 @@ function VisitationTab({ data, update, loan }: any) {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Physical Visitation Report — 7-Point Structured</h3>
+        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Physical Visitation Report â€” 7-Point Structured</h3>
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
           Replaces free-text comment with seven structured sections (Business Dynamics, Location, Capacity, Character, Ownership, Collateral, Guarantors).
         </p>
@@ -4324,11 +4352,11 @@ function VisitationTab({ data, update, loan }: any) {
         )}
       </div>
 
-      {/* v42-P8: GPS Coordinates — 4 locations (business, collateral, guarantor1, guarantor2) */}
+      {/* v42-P8: GPS Coordinates â€” 4 locations (business, collateral, guarantor1, guarantor2) */}
       <div>
         <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1 flex items-center gap-2">
           <MapPinned className="h-4 w-4 text-emerald-600" />
-          GPS Coordinates — 4 Locations (Excel Parity)
+          GPS Coordinates â€” 4 Locations (Excel Parity)
         </h3>
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
           Capture GPS coordinates for business location, collateral location, and both guarantors&apos; locations.
@@ -4402,7 +4430,7 @@ function VisitationTab({ data, update, loan }: any) {
           {photoEvidence.map((p: any, idx: number) => (
             <Card key={idx} className="p-3">
               <p className="text-xs font-bold text-slate-900 dark:text-slate-100 mb-1">{p.type}</p>
-              <p className="text-[9px] text-amber-700 mb-2 italic">⚠ {p.geoNote}</p>
+              <p className="text-[9px] text-amber-700 mb-2 italic">âš  {p.geoNote}</p>
               <div className="border-2 border-dashed border-slate-300 rounded-md p-3 text-slate-400 text-xs text-center mb-2">
                 <Camera className="h-6 w-6 mx-auto mb-1 text-slate-400" />
                 Click to upload
@@ -4416,7 +4444,7 @@ function VisitationTab({ data, update, loan }: any) {
                 />
               </div>
               {p.fileName && (
-                <p className="text-[10px] text-emerald-700 truncate mb-1">📎 {p.fileName}</p>
+                <p className="text-[10px] text-emerald-700 truncate mb-1">ðŸ“Ž {p.fileName}</p>
               )}
               <div>
                 <Label className="text-[10px] text-slate-600">Date Taken</Label>
@@ -4445,7 +4473,7 @@ function VisitationTab({ data, update, loan }: any) {
 
 // ============================================================================
 // G14: PICTORIAL EVIDENCE CONSOLIDATED GALLERY
-// Mirrors Excel PICTORIAL EVIDENCE sheet — categorized photos for committee review
+// Mirrors Excel PICTORIAL EVIDENCE sheet â€” categorized photos for committee review
 // ============================================================================
 
 function PictorialEvidenceGallery({ data }: any) {
@@ -4454,12 +4482,12 @@ function PictorialEvidenceGallery({ data }: any) {
 
   // Group photos by category
   const categories = [
-    { key: 'shop_front', label: 'Shop Front', icon: '🏪', color: 'bg-emerald-50 border-emerald-200' },
-    { key: 'stock', label: 'Stock / Inventory', icon: '📦', color: 'bg-blue-50 border-blue-200' },
-    { key: 'customer', label: 'Customer (with ID)', icon: '👤', color: 'bg-purple-50 border-purple-200' },
-    { key: 'borrower', label: 'Business & House Pictures', icon: '🏠', color: 'bg-amber-50 border-amber-200' },
-    { key: 'collateral', label: 'Collateral Pictures', icon: '🔐', color: 'bg-red-50 border-red-200' },
-    { key: 'guarantors', label: 'Guarantor Pictures', icon: '👥', color: 'bg-cyan-50 border-cyan-200' },
+    { key: 'shop_front', label: 'Shop Front', icon: 'ðŸª', color: 'bg-emerald-50 border-emerald-200' },
+    { key: 'stock', label: 'Stock / Inventory', icon: 'ðŸ“¦', color: 'bg-blue-50 border-blue-200' },
+    { key: 'customer', label: 'Customer (with ID)', icon: 'ðŸ‘¤', color: 'bg-purple-50 border-purple-200' },
+    { key: 'borrower', label: 'Business & House Pictures', icon: 'ðŸ ', color: 'bg-amber-50 border-amber-200' },
+    { key: 'collateral', label: 'Collateral Pictures', icon: 'ðŸ”', color: 'bg-red-50 border-red-200' },
+    { key: 'guarantors', label: 'Guarantor Pictures', icon: 'ðŸ‘¥', color: 'bg-cyan-50 border-cyan-200' },
   ];
 
   const photosByCategory = categories.map((cat) => ({
@@ -4477,7 +4505,7 @@ function PictorialEvidenceGallery({ data }: any) {
           <Camera className="h-4 w-4 text-slate-700" />
           <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Pictorial Evidence Gallery (G14)</h3>
         </div>
-        <Badge className="bg-slate-200 text-slate-700 text-[10px]">{totalPhotos} photos · {categories.length} categories</Badge>
+        <Badge className="bg-slate-200 text-slate-700 text-[10px]">{totalPhotos} photos Â· {categories.length} categories</Badge>
       </div>
       <p className="text-xs text-slate-600 mb-4">
         Consolidated categorized photo gallery for committee review. Mirrors Excel PICTORIAL EVIDENCE sheet.
@@ -4511,7 +4539,7 @@ function PictorialEvidenceGallery({ data }: any) {
                       </div>
                       {p.fileName && (
                         <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[8px] px-1 py-0.5 truncate">
-                          📎 {p.fileName}
+                          ðŸ“Ž {p.fileName}
                         </div>
                       )}
                       {p.dateTaken && (
@@ -4537,23 +4565,23 @@ function PictorialEvidenceGallery({ data }: any) {
           <div className="bg-white rounded-lg max-w-2xl w-full p-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">{allPhotos[lightbox].type || 'Photo'}</h4>
-              <Button size="sm" variant="ghost" onClick={() => setLightbox(null)}>✕</Button>
+              <Button size="sm" variant="ghost" onClick={() => setLightbox(null)}>âœ•</Button>
             </div>
             <div className="aspect-video bg-slate-100 dark:bg-slate-800 rounded flex items-center justify-center mb-3">
               <Camera className="h-16 w-16 text-slate-300" />
             </div>
             <div className="grid grid-cols-2 gap-3 text-xs">
-              <div><strong>File:</strong> {allPhotos[lightbox].fileName || '—'}</div>
-              <div><strong>Date Taken:</strong> {allPhotos[lightbox].dateTaken || '—'}</div>
-              <div><strong>Geo Note:</strong> {allPhotos[lightbox].geoNote || '—'}</div>
-              <div><strong>Category:</strong> {allPhotos[lightbox].type || '—'}</div>
+              <div><strong>File:</strong> {allPhotos[lightbox].fileName || 'â€”'}</div>
+              <div><strong>Date Taken:</strong> {allPhotos[lightbox].dateTaken || 'â€”'}</div>
+              <div><strong>Geo Note:</strong> {allPhotos[lightbox].geoNote || 'â€”'}</div>
+              <div><strong>Category:</strong> {allPhotos[lightbox].type || 'â€”'}</div>
             </div>
             <div className="mt-3 flex justify-between">
               <Button size="sm" variant="outline" onClick={() => setLightbox(Math.max(0, lightbox - 1))} disabled={lightbox === 0}>
-                ← Previous
+                â† Previous
               </Button>
               <Button size="sm" variant="outline" onClick={() => setLightbox(Math.min(allPhotos.length - 1, lightbox + 1))} disabled={lightbox === allPhotos.length - 1}>
-                Next →
+                Next â†’
               </Button>
             </div>
           </div>
@@ -4564,11 +4592,11 @@ function PictorialEvidenceGallery({ data }: any) {
 }
 
 // ============================================================================
-// TAB 9 — CROSS-CHECKS (Excel SALES & PURCHASES CROSS CHECKS sheet parity)
+// TAB 9 â€” CROSS-CHECKS (Excel SALES & PURCHASES CROSS CHECKS sheet parity)
 // ============================================================================
 
 function CrossChecksTab({ result }: { result: EngineResult | null }) {
-  const fmtNaira = (n: number) => '₦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
+  const fmtNaira = (n: number) => 'â‚¦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
   const fmtNum = (n: number, d = 2) => (n || 0).toLocaleString('en-NG', { maximumFractionDigits: d, minimumFractionDigits: d });
 
   if (!result) {
@@ -4599,7 +4627,7 @@ function CrossChecksTab({ result }: { result: EngineResult | null }) {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Sales &amp; Purchases Cross-Checks</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">Excel SALES &amp; PURCHASES CROSS CHECKS sheet — capitalization, treasury, debt rotation &amp; turnover.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Excel SALES &amp; PURCHASES CROSS CHECKS sheet â€” capitalization, treasury, debt rotation &amp; turnover.</p>
         </div>
         <Badge variant="outline" className="text-[10px] font-mono">{result.policyVersion}</Badge>
       </div>
@@ -4660,7 +4688,7 @@ function CrossChecksTab({ result }: { result: EngineResult | null }) {
         {/* Capitalization */}
         <Card className="p-4">
           <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Cross-Check 3 — Capitalization</h4>
+            <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Cross-Check 3 â€” Capitalization</h4>
             {cap && (
               <Badge className={cn(
                 'text-[10px]',
@@ -4687,7 +4715,7 @@ function CrossChecksTab({ result }: { result: EngineResult | null }) {
         {/* Treasury variance */}
         <Card className="p-4">
           <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Cross-Check 4 — Treasury vs Cash Sales</h4>
+            <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Cross-Check 4 â€” Treasury vs Cash Sales</h4>
             {tv && (
               <Badge className={cn(
                 'text-[10px]',
@@ -4750,7 +4778,7 @@ function CrossChecksTab({ result }: { result: EngineResult | null }) {
         </Card>
       </div>
 
-      {/* v42-M1: Margin Summary Base — 3-way comparison + least figure (Excel A26-D32) */}
+      {/* v42-M1: Margin Summary Base â€” 3-way comparison + least figure (Excel A26-D32) */}
       {result && result.weightedMargin && (
         <Card className="p-4 border-2 border-purple-200 bg-purple-50">
           <div className="flex items-center gap-2 mb-3">
@@ -4758,21 +4786,21 @@ function CrossChecksTab({ result }: { result: EngineResult | null }) {
             <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Margin Summary Base (3-Way Comparison)</h4>
           </div>
           <p className="text-xs text-slate-600 mb-3">
-            Excel FINANCIAL ANALYSIS rows 26-32. Compares average margin, weighted margin, and sector benchmark —
+            Excel FINANCIAL ANALYSIS rows 26-32. Compares average margin, weighted margin, and sector benchmark â€”
             the <strong>least figure</strong> is used as the &quot;margin used&quot; for all downstream calculations.
           </p>
           {(() => {
-            // v50 — Use the AUTHORITATIVE marginSummary from the engine result
+            // v50 â€” Use the AUTHORITATIVE marginSummary from the engine result
             // instead of recomputing locally. The previous implementation
             // passed `result.weightedMargin.simpleAverage` as the sector
             // benchmark, which made the displayed "Sector Benchmark Margin"
-            // actually equal the Simple Average Margin — masking the real
+            // actually equal the Simple Average Margin â€” masking the real
             // admin-configured sector benchmark.
             //
             // Now the engine's executeFullAppraisal() computes marginSummary
             // once from the authoritative inputs:
             //   averageMargin  = AVERAGEIF(lineMargins, "<>0")
-            //   weightedMargin = Σ(margin × costShare)
+            //   weightedMargin = Î£(margin Ã— costShare)
             //   benchmarkMargin = data.sectorBenchmarkMargin (DB-configured)
             //   marginUsed = LEAST non-zero of the three
             // All downstream UI display + downstream engine calculations
@@ -4816,7 +4844,7 @@ function CrossChecksTab({ result }: { result: EngineResult | null }) {
                   <p className="text-[10px] text-slate-500">Source: {msb.sourceUsed}</p>
                 </div>
                 <p className="text-[10px] text-slate-500">
-                  This margin is used to derive purchases (P = S × (1 − margin)) and feed the cashflow projection.
+                  This margin is used to derive purchases (P = S Ã— (1 âˆ’ margin)) and feed the cashflow projection.
                 </p>
               </div>
             );
@@ -4828,11 +4856,11 @@ function CrossChecksTab({ result }: { result: EngineResult | null }) {
 }
 
 // ============================================================================
-// TAB 10 — VERIFICATIONS (Bank balances & Guarantor business verification)
+// TAB 10 â€” VERIFICATIONS (Bank balances & Guarantor business verification)
 // ============================================================================
 
 function VerificationsTab({ result }: { result: EngineResult | null }) {
-  const fmtNaira = (n: number) => '₦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
+  const fmtNaira = (n: number) => 'â‚¦' + (n || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 });
 
   if (!result) {
     return (
@@ -4874,7 +4902,7 @@ function VerificationsTab({ result }: { result: EngineResult | null }) {
                   <th className="px-2 py-2">Bank Name</th>
                   <th className="px-2 py-2">Account Name</th>
                   <th className="px-2 py-2">Account Number</th>
-                  <th className="px-2 py-2 text-right">Balance (₦)</th>
+                  <th className="px-2 py-2 text-right">Balance (â‚¦)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -4915,9 +4943,9 @@ function VerificationsTab({ result }: { result: EngineResult | null }) {
         {gbv ? (
           <div className="space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-              <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Guarantor Name</p><p className="font-semibold">{gbv.guarantorName || '—'}</p></div>
-              <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Business Name</p><p className="font-semibold">{gbv.businessName || '—'}</p></div>
-              <div className="md:col-span-2"><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Business Address</p><p className="font-semibold">{gbv.businessAddress || '—'}</p></div>
+              <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Guarantor Name</p><p className="font-semibold">{gbv.guarantorName || 'â€”'}</p></div>
+              <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Business Name</p><p className="font-semibold">{gbv.businessName || 'â€”'}</p></div>
+              <div className="md:col-span-2"><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Business Address</p><p className="font-semibold">{gbv.businessAddress || 'â€”'}</p></div>
               <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Years in Operation</p><p className="font-mono font-semibold">{gbv.yearsInOperation}</p></div>
               <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Stock Value</p><p className="font-mono font-semibold">{fmtNaira(gbv.stockValue)}</p></div>
               <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Monthly Sales</p><p className="font-mono font-semibold">{fmtNaira(gbv.monthlySales)}</p></div>
@@ -4941,7 +4969,7 @@ function VerificationsTab({ result }: { result: EngineResult | null }) {
 }
 
 // ============================================================================
-// TAB 11 — SWOT & RECOMMENDATION
+// TAB 11 â€” SWOT & RECOMMENDATION
 // ============================================================================
 
 function SwotTab({ data, update, engineResult }: any) {
@@ -4978,9 +5006,9 @@ function SwotTab({ data, update, engineResult }: any) {
           <h4 className="text-sm font-bold mb-3">Loan Officer Recommendation</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
             <div><p className="text-[10px] text-slate-400 uppercase">Engine Verdict</p><p className="font-bold text-emerald-400">{engineResult.engineVerdict}</p></div>
-            <div><p className="text-[10px] text-slate-400 uppercase">Risk Grade</p><p className="font-bold">{engineResult.riskGrade.grade} — {engineResult.riskGrade.label}</p></div>
+            <div><p className="text-[10px] text-slate-400 uppercase">Risk Grade</p><p className="font-bold">{engineResult.riskGrade.grade} â€” {engineResult.riskGrade.label}</p></div>
             <div><p className="text-[10px] text-slate-400 uppercase">Final Score</p><p className="font-bold">{engineResult.finalScore}/100</p></div>
-            <div><p className="text-[10px] text-slate-400 uppercase">Bank Yield</p><p className="font-bold">{engineResult.bankYield.netYieldPercent.toFixed(1)}% — {engineResult.bankYield.profitability}</p></div>
+            <div><p className="text-[10px] text-slate-400 uppercase">Bank Yield</p><p className="font-bold">{engineResult.bankYield.netYieldPercent.toFixed(1)}% â€” {engineResult.bankYield.profitability}</p></div>
           </div>
           <div className="mt-3 pt-3 border-t border-slate-700">
             <p className="text-[10px] text-slate-400 uppercase mb-1">Red Flags Summary</p>
@@ -4993,7 +5021,7 @@ function SwotTab({ data, update, engineResult }: any) {
 }
 
 // ============================================================================
-// TAB 12 — ENGINE RESPONSE (read-only detailed output)
+// TAB 12 â€” ENGINE RESPONSE (read-only detailed output)
 // ============================================================================
 
 function EngineTab({ result }: { result: EngineResult | null }) {
@@ -5010,7 +5038,7 @@ function EngineTab({ result }: { result: EngineResult | null }) {
     <div className="space-y-4">
       <Card className="p-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Engine Output — Full Detail</h3>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Engine Output â€” Full Detail</h3>
           <Badge variant="outline" className="text-[10px] font-mono">{result.policyVersion}</Badge>
         </div>
         <pre className="text-[10px] bg-slate-900 text-emerald-400 p-4 rounded-md overflow-x-auto max-h-96 overflow-y-auto">
@@ -5036,11 +5064,11 @@ function EngineTab({ result }: { result: EngineResult | null }) {
                 {result.projection.map((row) => (
                   <tr key={row.month} className={row.isNegative ? 'bg-red-50' : ''}>
                     <td className="px-2 py-1 font-mono">{row.month}</td>
-                    <td className="px-2 py-1 text-right font-mono">₦{row.opening.toLocaleString()}</td>
-                    <td className="px-2 py-1 text-right font-mono text-emerald-700">₦{row.monthlySurplus.toLocaleString()}</td>
-                    <td className="px-2 py-1 text-right font-mono text-red-600">₦{row.loanOutflow.toLocaleString()}</td>
+                    <td className="px-2 py-1 text-right font-mono">â‚¦{row.opening.toLocaleString()}</td>
+                    <td className="px-2 py-1 text-right font-mono text-emerald-700">â‚¦{row.monthlySurplus.toLocaleString()}</td>
+                    <td className="px-2 py-1 text-right font-mono text-red-600">â‚¦{row.loanOutflow.toLocaleString()}</td>
                     <td className={cn('px-2 py-1 text-right font-mono font-bold', row.isNegative ? 'text-red-600' : 'text-slate-900 dark:text-slate-100')}>
-                      ₦{row.closing.toLocaleString()}
+                      â‚¦{row.closing.toLocaleString()}
                     </td>
                   </tr>
                 ))}
@@ -5081,24 +5109,24 @@ function EngineTab({ result }: { result: EngineResult | null }) {
       <Card className="p-4">
         <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-3">Bank Yield Analysis</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Interest Income</p><p className="font-bold text-emerald-700">₦{result.bankYield.interestIncome.toLocaleString()}</p></div>
-          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Processing Fee</p><p className="font-bold">₦{result.bankYield.processingFee.toLocaleString()}</p></div>
-          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">CCD Income</p><p className="font-bold">₦{result.bankYield.cashDepositIncome.toLocaleString()}</p></div>
-          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Total Earnings</p><p className="font-bold">₦{result.bankYield.totalEarnings.toLocaleString()}</p></div>
-          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Cost of Fund (30% p.a.)</p><p className="font-bold text-red-600">₦{result.bankYield.costOfFund.toLocaleString()}</p></div>
-          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Admin Cost (5% p.a.)</p><p className="font-bold text-red-600">₦{result.bankYield.adminCost.toLocaleString()}</p></div>
-          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Net Yield</p><p className="font-bold">₦{result.bankYield.netYield.toLocaleString()}</p></div>
+          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Interest Income</p><p className="font-bold text-emerald-700">â‚¦{result.bankYield.interestIncome.toLocaleString()}</p></div>
+          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Processing Fee</p><p className="font-bold">â‚¦{result.bankYield.processingFee.toLocaleString()}</p></div>
+          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">CCD Income</p><p className="font-bold">â‚¦{result.bankYield.cashDepositIncome.toLocaleString()}</p></div>
+          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Total Earnings</p><p className="font-bold">â‚¦{result.bankYield.totalEarnings.toLocaleString()}</p></div>
+          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Cost of Fund (30% p.a.)</p><p className="font-bold text-red-600">â‚¦{result.bankYield.costOfFund.toLocaleString()}</p></div>
+          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Admin Cost (5% p.a.)</p><p className="font-bold text-red-600">â‚¦{result.bankYield.adminCost.toLocaleString()}</p></div>
+          <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Net Yield</p><p className="font-bold">â‚¦{result.bankYield.netYield.toLocaleString()}</p></div>
           <div><p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Annualized %</p><p className={cn('font-bold', result.bankYield.netYieldPercent < 0 ? 'text-red-600' : 'text-emerald-700')}>{result.bankYield.netYieldPercent.toFixed(2)}%</p></div>
         </div>
       </Card>
 
-      {/* G1: Detailed Monthly Cashflow Test (22 rows × 12 months) */}
+      {/* G1: Detailed Monthly Cashflow Test (22 rows Ã— 12 months) */}
       {result.detailedCashflow && result.detailedCashflow.length > 0 && (
         <Card className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
           <div className="flex items-center justify-between mb-3">
             <div>
               <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">G1: Monthly Cashflow Test (Excel Parity)</h4>
-              <p className="text-xs text-slate-600">22 line items × 12 months — mirrors Excel MONTHLY CASHFLOW TEST sheet</p>
+              <p className="text-xs text-slate-600">22 line items Ã— 12 months â€” mirrors Excel MONTHLY CASHFLOW TEST sheet</p>
             </div>
             <Badge className="bg-blue-100 text-blue-700 text-[10px]">{result.detailedCashflow.length} months</Badge>
           </div>
@@ -5144,7 +5172,7 @@ function EngineTab({ result }: { result: EngineResult | null }) {
                           'px-1 py-1 border text-right font-mono',
                           isNegative ? 'text-red-600' : 'text-slate-700'
                         )}>
-                          {val === 0 ? '—' : val.toLocaleString('en-NG', { maximumFractionDigits: 0 })}
+                          {val === 0 ? 'â€”' : val.toLocaleString('en-NG', { maximumFractionDigits: 0 })}
                         </td>
                       );
                     })}
@@ -5174,27 +5202,27 @@ function EngineTab({ result }: { result: EngineResult | null }) {
             <div className="p-3 bg-white rounded border border-slate-200">
               <p className="text-[10px] uppercase text-slate-500 dark:text-slate-400 font-semibold mb-2">Total Assets</p>
               <div className="space-y-1 text-xs">
-                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Current:</span><span className="font-mono font-bold">₦{result.balanceSheetComparison.currentTotalAssets.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Previous:</span><span className="font-mono">₦{result.balanceSheetComparison.previousTotalAssets.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Difference:</span><span className={cn('font-mono font-bold', result.balanceSheetComparison.assetsDifference >= 0 ? 'text-emerald-600' : 'text-red-600')}>₦{result.balanceSheetComparison.assetsDifference.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Current:</span><span className="font-mono font-bold">â‚¦{result.balanceSheetComparison.currentTotalAssets.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Previous:</span><span className="font-mono">â‚¦{result.balanceSheetComparison.previousTotalAssets.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Difference:</span><span className={cn('font-mono font-bold', result.balanceSheetComparison.assetsDifference >= 0 ? 'text-emerald-600' : 'text-red-600')}>â‚¦{result.balanceSheetComparison.assetsDifference.toLocaleString()}</span></div>
                 <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">% Change:</span><span className={cn('font-mono font-bold', result.balanceSheetComparison.assetsPercentChange >= 0 ? 'text-emerald-600' : 'text-red-600')}>{result.balanceSheetComparison.assetsPercentChange.toFixed(1)}%</span></div>
               </div>
             </div>
             <div className="p-3 bg-white rounded border border-slate-200">
               <p className="text-[10px] uppercase text-slate-500 dark:text-slate-400 font-semibold mb-2">Total Liabilities</p>
               <div className="space-y-1 text-xs">
-                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Current:</span><span className="font-mono font-bold">₦{result.balanceSheetComparison.currentTotalLiabilities.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Previous:</span><span className="font-mono">₦{result.balanceSheetComparison.previousTotalLiabilities.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Difference:</span><span className={cn('font-mono font-bold', result.balanceSheetComparison.liabilitiesDifference >= 0 ? 'text-red-600' : 'text-emerald-600')}>₦{result.balanceSheetComparison.liabilitiesDifference.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Current:</span><span className="font-mono font-bold">â‚¦{result.balanceSheetComparison.currentTotalLiabilities.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Previous:</span><span className="font-mono">â‚¦{result.balanceSheetComparison.previousTotalLiabilities.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Difference:</span><span className={cn('font-mono font-bold', result.balanceSheetComparison.liabilitiesDifference >= 0 ? 'text-red-600' : 'text-emerald-600')}>â‚¦{result.balanceSheetComparison.liabilitiesDifference.toLocaleString()}</span></div>
                 <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">% Change:</span><span className={cn('font-mono font-bold', result.balanceSheetComparison.liabilitiesPercentChange >= 0 ? 'text-red-600' : 'text-emerald-600')}>{result.balanceSheetComparison.liabilitiesPercentChange.toFixed(1)}%</span></div>
               </div>
             </div>
             <div className="p-3 bg-white rounded border border-slate-200">
               <p className="text-[10px] uppercase text-slate-500 dark:text-slate-400 font-semibold mb-2">Equity (Net Worth)</p>
               <div className="space-y-1 text-xs">
-                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Current:</span><span className="font-mono font-bold">₦{result.balanceSheetComparison.currentEquity.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Previous:</span><span className="font-mono">₦{result.balanceSheetComparison.previousEquity.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Difference:</span><span className={cn('font-mono font-bold', result.balanceSheetComparison.equityDifference >= 0 ? 'text-emerald-600' : 'text-red-600')}>₦{result.balanceSheetComparison.equityDifference.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Current:</span><span className="font-mono font-bold">â‚¦{result.balanceSheetComparison.currentEquity.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Previous:</span><span className="font-mono">â‚¦{result.balanceSheetComparison.previousEquity.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Difference:</span><span className={cn('font-mono font-bold', result.balanceSheetComparison.equityDifference >= 0 ? 'text-emerald-600' : 'text-red-600')}>â‚¦{result.balanceSheetComparison.equityDifference.toLocaleString()}</span></div>
                 <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">% Change:</span><span className={cn('font-mono font-bold', result.balanceSheetComparison.equityPercentChange >= 0 ? 'text-emerald-600' : 'text-red-600')}>{result.balanceSheetComparison.equityPercentChange.toFixed(1)}%</span></div>
               </div>
             </div>
@@ -5210,9 +5238,9 @@ function EngineTab({ result }: { result: EngineResult | null }) {
             <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">G8: Cost-of-Fund Schedule (30% PA)</h4>
             <p className="text-xs text-slate-600 mb-3">Bank's true cost of capital over loan tenure</p>
             <div className="grid grid-cols-3 gap-2 mb-3 text-xs">
-              <div><p className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Monthly</p><p className="font-mono font-bold">₦{result.costOfFundSchedule.monthlyInstallment.toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
-              <div><p className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Total Interest</p><p className="font-mono font-bold text-red-600">₦{result.costOfFundSchedule.totalInterest.toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
-              <div><p className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Total Payable</p><p className="font-mono font-bold">₦{result.costOfFundSchedule.totalPayable.toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
+              <div><p className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Monthly</p><p className="font-mono font-bold">â‚¦{result.costOfFundSchedule.monthlyInstallment.toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
+              <div><p className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Total Interest</p><p className="font-mono font-bold text-red-600">â‚¦{result.costOfFundSchedule.totalInterest.toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
+              <div><p className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Total Payable</p><p className="font-mono font-bold">â‚¦{result.costOfFundSchedule.totalPayable.toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
             </div>
             <div className="overflow-x-auto max-h-48 overflow-y-auto">
               <table className="w-full text-[10px]">
@@ -5247,10 +5275,10 @@ function EngineTab({ result }: { result: EngineResult | null }) {
             <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">G8: Convert-to-Loan Schedule</h4>
             <p className="text-xs text-slate-600 mb-3">Principal + upfront + CCD + admin cost amortized</p>
             <div className="grid grid-cols-2 gap-2 mb-2 text-[10px]">
-              <div><p className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Upfront Fee</p><p className="font-mono font-bold">₦{(result.convertToLoanSchedule.summary.upfrontFee || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
-              <div><p className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">CCD Amount</p><p className="font-mono font-bold">₦{(result.convertToLoanSchedule.summary.ccdAmount || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
-              <div><p className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Admin Cost Total</p><p className="font-mono font-bold">₦{(result.convertToLoanSchedule.summary.adminCostTotal || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
-              <div><p className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Monthly Installment</p><p className="font-mono font-bold">₦{result.convertToLoanSchedule.monthlyInstallment.toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
+              <div><p className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Upfront Fee</p><p className="font-mono font-bold">â‚¦{(result.convertToLoanSchedule.summary.upfrontFee || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
+              <div><p className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">CCD Amount</p><p className="font-mono font-bold">â‚¦{(result.convertToLoanSchedule.summary.ccdAmount || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
+              <div><p className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Admin Cost Total</p><p className="font-mono font-bold">â‚¦{(result.convertToLoanSchedule.summary.adminCostTotal || 0).toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
+              <div><p className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Monthly Installment</p><p className="font-mono font-bold">â‚¦{result.convertToLoanSchedule.monthlyInstallment.toLocaleString('en-NG', { maximumFractionDigits: 0 })}</p></div>
             </div>
             <div className="overflow-x-auto max-h-48 overflow-y-auto">
               <table className="w-full text-[10px]">
@@ -5290,7 +5318,7 @@ function EngineTab({ result }: { result: EngineResult | null }) {
 
 // ============================================================================
 // v42-P9: COMMITTEE SIGNATURE SECTION
-// Mirrors Excel COMMITTEE'S DECISION sheet — 7-8 approvers with signatures
+// Mirrors Excel COMMITTEE'S DECISION sheet â€” 7-8 approvers with signatures
 // ============================================================================
 
 function CommitteeSignatureSection() {
@@ -5381,7 +5409,7 @@ function CommitteeSignatureSection() {
       {signatures.length > 0 && (
         <div className="mt-3 p-2 bg-emerald-50 rounded text-center">
           <p className="text-xs text-emerald-700">
-            ✓ {signatures.length} of {roles.length} signatures captured
+            âœ“ {signatures.length} of {roles.length} signatures captured
           </p>
         </div>
       )}
@@ -5393,7 +5421,7 @@ function CommitteeSignatureSection() {
 // SHARED FORM COMPONENTS
 // ============================================================================
 
-// v46: FormattedNumberInput — shows empty for 0/null, formats with commas as user types
+// v46: FormattedNumberInput â€” shows empty for 0/null, formats with commas as user types
 // Returns raw number via onChange. Used everywhere a currency/figure is entered.
 function FormattedNumberInput({
   value,
@@ -5408,18 +5436,13 @@ function FormattedNumberInput({
   placeholder?: string;
   className?: string;
 }) {
-  // Internal display state — allows user to type freely while we format
-  const [display, setDisplay] = useState('');
-
-  // Sync external value → display when value changes externally
-  useEffect(() => {
-    const num = Number(value);
-    if (!value || isNaN(num) || num === 0) {
-      setDisplay('');
-    } else {
-      setDisplay(num.toLocaleString('en-NG', { maximumFractionDigits: 2 }));
-    }
-  }, [value]);
+  // Internal display state â€” allows user to type freely while we format
+  const [display, setDisplay] = useState<string | null>(null);
+  const num = Number(value);
+  const formattedValue =
+    !value || !Number.isFinite(num) || num === 0
+      ? ''
+      : num.toLocaleString('en-NG', { maximumFractionDigits: 2 });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (readOnly) return;
@@ -5447,9 +5470,10 @@ function FormattedNumberInput({
     <Input
       type="text"
       inputMode="decimal"
-      value={display}
+      value={display ?? formattedValue}
       onChange={handleChange}
       onFocus={handleFocus}
+      onBlur={() => setDisplay(null)}
       readOnly={readOnly}
       placeholder={placeholder || '0'}
       className={cn(className, 'text-right')}
@@ -5457,7 +5481,7 @@ function FormattedNumberInput({
   );
 }
 
-// v46: Field component — uses FormattedNumberInput for number fields
+// v46: Field component â€” uses FormattedNumberInput for number fields
 function Field({ label, value, onChange, type = 'text', readOnly }: any) {
   return (
     <div>
@@ -5482,7 +5506,7 @@ function Field({ label, value, onChange, type = 'text', readOnly }: any) {
   );
 }
 
-// v46: InlineFormattedNumber — for table cells where a full Field wrapper is too much
+// v46: InlineFormattedNumber â€” for table cells where a full Field wrapper is too much
 function InlineFormattedNumber({
   value,
   onChange,
@@ -5494,16 +5518,12 @@ function InlineFormattedNumber({
   readOnly?: boolean;
   className?: string;
 }) {
-  const [display, setDisplay] = useState('');
-
-  useEffect(() => {
-    const num = Number(value);
-    if (!value || isNaN(num) || num === 0) {
-      setDisplay('');
-    } else {
-      setDisplay(num.toLocaleString('en-NG', { maximumFractionDigits: 2 }));
-    }
-  }, [value]);
+  const [display, setDisplay] = useState<string | null>(null);
+  const num = Number(value);
+  const formattedValue =
+    !value || !Number.isFinite(num) || num === 0
+      ? ''
+      : num.toLocaleString('en-NG', { maximumFractionDigits: 2 });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (readOnly) return;
@@ -5523,9 +5543,10 @@ function InlineFormattedNumber({
     <Input
       type="text"
       inputMode="decimal"
-      value={display}
+      value={display ?? formattedValue}
       onChange={handleChange}
       onFocus={(e) => !readOnly && e.target.select()}
+      onBlur={() => setDisplay(null)}
       readOnly={readOnly}
       placeholder="0"
       className={cn('text-right', className)}
@@ -5542,7 +5563,7 @@ function SelectField({ label, value, onChange, options }: any) {
         onChange={(e) => onChange(e.target.value)}
         className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500"
       >
-        <option value="">— Select —</option>
+        <option value="">â€” Select â€”</option>
         {options.map((o: string) => <option key={o} value={o}>{o}</option>)}
       </select>
     </div>
@@ -5585,3 +5606,4 @@ function SliderField({ label, value, min, max, step, onChange }: any) {
     </div>
   );
 }
+

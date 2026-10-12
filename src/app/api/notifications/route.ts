@@ -3,6 +3,7 @@ import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { createNotification } from '@/lib/notifications';
 
+import { safeError } from '@/lib/security/errors';
 /**
  * GET /api/notifications?userId=&adminId=&unreadOnly=&page=&limit=
  * Returns notifications for the user/admin, paginated, with unread count.
@@ -20,7 +21,8 @@ export async function GET(req: NextRequest) {
 
   try {
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get('userId') || undefined;
+    // v5 — userId from JWT, not query string
+    const userId = authPayload.id;
     // v54-Blocker1: adminId from JWT, not query string.
     const adminId = authPayload.id;
     const unreadOnly = searchParams.get('unreadOnly') === 'true' || searchParams.get('unreadOnly') === '1';
@@ -57,7 +59,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (e: any) {
     console.error('[api/notifications] GET error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -119,6 +121,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, notification: created });
   } catch (e: any) {
     console.error('[api/notifications] POST error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

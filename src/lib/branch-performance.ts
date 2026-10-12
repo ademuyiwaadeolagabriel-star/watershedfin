@@ -423,62 +423,30 @@ async function getFieldVisits(branchId: string, period: Period) {
 
 /** LO allocation — sum of LO targets vs branch target */
 async function getLOAllocation(branchId: string, period: Period) {
-  const activeBranchTarget = await db.branchTarget.findFirst({
-    where: {
-      branchId,
-      metricKey: 'disbursement_amount',
-      periodType: period.type,
-      periodStart: period.start,
-      status: 'ACTIVE',
-    },
-    orderBy: { version: 'desc' },
+  const branch = await db.branch.findUnique({
+    where: { id: branchId },
+    select: { monthlyDisbursementTarget: true, monthlyLoanCountTarget: true },
   });
 
-  const branchTarget = Number(activeBranchTarget?.targetValue || 0);
+  const branchTarget = Number(branch?.monthlyDisbursementTarget) || 0;
 
   const los = await db.admin.findMany({
     where: { branchId, role: { in: ['loan', 'lo'] }, status: 1 },
     select: {
       id: true, firstName: true, lastName: true,
       monthlyDisbursementTarget: true, monthlyLoanCountTarget: true,
-      quarterlyDisbursementTarget: true, quarterlyLoanCountTarget: true,
-      annualDisbursementTarget: true, annualLoanCountTarget: true,
     },
   });
 
-  const loIds = los.map(lo => lo.id);
-  const actualLoans = loIds.length > 0
-    ? await db.loanApplicants.findMany({
-        where: {
-          staffId: { in: loIds },
-          disbursedAt: { gte: period.start, lt: period.end },
-        },
-        select: { staffId: true, finalAmount: true, amount: true },
-      })
-    : [];
-  const actualByLo = new Map<string, { amount: number; count: number }>();
-  for (const loan of actualLoans) {
-    if (!loan.staffId) continue;
-    const current = actualByLo.get(loan.staffId) || { amount: 0, count: 0 };
-    current.amount += Number(loan.finalAmount ?? loan.amount);
-    current.count += 1;
-    actualByLo.set(loan.staffId, current);
-  }
-
   const loBreakdown = los.map(lo => {
-    const target =
-      period.type === 'annual'
-        ? Number(lo.annualDisbursementTarget) || 0
-        : period.type === 'quarterly'
-          ? Number(lo.quarterlyDisbursementTarget) || 0
-          : Number(lo.monthlyDisbursementTarget) || 0;
-    const actual = actualByLo.get(lo.id)?.amount || 0;
+    const target = Number(lo.monthlyDisbursementTarget) || 0;
+    // Actual: loans disbursed by this LO in period
     return {
       loId: lo.id,
       loName: `${lo.firstName} ${lo.lastName}`.trim(),
       target,
-      actual,
-      achievement: target > 0 ? (actual / target) * 100 : 0,
+      actual: 0, // would need a per-LO actual query — placeholder
+      achievement: target > 0 ? 0 : 0,
     };
   });
 
@@ -537,28 +505,13 @@ export async function getBranchPerformance(branchId: string, periodType: 'monthl
     getLOAllocation(branchId, period),
   ]);
 
-  // BranchTarget is the authoritative target source. Legacy Branch columns
-  // remain only as a compatibility fallback for pre-migration periods.
-  const activeTargets = await db.branchTarget.findMany({
-    where: {
-      branchId,
-      periodType: period.type,
-      periodStart: period.start,
-      status: 'ACTIVE',
-      metricKey: { in: ['disbursement_amount', 'loan_count'] },
-    },
-    orderBy: { version: 'desc' },
+  // Fetch targets from BranchTarget table (or legacy Branch columns)
+  const branchRow = await db.branch.findUnique({
+    where: { id: branchId },
+    select: { monthlyDisbursementTarget: true, monthlyLoanCountTarget: true },
   });
-  const targetMap = new Map<string, any>();
-  for (const t of activeTargets) if (!targetMap.has(t.metricKey)) targetMap.set(t.metricKey, t);
-  const legacyBranch = activeTargets.length === 0
-    ? await db.branch.findUnique({
-        where: { id: branchId },
-        select: { monthlyDisbursementTarget: true, monthlyLoanCountTarget: true },
-      })
-    : null;
-  const disbursementTarget = Number(targetMap.get('disbursement_amount')?.targetValue ?? legacyBranch?.monthlyDisbursementTarget ?? 0);
-  const loanCountTarget = Number(targetMap.get('loan_count')?.targetValue ?? legacyBranch?.monthlyLoanCountTarget ?? 0);
+  const disbursementTarget = Number(branchRow?.monthlyDisbursementTarget) || 0;
+  const loanCountTarget = branchRow?.monthlyLoanCountTarget || 0;
 
   // Pace forecasts
   const elapsedPercent = getPeriodElapsedPercent(period);

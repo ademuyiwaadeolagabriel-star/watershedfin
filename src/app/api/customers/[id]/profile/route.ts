@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requireRole } from '@/lib/auth';
+import { getAuthFromRequest } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 /**
  * PUT /api/customers/[id]/profile
  * Frontdesk or BM updates a customer's profile (walk-in completion).
@@ -14,9 +15,15 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authResult = await requireRole(req, ['super', 'frontdesk', 'bm']);
-    if (authResult instanceof NextResponse) return authResult;
-    const authPayload = authResult;
+    const authPayload = await getAuthFromRequest(req);
+    if (!authPayload) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+
+    const allowedRoles = ['super', 'frontdesk', 'bm'];
+    if (!allowedRoles.includes(authPayload.role)) {
+      return NextResponse.json({ error: 'Only Front Desk, Branch Manager, or Super Admin can edit customer profiles' }, { status: 403 });
+    }
 
     const { id: userId } = await params;
     const body = await req.json();
@@ -24,15 +31,6 @@ export async function PUT(
     const user = await db.user.findUnique({ where: { id: userId } });
     if (!user) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
-    }
-    if (authPayload.role === 'bm' && authPayload.branchId && user.branchId &&
-        authPayload.branchId !== user.branchId) {
-      return NextResponse.json({ error: 'Access denied — customer belongs to a different branch.' }, { status: 403 });
-    }
-
-    if (body.sectorId) {
-      const sector = await db.sector.findUnique({ where: { id: String(body.sectorId) }, select: { id: true } });
-      if (!sector) return NextResponse.json({ error: 'Selected sector does not exist.' }, { status: 400 });
     }
 
     // Allowed fields for profile update
@@ -92,6 +90,6 @@ export async function PUT(
     return NextResponse.json({ success: true, user: safeUser });
   } catch (e: any) {
     console.error('Profile update error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

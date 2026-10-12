@@ -3,6 +3,7 @@ import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { KYC_STATUSES } from '@/lib/constants';
 
+import { safeError } from '@/lib/security/errors';
 /**
  * GET /api/admin/customers
  * Query: ?search=&kycStatus=&branchId=&page=
@@ -19,11 +20,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const search = (searchParams.get('search') || '').trim();
     const kycStatus = searchParams.get('kycStatus') || '';
-    let branchId = searchParams.get('branchId') || '';
-    if (['bm', 'loan', 'lo', 'cs'].includes(authResult_v53.role)) {
-      if (!authResult_v53.branchId) return NextResponse.json({ error: 'Your staff account is not assigned to a branch.' }, { status: 403 });
-      branchId = authResult_v53.branchId || '';
-    }
+    const branchId = searchParams.get('branchId') || '';
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
     const pageSize = 50;
 
@@ -82,6 +79,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (e: any) {
     console.error('Customer list API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

@@ -5,6 +5,7 @@ import { createNotification } from '@/lib/notifications';
 import { sendSms } from '@/lib/sms';
 import crypto from 'crypto';
 
+import { safeError } from '@/lib/security/errors';
 /**
  * GET /api/legal/cac-search
  * Returns pending Legal CAC Name Search cases (for Legal staff with legalCacSearch permission)
@@ -286,6 +287,6 @@ export async function POST(req: NextRequest) {
       );
     }
     console.error('[LEGAL CAC SEARCH POST] error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

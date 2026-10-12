@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireCustomerAuth } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 // ============================================================================
 // POST /api/payment/verify
 // v50: SECURE PAYMENT VERIFICATION (Paystack server-to-server)
@@ -254,6 +255,6 @@ export async function POST(req: NextRequest) {
         { status: 200 },
       );
     }
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

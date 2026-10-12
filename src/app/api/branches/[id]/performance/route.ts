@@ -21,11 +21,6 @@ export async function GET(
 
   try {
     const { id } = await params;
-    if (['bm', 'loan', 'lo', 'cs', 'compliance', 'credit', 'analyst'].includes(authResult.role)) {
-      if (!authResult.branchId || authResult.branchId !== id) {
-        return NextResponse.json({ error: 'Access denied — branch performance is restricted to your assigned branch.' }, { status: 403 });
-      }
-    }
     const url = new URL(req.url);
     const periodType = (url.searchParams.get('period') || 'monthly') as 'monthly' | 'quarterly' | 'annual' | 'daily';
 

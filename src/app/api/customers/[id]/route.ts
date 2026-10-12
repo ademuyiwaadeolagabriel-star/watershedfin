@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 
+import { safeError } from '@/lib/security/errors';
 /**
  * GET /api/customers/[id]
  * Returns the customer's user record, business, loans, and transactions.
@@ -57,6 +58,6 @@ export async function GET(
     return NextResponse.json({ user: safeUser });
   } catch (e: any) {
     console.error('Customer detail API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

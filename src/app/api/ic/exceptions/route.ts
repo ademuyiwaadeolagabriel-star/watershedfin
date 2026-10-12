@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getAuthFromRequest } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 async function genExceptionCode(): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `EXC-${year}-`;
@@ -50,7 +51,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ exceptions });
   } catch (e: any) {
     console.error('List exceptions API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -109,6 +110,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ exception });
   } catch (e: any) {
     console.error('Create exception API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 
+import { safeError } from '@/lib/security/errors';
 /**
  * GET /api/customers?count=true&filter=<filter>
  * Returns either a list of customers or a count (when count=true).
@@ -52,6 +53,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ users: safe });
   } catch (e: any) {
     console.error('Customers GET error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

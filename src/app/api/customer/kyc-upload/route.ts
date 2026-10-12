@@ -3,9 +3,10 @@ import { db } from '@/lib/db';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
-import { put, del } from '@vercel/blob';
+import { put } from '@vercel/blob';
 import { requireCustomerAuth } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 // ============================================================================
 // POST /api/customer/kyc-upload
 // Authorization: Bearer <customer-jwt>
@@ -57,8 +58,6 @@ export async function POST(req: NextRequest) {
   const authPayload = authResult as { id: string; type: string };
   const userId = authPayload.id; // v50 — derived from JWT
 
-  let localPath: string | null = null;
-  let blobName: string | null = null;
   try {
     const formData = await req.formData();
     // v50 — userId is NOT read from the form. Identity comes from the JWT.
@@ -113,8 +112,7 @@ export async function POST(req: NextRequest) {
       // authenticated proxy. The proxy will look up the blob by name
       // and stream it to the (authenticated, ownership-verified) caller.
       // The blob's own URL is never returned to the client.
-      blobName = `kyc-private/${safeName}`;
-      await put(blobName, file, {
+      await put(`kyc-private/${safeName}`, file, {
         // v50 — `access: 'private'` IS supported by @vercel/blob. The v49
         // code used `access: 'public'` with a misleading comment claiming
         // "Vercel Blob doesn't support 'private' on free tier" — that was
@@ -131,7 +129,6 @@ export async function POST(req: NextRequest) {
       const tmpDir = join('/tmp', 'uploads', 'kyc-private', userId);
       await mkdir(tmpDir, { recursive: true });
       const tmpPath = join(tmpDir, `${randomUUID()}-${docType}.${ext}`);
-      localPath = tmpPath;
       const bytes = await file.arrayBuffer();
       await writeFile(tmpPath, Buffer.from(bytes));
       relativePath = `/api/customer/kyc-file/${userId}/${tmpPath.split('/').pop()}`;
@@ -176,14 +173,8 @@ export async function POST(req: NextRequest) {
       column,
     });
   } catch (e: any) {
-    // Compensating cleanup: a failed DB write must not leave an orphaned
-    // identity document in blob storage or /tmp.
-    try {
-      if (blobName && process.env.BLOB_READ_WRITE_TOKEN) await del(blobName);
-      if (localPath) await (await import('fs/promises')).unlink(localPath);
-    } catch {}
     console.error('[KYC UPLOAD] error:', e);
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 

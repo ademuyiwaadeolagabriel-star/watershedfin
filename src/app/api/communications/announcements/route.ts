@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 
+import { safeError } from '@/lib/security/errors';
 export async function GET() {
   try {
     const announcements = await db.notification.findMany({
@@ -42,6 +43,6 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ announcement });
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

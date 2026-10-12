@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireCustomerAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 
+import { safeError } from '@/lib/security/errors';
 // GET /api/customer/loan/[id]/agreement?userId=
 // Returns the loan + security agreement data for PDF generation
 export async function GET(
@@ -107,6 +108,6 @@ export async function GET(
     });
   } catch (e: any) {
     console.error('Agreement API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

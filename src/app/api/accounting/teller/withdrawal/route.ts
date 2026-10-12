@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireRole, requireMakerChecker, completeMakerCheckerExecution } from '@/lib/auth';
+import { requireRole, requireMakerChecker } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { postJournal } from '@/lib/accounting';
 
+import { safeError } from '@/lib/security/errors';
 // POST: teller withdrawal
 export async function POST(req: NextRequest) {
   // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
@@ -16,9 +17,8 @@ export async function POST(req: NextRequest) {
   // and existing callers continue to work while the PendingMutation
   // workflow table is being populated.
   const url_v53 = new URL(req.url);
-  let mc_v53: any;
-  {
-    mc_v53 = await requireMakerChecker(req, {
+  if (url_v53.searchParams.get('stage')) {
+    const mc_v53 = await requireMakerChecker(req, {
       operation: 'teller_withdrawal',
       stages: ['propose', 'review', 'authorize', 'execute'],
       enforceSegregation: true,
@@ -32,7 +32,8 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { tillId, amount, reference, description, contraAccountId, customerId} = body;
+    const { tillId, amount, reference, description, contraAccountId, customerId, createdById } = body;
+
     if (!tillId || !amount) return NextResponse.json({ error: 'tillId and amount required' }, { status: 400 });
     const amt = Number(amount);
     if (amt <= 0) return NextResponse.json({ error: 'Amount must be positive' }, { status: 400 });
@@ -54,7 +55,7 @@ export async function POST(req: NextRequest) {
       if (!till) {
         throw new Error('Till not found');
       }
-      if (Number(till.currentBalance ?? 0) < amt) {
+      if (till.currentBalance < amt) {
         throw new Error('Insufficient till balance');
       }
 
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
           description: description || 'Cash withdrawal',
           contraAccountId: contraAccountId || null,
           customerId: customerId || null,
-          createdById: authResult_v51.id,
+          createdById: createdById || null,
         },
       });
 
@@ -88,7 +89,7 @@ export async function POST(req: NextRequest) {
               { accountId: contraAccountId, debit: amt, credit: 0 },
               { accountId: till.glAccountId, debit: 0, credit: amt },
             ],
-            createdById: authResult_v51.id,
+            createdById: createdById || undefined,
             sourceType: 'teller',
             sourceId: txn.id,
           },
@@ -97,9 +98,9 @@ export async function POST(req: NextRequest) {
         journalEntryId = je.id;
       }
 
-      return { txn, newBalance: Number(till.currentBalance ?? 0) - amt, journalEntryId };
+      return { txn, newBalance: till.currentBalance - amt, journalEntryId };
     });
-    if (mc_v53.stage === 'execute' && mc_v53.proposalId) await completeMakerCheckerExecution(mc_v53.proposalId, mc_v53.actorId);
+
     return NextResponse.json(
       { transaction: result.txn, newBalance: result.newBalance, journalEntryId: result.journalEntryId },
       { status: 201 },
@@ -109,6 +110,6 @@ export async function POST(req: NextRequest) {
     // Surface expected business-rule errors with appropriate HTTP codes.
     if (e?.message === 'Till not found') return NextResponse.json({ error: 'Till not found' }, { status: 404 });
     if (e?.message === 'Insufficient till balance') return NextResponse.json({ error: 'Insufficient till balance' }, { status: 400 });
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

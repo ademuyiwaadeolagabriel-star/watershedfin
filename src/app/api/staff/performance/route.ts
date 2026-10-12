@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requireRole } from '@/lib/auth';
+import { getAuthFromRequest } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 /**
  * GET /api/staff/performance?role=loan&branchId=xxx&month=YYYY-MM
  * Returns performance metrics for all LOs or BMs
@@ -13,17 +14,12 @@ import { requireRole } from '@/lib/auth';
  */
 export async function GET(req: NextRequest) {
   try {
-    const authResult = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'cfo', 'hr', 'bm']);
-    if (authResult instanceof NextResponse) return authResult;
-    const authPayload = authResult;
+    const authPayload = await getAuthFromRequest(req);
+    if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
 
     const { searchParams } = new URL(req.url);
     const role = searchParams.get('role') || 'loan';
-    let branchId = searchParams.get('branchId');
-    if (authPayload.role === 'bm') {
-      if (!authPayload.branchId) return NextResponse.json({ error: 'Your Branch Manager account is not assigned to a branch.' }, { status: 403 });
-      branchId = authPayload.branchId;
-    }
+    const branchId = searchParams.get('branchId');
     const month = searchParams.get('month') || new Date().toISOString().slice(0, 7);
 
     const monthStart = new Date(`${month}-01T00:00:00.000Z`);
@@ -99,6 +95,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ staff: performance, month });
   } catch (e: any) {
     console.error('Performance API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

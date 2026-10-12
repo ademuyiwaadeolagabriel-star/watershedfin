@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
+import { safeError } from '@/lib/security/errors';
 /**
  * GET /api/admin/blog/categories
  *
@@ -23,6 +24,6 @@ export async function GET(_req: NextRequest) {
     return NextResponse.json({ categories });
   } catch (e: any) {
     console.error('List blog categories API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

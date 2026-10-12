@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 
+import { safeError } from '@/lib/security/errors';
 /**
  * GET /api/onboard/search?q=email_or_phone_or_bvn_or_nin_or_account
  * Returns users matching the query on email, phone, bvn, nin, or accountNumber.
@@ -52,6 +53,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ users: safe, query: q });
   } catch (e: any) {
     console.error('Onboard search API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

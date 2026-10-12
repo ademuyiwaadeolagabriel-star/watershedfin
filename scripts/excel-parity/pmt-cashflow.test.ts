@@ -1,8 +1,8 @@
-/**
- * Excel Parity Test Suite — PMT, DSR, Cashflow, Collateral
+﻿/**
+ * Excel Parity Test Suite â€” PMT, DSR, Cashflow, Collateral
  * =================================================================
  *
- * v51 — Second Excel-parity regression suite. Exercises:
+ * v51 â€” Second Excel-parity regression suite. Exercises:
  *   - PMT calculation (annual rate interpretation, reducing vs flat)
  *   - DSR (Debt Service Ratio)
  *   - 12-month cashflow projection
@@ -28,21 +28,21 @@ const results: { name: string; pass: boolean; expected: any; actual: any }[] = [
 function expectApprox(name: string, expected: number, actual: number, tolerance = 1e-6): void {
   const pass = Math.abs(expected - actual) <= tolerance;
   results.push({ name, pass, expected, actual });
-  console.log(`${pass ? '✓' : '✗'} ${name}: expected ${expected}, got ${actual}`);
+  console.log(`${pass ? 'âœ“' : 'âœ—'} ${name}: expected ${expected}, got ${actual}`);
 }
 
 function expectEqual<T>(name: string, expected: T, actual: T): void {
   const pass = expected === actual;
   results.push({ name, pass, expected, actual });
-  console.log(`${pass ? '✓' : '✗'} ${name}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+  console.log(`${pass ? 'âœ“' : 'âœ—'} ${name}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
 }
 
 // ============================================================================
-// TEST 1: PMT — reducing balance, annual rate
+// TEST 1: PMT â€” reducing balance, annual rate
 // Excel: =PMT(27.5%/12, 12, -100000) = monthly installment
 //   r = 0.275 / 12 = 0.022917
-//   factor = (1+r)^12 ≈ 1.3125
-//   PMT = P * r * factor / (factor - 1) = 100000 * 0.022917 * 1.3125 / 0.3125 ≈ 9626.15
+//   factor = (1+r)^12 â‰ˆ 1.3125
+//   PMT = P * r * factor / (factor - 1) = 100000 * 0.022917 * 1.3125 / 0.3125 â‰ˆ 9626.15
 // ============================================================================
 (function testPmtReducing() {
   const pmt = calculatePMT(100000, 27.5, 12, 'REDUCING');
@@ -50,18 +50,18 @@ function expectEqual<T>(name: string, expected: T, actual: T): void {
   expectApprox('test1: PMT reducing balance (100k @ 27.5%/yr, 12mo)', 9626.15, pmt.installment, 1);
   // Monthly rate
   expectApprox('test1: monthlyRate = annualRate / 12 / 100', 27.5 / 12 / 100, pmt.monthlyRate);
-  // Total repayment = installment × months
-  expectApprox('test1: totalRepayment = installment × months', pmt.installment * 12, pmt.totalRepayment, 1);
+  // Total repayment = installment Ã— months
+  expectApprox('test1: totalRepayment = installment Ã— months', pmt.installment * 12, pmt.totalRepayment, 1);
   // Total interest = total - principal
   expectApprox('test1: totalInterest = total - principal', pmt.totalRepayment - 100000, pmt.totalInterest, 1);
 })();
 
 // ============================================================================
-// TEST 2: PMT — flat method
-// Excel: installment = principal/n + (principal × monthlyRate)
+// TEST 2: PMT â€” flat method
+// Excel: installment = principal/n + (principal Ã— monthlyRate)
 //   monthlyRate = 0.275/12 = 0.022917
 //   monthlyPrincipal = 100000/12 = 8333.33
-//   monthlyInterest = 100000 × 0.022917 = 2291.67
+//   monthlyInterest = 100000 Ã— 0.022917 = 2291.67
 //   installment = 8333.33 + 2291.67 = 10625
 // ============================================================================
 (function testPmtFlat() {
@@ -70,7 +70,7 @@ function expectEqual<T>(name: string, expected: T, actual: T): void {
 })();
 
 // ============================================================================
-// TEST 3: PMT — zero interest (interest-free loan)
+// TEST 3: PMT â€” zero interest (interest-free loan)
 //   installment = principal / months = 100000 / 12 = 8333.33
 // ============================================================================
 (function testPmtZeroInterest() {
@@ -83,7 +83,7 @@ function expectEqual<T>(name: string, expected: T, actual: T): void {
 // Excel: DSR = installment / netOperatingIncome
 //   netOperatingIncome = grossProfit - opex - living - existingDebts
 //   installment = 9626.15
-//   sales = 200000, cogs = 200000 × (1 - 0.25) = 150000, grossProfit = 50000
+//   sales = 200000, cogs = 200000 Ã— (1 - 0.25) = 150000, grossProfit = 50000
 //   opex = 20000, living = 5000, existingDebts = 0
 //   netCashflowAvailable = 25000
 //   DSR = 9626.15 / 25000 = 0.3850
@@ -114,15 +114,18 @@ function expectEqual<T>(name: string, expected: T, actual: T): void {
       fixedFamilyAssets: 0,
       shortTermLiabilities: 0,
       longTermLiabilities: 0,
+      payables: 0,
     },
     riskInputs: {
       sectorRiskScore: 0.5,
       previousDefault: false,
+      successionPlanVerified: false,
+      bankAccountVerified: false,
     },
     loanBaseAmount: 100000,
     collaterals: [],
-    guarantor: { monthlyIncome: 100000, existingInstallments: 0, monthlyLivingExpenses: 5000 },
-    // v51 — stress test parameters (required by runStressTest)
+    guarantor: { income: 100000, cogs: 0, operationExpenses: 5000, existingInstallment: 0 },
+    // v51 â€” stress test parameters (required by runStressTest)
     stress: {
       salesHaircut: 10,        // -10% sales
       marginCompression: 5,   // -5pp margin
@@ -136,15 +139,15 @@ function expectEqual<T>(name: string, expected: T, actual: T): void {
   };
   const result2 = executeFullAppraisal(input2);
   // marginUsed = lowest of avg(0.30), weighted(0.30), sector(0.25) = 0.25
-  // cogs = 200000 × (1 - 0.25) = 150000
+  // cogs = 200000 Ã— (1 - 0.25) = 150000
   // grossProfit = 50000, opex = 20000, living = 5000, NOI = 25000
-  // installment ≈ 9626.15, DSR = 9626.15/25000 ≈ 0.3850
+  // installment â‰ˆ 9626.15, DSR = 9626.15/25000 â‰ˆ 0.3850
   expectApprox('test4: DSR < 0.45 hard gate (NOI=25k, installment=9626.15)', 0.3850, result2.ratios.dsr, 0.01);
 })();
 
 // ============================================================================
-// TEST 5: 12-month cashflow projection — solvent path
-//   positive monthly surplus → no negative closing balance
+// TEST 5: 12-month cashflow projection â€” solvent path
+//   positive monthly surplus â†’ no negative closing balance
 // ============================================================================
 (function testCashflowProjectionSolvent() {
   const monthlyNet = 10000;  // surplus
@@ -164,8 +167,8 @@ function expectEqual<T>(name: string, expected: T, actual: T): void {
 })();
 
 // ============================================================================
-// TEST 6: 12-month cashflow projection — insolvent path
-//   negative monthly surplus → eventually negative
+// TEST 6: 12-month cashflow projection â€” insolvent path
+//   negative monthly surplus â†’ eventually negative
 // ============================================================================
 (function testCashflowProjectionInsolvent() {
   const monthlyNet = -3000;  // deficit (more outflow than inflow)
@@ -180,10 +183,10 @@ function expectEqual<T>(name: string, expected: T, actual: T): void {
 })();
 
 // ============================================================================
-// TEST 7: Collateral coverage — FSV haircuts
-//   MOVABLE → 80% of market value
-//   IMMOVABLE → 60%
-//   CASH → 100%
+// TEST 7: Collateral coverage â€” FSV haircuts
+//   MOVABLE â†’ 80% of market value
+//   IMMOVABLE â†’ 60%
+//   CASH â†’ 100%
 //   Stock added at 10% of book value
 // ============================================================================
 (function testCollateralCoverage() {
@@ -193,7 +196,7 @@ function expectEqual<T>(name: string, expected: T, actual: T): void {
     { type: 'CASH' as const, marketValue: 50000 },
   ];
   // FSV: 100000*0.8 + 100000*0.6 + 50000*1.0 = 80000+60000+50000 = 190000
-  // + stock at 10%: 10000*0.1 = 1000 → total 191000
+  // + stock at 10%: 10000*0.1 = 1000 â†’ total 191000
   // Coverage: 191000 / 100000 = 1.91 = 191%
   const result = calculateCollateralCoverage(collaterals, 10000, 100000);
   // The function returns totalFSV = collateral FSV + stockCollateral (191000)
@@ -202,7 +205,7 @@ function expectEqual<T>(name: string, expected: T, actual: T): void {
 })();
 
 // ============================================================================
-// TEST 8: Risk grade — score >= 85 = APPROVE
+// TEST 8: Risk grade â€” score >= 85 = APPROVE
 // ============================================================================
 (function testRiskGradeApprove() {
   const grade = calculateRiskGrade(90, true, 0.3);
@@ -210,18 +213,18 @@ function expectEqual<T>(name: string, expected: T, actual: T): void {
 })();
 
 // ============================================================================
-// TEST 9: Risk grade — score 60-84 = APPROVE (grade B/C)
+// TEST 9: Risk grade â€” score 60-84 = APPROVE (grade B/C)
 // ============================================================================
 (function testRiskGradeMediumApprove() {
-  // v51 — score 70 (>=60) is APPROVE with grade B. The hard-gate check
+  // v51 â€” score 70 (>=60) is APPROVE with grade B. The hard-gate check
   // only triggers on insolvency OR DSR > 1.0. With DSR=0.4 (under the gate)
-  // and solvent, score 70 → APPROVE.
+  // and solvent, score 70 â†’ APPROVE.
   const grade = calculateRiskGrade(70, true, 0.4);
   expectEqual('test9: medium score (solvent, DSR=0.4) = APPROVE', 'APPROVE', grade.verdict);
 })();
 
 // ============================================================================
-// TEST 10: Risk grade — score < 60 = REJECT
+// TEST 10: Risk grade â€” score < 60 = REJECT
 // ============================================================================
 (function testRiskGradeReject() {
   const grade = calculateRiskGrade(40, true, 0.5);
@@ -229,11 +232,11 @@ function expectEqual<T>(name: string, expected: T, actual: T): void {
 })();
 
 // ============================================================================
-// TEST 11: Risk grade — insolvent always REJECT regardless of score
+// TEST 11: Risk grade â€” insolvent always REJECT regardless of score
 // ============================================================================
 (function testRiskGradeInsolventAlwaysReject() {
   const grade = calculateRiskGrade(95, false, 0.2);
-  expectEqual('test11: insolvent → REJECT even with high score', 'REJECT', grade.verdict);
+  expectEqual('test11: insolvent â†’ REJECT even with high score', 'REJECT', grade.verdict);
 })();
 
 // ============================================================================
@@ -247,3 +250,4 @@ console.log(`${'='.repeat(60)}`);
 if (fail > 0) {
   process.exit(1);
 }
+

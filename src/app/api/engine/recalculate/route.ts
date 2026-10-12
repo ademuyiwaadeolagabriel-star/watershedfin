@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { executeFullAppraisal, EngineInput } from '@/lib/credit-engine';
 
+import { safeError } from '@/lib/security/errors';
 export async function POST(req: NextRequest) {
   // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
   const authResult_v51 = await requireRole(req, ['super', 'md', 'hoc', 'cro', 'credit']);
@@ -13,6 +14,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ result });
   } catch (e: any) {
     console.error('Engine recalculate error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

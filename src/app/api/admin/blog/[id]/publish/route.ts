@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requireRole } from '@/lib/auth';
+import { requireAuth } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 /**
  * POST /api/admin/blog/[id]/publish
  * Authorization: Bearer <admin-jwt>
@@ -18,7 +19,7 @@ export async function POST(
 ) {
   try {
     // v50 — auth gate mandatory, no fallback.
-    const authResult = await requireRole(req, ['super', 'admin']);
+    const authResult = await requireAuth(req);
     if (authResult instanceof NextResponse) return authResult;
     const authPayload = authResult as { id: string; role: string };
     const adminId = authPayload.id;
@@ -76,7 +77,7 @@ export async function POST(
     return NextResponse.json({ post: updated });
   } catch (e: any) {
     console.error('Publish blog post API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 

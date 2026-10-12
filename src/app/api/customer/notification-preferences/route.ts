@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireCustomerAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 
+import { safeError } from '@/lib/security/errors';
 /**
  * Notification preferences per user, stored as a JSON string on
  * `User.notificationPreferences`. Shape (default when not set):
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (e: any) {
     console.error('[notification-preferences] GET error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -119,6 +120,6 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ success: true, preferences: merged });
   } catch (e: any) {
     console.error('[notification-preferences] PUT error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

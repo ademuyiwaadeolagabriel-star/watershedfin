@@ -5,6 +5,7 @@ import { createNotification, notifyNextGateStaff } from '@/lib/notifications';
 import { getAuthFromRequest, getAdminFromRequest } from '@/lib/auth';
 import { notifyLoanSubmitted, notifyLoanApproved, notifyLoanDeclined, notifyLoanQueried, notifyLoanDisbursed } from '@/lib/notification-service';
 
+import { safeError } from '@/lib/security/errors';
 // POST /api/loans/[id]/transition
 // A1 FIX: Requires Bearer token authentication
 // Body: { action: 'forward'|'return'|'query'|'reject'|'disburse', comment?, nextStep?, mccDecision? }
@@ -610,7 +611,7 @@ export async function POST(
     });
   } catch (e: any) {
     console.error('Transition error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 

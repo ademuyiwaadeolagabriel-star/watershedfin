@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 // ============================================================================
 // BVN VERIFICATION VIA EXTERNAL SITE
 // ============================================================================
@@ -121,6 +122,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unknown action. Use: initiate, confirm, cac_initiate, or cac_confirm.' }, { status: 400 });
   } catch (e: any) {
     console.error('BVN verification error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

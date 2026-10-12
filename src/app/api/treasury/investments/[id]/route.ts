@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireRole, requireMakerChecker, completeMakerCheckerExecution } from '@/lib/auth';
+import { requireRole, requireMakerChecker } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { computeMaturity, generateSubscriptionCode, refreshAccrual } from '@/lib/treasury';
 
+import { safeError } from '@/lib/security/errors';
 export async function GET(req : NextRequest, { params }: { params: Promise<{ id: string }> }) {
   // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
   const authResult_v51 = await requireRole(req, ['super', 'md', 'cfo', 'hoc', 'cro', 'treasury']);
@@ -24,7 +25,7 @@ export async function GET(req : NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ investment });
   } catch (e: any) {
     console.error('Treasury investment GET error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -38,12 +39,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Without a stage query param the route falls back to its existing behavior.
   // Applies to both `redeem` and `rollover` actions.
   const url_v53 = new URL(req.url);
-  let mc_v53: any;
-  const targetId_v53 = new URL(req.url).pathname.split('/').filter(Boolean).at(-1) || undefined;
-  {
-    mc_v53 = await requireMakerChecker(req, {
+  if (url_v53.searchParams.get('stage')) {
+    const mc_v53 = await requireMakerChecker(req, {
       operation: 'treasury_investment_redeem_rollover',
-      targetId: targetId_v53,
       stages: ['propose', 'review', 'authorize', 'execute'],
       enforceSegregation: true,
       makerRoles: ['treasury', 'cfo', 'finance'],
@@ -92,7 +90,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         data: { status: 'liquidated' },
       });
 
-    if (mc_v53.stage === 'execute' && mc_v53.proposalId) await completeMakerCheckerExecution(mc_v53.proposalId, mc_v53.actorId);
       return NextResponse.json({
         investment: updated,
         payout: { principal: inv.principal, accrued: inv.accruedInterest, penalty, wht: inv.whtDeducted, net: netPayout },
@@ -157,13 +154,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         },
       });
 
-    if (mc_v53.stage === 'execute' && mc_v53.proposalId) await completeMakerCheckerExecution(mc_v53.proposalId, mc_v53.actorId);
       return NextResponse.json({ investment: newInv, previous: inv.subscriptionCode });
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
   } catch (e: any) {
     console.error('Treasury investment POST error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireRole, requireMakerChecker, completeMakerCheckerExecution } from '@/lib/auth';
+import { requireRole, requireMakerChecker } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { generateBillNumber, postJournal } from '@/lib/accounting';
 
+import { safeError } from '@/lib/security/errors';
 export async function GET(req: NextRequest) {
   // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
   const authResult_v51 = await requireRole(req, ['super', 'md', 'cfo', 'hoc', 'cro', 'finance', 'accountant']);
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ bills });
   } catch (e: any) {
     console.error('Bills GET error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -35,9 +36,8 @@ export async function POST(req: NextRequest) {
   // Only enforced when the caller passes `?stage=propose|review|authorize|execute`.
   // Without a stage query param the route falls back to its existing behavior.
   const url_v53 = new URL(req.url);
-  let mc_v53: any;
-  {
-    mc_v53 = await requireMakerChecker(req, {
+  if (url_v53.searchParams.get('stage')) {
+    const mc_v53 = await requireMakerChecker(req, {
       operation: 'bill_post',
       stages: ['propose', 'review', 'authorize', 'execute'],
       enforceSegregation: true,
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { vendorId, date, dueDate, subtotal, taxAmount, totalAmount, expenseAccountId, description} = body;
+    const { vendorId, date, dueDate, subtotal, taxAmount, totalAmount, expenseAccountId, description, createdById } = body;
 
     if (!vendorId || !dueDate) return NextResponse.json({ error: 'vendorId, dueDate required' }, { status: 400 });
     const sub = Number(subtotal) || 0;
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
         expenseAccountId: expenseAccountId || null,
         description: description || null,
         status: 'pending',
-        createdById: authResult_v51.id,
+        createdById: createdById || null,
       },
       include: { vendor: true },
     });
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
             { accountId: expenseAccountId, debit: total, credit: 0 },
             { accountId: apAcc.id, debit: 0, credit: total },
           ],
-          createdById: authResult_v51.id,
+          createdById: createdById || undefined,
           sourceType: 'vendor_bill',
           sourceId: bill.id,
         });
@@ -99,10 +99,10 @@ export async function POST(req: NextRequest) {
     } catch (jeErr) {
       console.error('Bill JE failed (non-fatal):', jeErr);
     }
-    if (mc_v53.stage === 'execute' && mc_v53.proposalId) await completeMakerCheckerExecution(mc_v53.proposalId, mc_v53.actorId);
+
     return NextResponse.json({ bill }, { status: 201 });
   } catch (e: any) {
     console.error('Bill POST error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 
+import { safeError } from '@/lib/security/errors';
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -24,7 +25,7 @@ export async function PUT(
     return NextResponse.json({ product });
   } catch (e: any) {
     console.error('Update loan product API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -41,6 +42,6 @@ export async function DELETE(req : NextRequest,
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     console.error('Delete loan product API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

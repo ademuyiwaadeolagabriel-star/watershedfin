@@ -1,11 +1,17 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { BrandingBootstrap } from "@/components/branding-bootstrap";
 import { ErrorBoundary } from "@/components/error-boundary";
 
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin"],
+});
+
 export const metadata: Metadata = {
-  title: "Watershed Capital — Banking Governance Platform",
+  title: "Watershed Capital â€” Banking Governance Platform",
   description:
     "Enterprise banking platform: 20-state loan workflow, 8-snapshot audit trail, MCC committee, treasury, accounting.",
   icons: {
@@ -40,16 +46,16 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-
-      <body className="antialiased bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <body
+        className="antialiased bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100"
+      >
         <BrandingBootstrap />
-
         <ErrorBoundary>
           {children}
         </ErrorBoundary>
-
         <Toaster />
       </body>
     </html>
   );
 }
+

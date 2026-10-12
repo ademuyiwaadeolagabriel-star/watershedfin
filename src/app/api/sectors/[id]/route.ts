@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireRole } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 // ============================================================================
 // /api/sectors/[id]
 //   PUT    — admin-only: update sector fields (incl. benchmarkedMargin)
@@ -31,28 +32,12 @@ export async function PUT(
     if (body.name !== undefined) data.name = body.name;
     if (body.riskScore !== undefined) data.riskScore = Number(body.riskScore);
     if (body.riskScoreInt !== undefined) data.riskScoreInt = Number(body.riskScoreInt);
-    if (body.benchmarkedMargin !== undefined) {
-      const margin = Number(body.benchmarkedMargin);
-      if (!Number.isFinite(margin) || margin < 0) {
-        return NextResponse.json({ error: 'benchmarkedMargin must be a finite non-negative percentage.' }, { status: 400 });
-      }
-      data.benchmarkedMargin = margin;
-    }
+    if (body.benchmarkedMargin !== undefined) data.benchmarkedMargin = Number(body.benchmarkedMargin);
     const sector = await db.sector.update({ where: { id }, data });
-    await db.auditLog.create({
-      data: {
-        adminId: authResult.id,
-        action: 'sector_updated',
-        module: 'settings',
-        description: `Updated sector ${sector.name}; benchmark margin=${sector.benchmarkedMargin}%`,
-        severity: 'info',
-        metadata: JSON.stringify({ sectorId: sector.id, benchmarkedMargin: Number(sector.benchmarkedMargin), riskScore: Number(sector.riskScore) }),
-      },
-    });
     return NextResponse.json({ sector });
   } catch (e: any) {
     console.error('Update sector API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -70,6 +55,6 @@ export async function DELETE(
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     console.error('Delete sector API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

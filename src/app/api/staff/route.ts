@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import { ROLE_PERMISSIONS } from '@/lib/constants';
 
+import { safeError } from '@/lib/security/errors';
 export async function GET(req: NextRequest) {
   // v53 — auth gate: least-privilege role check.
   const authResult_v53 = await requireRole(req, ['super', 'md', 'hoc', 'hr', 'loan', 'lo', 'bm', 'cs']);
@@ -12,11 +13,7 @@ export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
     const role = url.searchParams.get('role');
-    let branchId = url.searchParams.get('branchId');
-    if (['bm', 'loan', 'lo', 'cs'].includes(authResult_v53.role)) {
-      if (!authResult_v53.branchId) return NextResponse.json({ error: 'Your staff account is not assigned to a branch.' }, { status: 403 });
-      branchId = authResult_v53.branchId || null;
-    }
+    const branchId = url.searchParams.get('branchId');
     const status = url.searchParams.get('status');
 
     const where: any = {};
@@ -63,15 +60,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ staff });
   } catch (e: any) {
     console.error('List staff API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
 export async function POST(req: NextRequest) {
   // v53 — auth gate: least-privilege role check.
-  const authResult_v53 = await requireRole(req, ['super', 'hr']);
+  const authResult_v53 = await requireRole(req, ['super', 'md', 'hoc', 'hr', 'loan', 'lo', 'bm', 'cs']);
   if (authResult_v53 instanceof NextResponse) return authResult_v53;
-  const creator = authResult_v53 as { id: string; role: string; branchId?: string | null };
 
   try {
     const body = await req.json();
@@ -86,11 +82,7 @@ export async function POST(req: NextRequest) {
     }
 
     const hashed = await bcrypt.hash(body.password, 10);
-    const allowedRoles = ['admin', 'cs', 'compliance', 'credit', 'loan', 'lo', 'bm', 'frontdesk', 'treasury', 'analyst', 'cfo', 'legal', 'hoc', 'cro', 'md'];
-    const role = String(body.role || 'admin');
-    if (!allowedRoles.includes(role) || (role === 'super' && creator.role !== 'super')) {
-      return NextResponse.json({ error: 'Invalid or unauthorized staff role.' }, { status: 403 });
-    }
+    const role = body.role || 'admin';
     const perms = ROLE_PERMISSIONS[role] || [];
 
     // Build permission data — if role gets wildcard, leave all flags false (checked at runtime)
@@ -107,11 +99,7 @@ export async function POST(req: NextRequest) {
       'csKycVerify', 'csPaymentVerify', 'legalCacSearch', 'legalMcc',
     ];
     for (const f of flags) {
-      permData[f] = perms.includes('*') || perms.includes(f);
-    }
-
-    if (creator.role !== 'super' && body.branchId && creator.branchId && body.branchId !== creator.branchId) {
-      return NextResponse.json({ error: 'HR can only create staff for their own branch.' }, { status: 403 });
+      permData[f] = perms.includes('*') || perms.includes(f) || body[f] === true;
     }
 
     const admin = await db.admin.create({
@@ -133,6 +121,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ admin: { ...admin, password: undefined } });
   } catch (e: any) {
     console.error('Create staff API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

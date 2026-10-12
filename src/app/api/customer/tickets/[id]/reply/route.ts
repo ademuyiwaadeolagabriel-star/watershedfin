@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireCustomerAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 
+import { safeError } from '@/lib/security/errors';
 // ============================================================================
 // POST /api/customer/tickets/[id]/reply
 // Body: { userId, message }
@@ -71,6 +72,6 @@ export async function POST(
     });
   } catch (e: any) {
     console.error('Ticket reply error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

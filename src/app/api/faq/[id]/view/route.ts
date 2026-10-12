@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
+import { safeError } from '@/lib/security/errors';
 // ============================================================================
 // /api/faq/[id]/view
 // POST — increment view count on a single FAQ article (fire-and-forget)
@@ -20,6 +21,6 @@ export async function POST(
       .catch(() => {});
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

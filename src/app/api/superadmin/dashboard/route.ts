@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireRole } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 export async function GET(req: NextRequest) {
   const auth = await requireRole(req, ['super']);
   if (auth instanceof NextResponse) return auth;
@@ -21,7 +22,6 @@ export async function GET(req: NextRequest) {
       activeSessions,
       auditLogsToday,
       recentErrors,
-      pendingMutations,
     ] = await Promise.all([
       db.admin.count(),
       db.admin.count({ where: { status: 1 } }),
@@ -43,7 +43,6 @@ export async function GET(req: NextRequest) {
           action: { contains: 'error', mode: 'insensitive' },
         },
       }),
-      db.pendingMutation.count({ where: { status: { in: ['PENDING', 'REVIEWED', 'AUTHORIZED'] } } }),
     ]);
 
     // Disbursement this month
@@ -101,7 +100,6 @@ export async function GET(req: NextRequest) {
         activeSessions,
         auditLogsToday,
         recentErrors,
-        pendingMutations,
       },
       disbursedThisMonth: {
         count: disbursedThisMonth._count,
@@ -115,6 +113,6 @@ export async function GET(req: NextRequest) {
       generatedAt: new Date().toISOString(),
     });
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

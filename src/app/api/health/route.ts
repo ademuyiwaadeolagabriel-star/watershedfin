@@ -1,30 +1,30 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
 
-/**
- * Production health endpoint.
- * Does not expose credentials or database details.
- * Returns 503 when the application cannot reach its configured database.
- */
+// ============================================================================
+// GET /api/health
+// v5 Phase 6 — Production health check endpoint.
+//
+// Returns a safe liveness/readiness response WITHOUT exposing:
+//   - database credentials
+//   - environment variables
+//   - stack traces
+//   - internal infrastructure secrets
+//   - connection strings
+//
+// The response is intentionally minimal — just indicates whether the
+// application process is alive and can respond to HTTP requests.
+// ============================================================================
+
 export async function GET() {
-  const started = Date.now();
-  try {
-    await db.$queryRaw`SELECT 1`;
-    return NextResponse.json({
-      ok: true,
-      service: 'watershed-capital',
-      database: 'ok',
-      uptimeSeconds: Math.floor(process.uptime()),
-      latencyMs: Date.now() - started,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error('[HEALTH] database check failed', error);
-    return NextResponse.json({
-      ok: false,
-      service: 'watershed-capital',
-      database: 'unavailable',
-      timestamp: new Date().toISOString(),
-    }, { status: 503 });
-  }
+  return NextResponse.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    service: 'watershed-capital',
+    version: '5.0.0',
+  }, {
+    status: 200,
+    headers: {
+      'Cache-Control': 'no-store, max-age=0',
+    },
+  });
 }

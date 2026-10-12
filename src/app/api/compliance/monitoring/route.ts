@@ -3,6 +3,7 @@ import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { KYC_STATUSES } from '@/lib/constants';
 
+import { safeError } from '@/lib/security/errors';
 export async function GET(req: NextRequest) {
   // v53 — auth gate: least-privilege role check.
   // Handler had no req param; inject one so requireRole can read the JWT.
@@ -90,6 +91,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (e: any) {
     console.error('Compliance monitoring API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

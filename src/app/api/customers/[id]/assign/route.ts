@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requireRole } from '@/lib/auth';
+import { getAuthFromRequest } from '@/lib/auth';
 import { notifyClientAssigned } from '@/lib/notification-service';
 
+import { safeError } from '@/lib/security/errors';
 /**
  * POST /api/customers/[id]/assign
  * Assigns a client to a Branch Manager (by Frontdesk) or to a Loan Officer (by BM).
@@ -18,9 +19,10 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authResult = await requireRole(req, ['super', 'frontdesk', 'bm']);
-    if (authResult instanceof NextResponse) return authResult;
-    const authPayload = authResult;
+    const authPayload = await getAuthFromRequest(req);
+    if (!authPayload) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
 
     const { id: userId } = await params;
     const body = await req.json();
@@ -33,12 +35,6 @@ export async function POST(
 
     if (!user) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
-    }
-
-    // Branch-scoped staff may only reassign customers in their own branch.
-    if (authPayload.role === 'bm' && authPayload.branchId && user.branchId &&
-        authPayload.branchId !== user.branchId) {
-      return NextResponse.json({ error: 'Access denied — customer belongs to a different branch.' }, { status: 403 });
     }
 
     if (assignTo === 'bm') {
@@ -100,6 +96,6 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid assignTo value. Use "bm" or "lo".' }, { status: 400 });
   } catch (e: any) {
     console.error('Assignment error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

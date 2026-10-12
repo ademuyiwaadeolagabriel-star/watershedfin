@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 
+import { safeError } from '@/lib/security/errors';
 export async function GET(req : NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -32,7 +33,7 @@ export async function GET(req : NextRequest,
     return NextResponse.json({ condition });
   } catch (e: any) {
     console.error('Get condition API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -127,6 +128,6 @@ export async function PUT(
     return NextResponse.json({ condition: updated });
   } catch (e: any) {
     console.error('Update condition API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

@@ -1,15 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { db } from '@/lib/db';
-import { getAuthFromRequest } from '@/lib/auth';
+import { requireCustomerAuth } from '@/lib/auth';
 import { get } from '@vercel/blob';
 
+import { safeError } from '@/lib/security/errors';
 // ============================================================================
 // GET /api/customer/kyc-file/[...path]
 // Authorization: Bearer <customer-jwt>
 //
-// v50 — Authenticated proxy for serving KYC documents. The blob URL is
+// v50 â€” Authenticated proxy for serving KYC documents. The blob URL is
 // NEVER exposed to the client; only the proxy path is stored on the
 // Business record. Reads are gated behind:
 //   1. requireCustomerAuth (caller must be a customer with a valid JWT)
@@ -26,41 +27,40 @@ export async function GET(
   { params }: { params: Promise<{ path: string[] }> },
 ) {
   try {
-    // Customers may read only their own files. KYC reviewers may read the
-    // customer's referenced KYC documents through the same private proxy.
-    const authPayload = await getAuthFromRequest(req);
-    if (!authPayload) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    // --- Auth gate: customer JWT mandatory -------------------------------
+    const authResult = await requireCustomerAuth(req);
+    if (authResult instanceof NextResponse) return authResult;
+    const authPayload = authResult as { id: string; type: string };
+    const userId = authPayload.id;
 
     const { path } = await params;
     const fullPath = path.join('/');
+
+    // --- Ownership check: first path segment must match the caller -------
+    // (The upload route wrote files under kyc-private/{userId}/... or
+    // proxy path /api/customer/kyc-file/{userId}/...).
     const parts = fullPath.split('/');
     const pathUserId = parts[0];
-    if (!pathUserId) return NextResponse.json({ error: 'Invalid file path' }, { status: 400 });
-
-    const isCustomer = authPayload.type === 'customer';
-    const reviewerRole = ['super', 'cs', 'compliance'].includes(authPayload.role);
-    if (!isCustomer && !reviewerRole) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-    if (isCustomer && pathUserId !== authPayload.id) {
-      return NextResponse.json({ error: 'Forbidden: file does not belong to authenticated customer.' }, { status: 403 });
+    if (!pathUserId || pathUserId !== userId) {
+      return NextResponse.json(
+        { error: 'Forbidden: file does not belong to authenticated customer.' },
+        { status: 403 },
+      );
     }
 
+    // Double-check via DB: at least one Business column owned by the user
+    // must reference this proxy path. This prevents a customer from
+    // path-traversing to a file they did upload once but later removed.
     const user = await db.user.findUnique({
-      where: { id: pathUserId },
-      select: { id: true, businessId: true, branchId: true },
+      where: { id: userId },
+      select: { businessId: true },
     });
-    if (!user) return NextResponse.json({ error: 'Customer not found.' }, { status: 404 });
-    if (authPayload.role === 'cs' && authPayload.branchId && user.branchId &&
-        authPayload.branchId !== user.branchId) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
     if (!user?.businessId) {
       return NextResponse.json({ error: 'No business record on file.' }, { status: 404 });
     }
     const business = await db.business.findUnique({
       where: { id: user.businessId },
-      select: ['selfie', 'docFront', 'docBack', 'proofOfAddress', 'docShopPhoto', 'docCac'].reduce((acc: any, c) => {
+      select: ['selfie', 'docFront', 'proofOfAddress', 'docCac'].reduce((acc: any, c) => {
         acc[c] = true; return acc;
       }, {}),
     });
@@ -90,7 +90,6 @@ export async function GET(
         // Convert the readable stream into a Buffer for the response.
         const reader = result.stream.getReader();
         const chunks: Uint8Array[] = [];
-        // eslint-disable-next-line no-constant-condition
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -113,7 +112,7 @@ export async function GET(
       }
     } else {
       // Dev: read from /tmp.
-      const tmpPath = join('/tmp', 'uploads', 'kyc-private', pathUserId, filename);
+      const tmpPath = join('/tmp', 'uploads', 'kyc-private', userId, filename);
       try {
         const buf = await readFile(tmpPath);
         const ext = filename.split('.').pop()?.toLowerCase();
@@ -137,6 +136,7 @@ export async function GET(
     }
   } catch (e: any) {
     console.error('[KYC-FILE] error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
+

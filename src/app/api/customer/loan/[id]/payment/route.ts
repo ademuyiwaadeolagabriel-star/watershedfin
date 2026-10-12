@@ -3,9 +3,8 @@ import { db } from '@/lib/db';
 import { sendTemplatedNotification } from '@/lib/notification-templates';
 import { checkPaymentBadges, checkLoanCompletionBadges } from '@/lib/gamification';
 import { requireCustomerAuth } from '@/lib/auth';
-import { Prisma } from '@prisma/client';
-import crypto from 'crypto';
 
+import { safeError } from '@/lib/security/errors';
 // POST /api/customer/loan/[id]/payment
 // Authorization: Bearer <customer-jwt>
 // Body: { amount, paymentMethod?, reference? }
@@ -49,7 +48,7 @@ export async function POST(
     // If the client supplied a reference, check whether we already processed
     // it. If we did, return the prior result instead of creating a duplicate.
     const paymentRef =
-      reference || `PMT-${id}-${crypto.randomUUID()}`;
+      reference || `PMT-${id}-${Date.now().toString().slice(-10)}-${Math.random().toString(36).slice(2, 8)}`;
 
     if (reference) {
       const existing = await db.loanTransaction.findFirst({
@@ -85,9 +84,88 @@ export async function POST(
       );
     }
 
-    // All authoritative balance calculations happen inside the transaction.
-    // This prevents concurrent payments from both observing the same stale
-    // outstanding balance and overpaying the loan.
+    // Pre-compute outstanding balance AFTER this payment so we can stamp it on
+    // the receipt metadata and include it in the customer notification.
+    const priorRepayments = await db.loanTransaction.findMany({
+      where: { loanApplicantId: id, type: 'repayment' },
+    });
+    const priorPaid = priorRepayments.reduce((s, t) => s + Number(t.amount), 0);
+
+    // v51 — Decimal arithmetic: wrap each Decimal field with Number()
+    // so the resulting values are plain numbers (not number | Decimal).
+    const principal =
+      Number(loan.finalAmount) ||
+      Number(loan.vettedAmount) ||
+      Number(loan.approvedAmount) ||
+      Number(loan.amount);
+    const tenorMonths =
+      Number(loan.finalTenure) ||
+      Number(loan.vettedDuration) ||
+      Number(loan.approvedTenor) ||
+      Number(loan.duration);
+    const annualRate = Number(loan.finalInterestRate) || Number(loan.percent); // v53-P3: removed || 24 fallback
+      if (annualRate == null || isNaN(Number(annualRate))) {
+        return NextResponse.json({ error: "Loan is missing finalInterestRate. MD approval must record the rate before this operation can proceed." }, { status: 400 });
+      }
+    const repaymentMethod =
+      (loan.repaymentPlan as 'REDUCING' | 'FLAT') || 'REDUCING';
+    const startDate = loan.disbursedAt || loan.disbursementDate || new Date();
+    const { calculateLoanSchedule, applyPaymentsToSchedule, computeLoanProgress } =
+      await import('@/lib/loan-calc');
+    const calc = calculateLoanSchedule(
+      principal,
+      annualRate,
+      tenorMonths,
+      repaymentMethod,
+      startDate,
+      0,
+      0,
+      0,
+    );
+    const newTotalPaid = priorPaid + Number(amount);
+    const scheduleWithPayments = applyPaymentsToSchedule(
+      calc.schedule,
+      newTotalPaid,
+      new Date(),
+    );
+    const progress = computeLoanProgress(scheduleWithPayments, newTotalPaid);
+    const outstandingBalance = Math.max(0, progress.outstandingBalance);
+    const nextDueDate = progress.nextDue?.dueDate || null;
+    const nextDueAmount = progress.nextDue?.installment ?? null;
+
+    const receiptNumber = `RCP-${(loan.applicationRef || id).slice(-6).toUpperCase()}-${Date.now().toString().slice(-6).toUpperCase()}`;
+
+    // v54 — Blocker 2: remove the hidden || 24 fallback (audit #7).
+    // The loan-total calculation MUST use the MD-approved rate; if missing,
+    // that's a data-integrity bug, not a fallback case.
+    const finalRate = Number(loan.finalInterestRate) || Number(loan.percent);
+    if (finalRate == null || isNaN(Number(finalRate))) {
+      return NextResponse.json(
+        { error: 'Loan is missing finalInterestRate. MD approval must record the rate before payments can be processed.' },
+        { status: 400 },
+      );
+    }
+    const loanPrincipal = Number(loan.finalAmount) || Number(loan.approvedAmount) || Number(loan.amount);
+    const loanTotal =
+      loanPrincipal *
+      (1 + (Number(finalRate) / 100) * (Number(loan.duration) / 12));
+    const willCloseLoan = newTotalPaid + Number(amount) >= loanTotal;
+
+    // v54 — Blocker 2: outstanding-balance check (audit #6).
+    // Customer cannot pay more than the outstanding balance. Overpayment
+    // is rejected with 400 — no defined refund/excess process yet.
+    const outstandingBeforePayment = Math.max(0, loanTotal - priorPaid);
+    if (Number(amount) > outstandingBeforePayment) {
+      return NextResponse.json(
+        {
+          error: `Payment amount ₦${Number(amount).toLocaleString()} exceeds outstanding balance ₦${outstandingBeforePayment.toLocaleString()}. Overpayment is not currently supported.`,
+          outstandingBalance: outstandingBeforePayment,
+          requestedAmount: Number(amount),
+        },
+        { status: 400 },
+      );
+    }
+
     // --- ATOMIC MULTI-WRITE ---------------------------------------------
     // v50 — All financial state transitions are wrapped in a single
     // Prisma transaction. If any one write fails, the entire repayment is
@@ -98,44 +176,21 @@ export async function POST(
     // Previously the LoanRepayment rows stayed at amountPaid=0 even though
     // the customer paid — the overdue engine would then say the loan is
     // overdue. This closes audit #4.
-    const result = await db.$transaction(async (tx) => {
-      const scheduleRows = await tx.loanRepayment.findMany({
-        where: {
-          loanApplicantId: id,
-          status: { in: ['pending', 'partial', 'overdue'] },
-        },
-        orderBy: { dueDate: 'asc' },
-      });
-      if (scheduleRows.length === 0) {
-        throw new Error('NO_REPAYMENT_SCHEDULE');
-      }
-
-      const totalOutstanding = scheduleRows.reduce(
-        (sum, row) => sum + Math.max(0, Number(row.amountDue) - Number(row.amountPaid)),
-        0,
-      );
-      const requestedAmount = Number(amount);
-      if (requestedAmount > totalOutstanding + 0.005) {
-        const err: any = new Error('OVERPAYMENT');
-        err.outstandingBalance = totalOutstanding;
-        err.requestedAmount = requestedAmount;
-        throw err;
-      }
-
-      const paymentDate = new Date();
-      const receiptNumber = `RCP-${(loan.applicationRef || id).slice(-6).toUpperCase()}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
-
+    const transaction = await db.$transaction(async (tx) => {
       const txRow = await tx.loanTransaction.create({
         data: {
           loanApplicantId: id,
           type: 'repayment',
-          amount: requestedAmount,
+          amount: Number(amount),
           reference: paymentRef,
-          transactionDate: paymentDate,
+          transactionDate: new Date(),
           metadata: JSON.stringify({
             paymentMethod: paymentMethod || 'bank_transfer',
             userId,
             receiptNumber,
+            outstandingBalance,
+            nextDueDate: nextDueDate ? new Date(nextDueDate).toISOString() : null,
+            nextDueAmount,
           }),
         },
       });
@@ -144,7 +199,7 @@ export async function POST(
         data: {
           userId,
           type: 'loan_repaid',
-          amount: requestedAmount,
+          amount: Number(amount),
           charge: 0,
           status: 'success',
           reference: paymentRef,
@@ -152,85 +207,69 @@ export async function POST(
         },
       });
 
-      let remaining = requestedAmount;
-      const projectedRows = scheduleRows.map((row) => ({ ...row, amountPaid: Number(row.amountPaid) }));
-      for (const row of projectedRows) {
-        if (remaining <= 0.005) break;
+      await tx.auditLog.create({
+        data: {
+          action: 'created',
+          module: 'loan',
+          description: `Customer made repayment of ₦${Number(amount).toLocaleString()} for loan ${loan.applicationRef}`,
+          severity: 'info',
+          metadata: JSON.stringify({
+            loanId: id,
+            userId,
+            amount,
+            paymentMethod,
+            receiptNumber,
+            transactionId: txRow.id,
+          }),
+        },
+      });
+
+      // v54 — Blocker 2: allocate payment to LoanRepayment rows.
+      // Fetch the pending/partial/overdue schedule rows in due-date order,
+      // allocate the payment amount across them, and update amountPaid +
+      // status atomically. This is the authoritative ledger write — the
+      // overdue engine reads LoanRepayment, so this must be in the same
+      // transaction as the LoanTransaction.create.
+      const scheduleRows = await tx.loanRepayment.findMany({
+        where: {
+          loanApplicantId: id,
+          status: { in: ['pending', 'partial', 'overdue'] },
+        },
+        orderBy: { dueDate: 'asc' },
+      });
+
+      let remaining = Number(amount);
+      for (const row of scheduleRows) {
+        if (remaining <= 0) break;
         const due = Number(row.amountDue);
         const alreadyPaid = Number(row.amountPaid);
         const outstanding = Math.max(0, due - alreadyPaid);
         if (outstanding <= 0) continue;
         const payNow = Math.min(outstanding, remaining);
         const newPaid = alreadyPaid + payNow;
-        const newStatus = newPaid >= due - 0.005 ? 'paid' : 'partial';
+        const newStatus = newPaid >= due ? 'paid' : 'partial';
         await tx.loanRepayment.update({
           where: { id: row.id },
           data: {
             amountPaid: newPaid,
             status: newStatus,
-            paidAt: newStatus === 'paid' ? paymentDate : row.paidAt,
+            paidAt: newStatus === 'paid' ? new Date() : row.paidAt,
             paymentMethod: paymentMethod || 'bank_transfer',
           },
         });
-        row.amountPaid = newPaid;
-        row.status = newStatus;
         remaining -= payNow;
       }
 
-      const totalPaidAfter = projectedRows.reduce((sum, row) => sum + Number(row.amountPaid), 0);
-      const outstandingAfter = Math.max(0, totalOutstanding - requestedAmount);
-      const allPaid = projectedRows.every(
-        row => Number(row.amountPaid) >= Number(row.amountDue) - 0.005,
-      );
-
-      if (allPaid) {
+      if (willCloseLoan) {
         await tx.loanApplicants.update({
           where: { id },
           data: { status: 'paid' },
         });
       }
 
-      await tx.auditLog.create({
-        data: {
-          action: 'created',
-          module: 'loan',
-          description: `Customer made repayment of ₦${requestedAmount.toLocaleString()} for loan ${loan.applicationRef}`,
-          severity: 'info',
-          metadata: JSON.stringify({
-            loanId: id,
-            userId,
-            amount: requestedAmount,
-            paymentMethod,
-            receiptNumber,
-            transactionId: txRow.id,
-            outstandingBefore: totalOutstanding,
-            outstandingAfter,
-          }),
-        },
-      });
-
-      const nextDue = projectedRows.find(row => Number(row.amountPaid) < Number(row.amountDue) - 0.005);
-      return {
-        txRow,
-        receiptNumber,
-        totalPaidAfter,
-        outstandingAfter,
-        nextDueDate: nextDue?.dueDate || null,
-        nextDueAmount: nextDue ? Math.max(0, Number(nextDue.amountDue) - Number(nextDue.amountPaid)) : null,
-        loanClosed: allPaid,
-      };
-    }, {
-      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      maxWait: 5000,
-      timeout: 15000,
+      return txRow;
     });
 
-    const transaction = result.txRow;
-    const outstandingBalance = result.outstandingAfter;
-    const nextDueDate = result.nextDueDate;
-    const nextDueAmount = result.nextDueAmount;
-    const receiptNumber = result.receiptNumber;
-    const willCloseLoan = result.loanClosed;
     // --- Post-transaction side effects (NOT inside the DB transaction) ----
     // These are fire-and-forget: notifications, gamification, drip emails.
     // They must never cause the repayment itself to fail.
@@ -305,7 +344,7 @@ export async function POST(
       success: true,
       transaction,
       message: `Payment of ₦${Number(amount).toLocaleString()} recorded successfully`,
-      totalPaidSoFar: result.totalPaidAfter,
+      totalPaidSoFar: newTotalPaid,
       outstandingBalance,
       loanClosed: willCloseLoan,
       receipt: {
@@ -324,16 +363,6 @@ export async function POST(
     });
   } catch (e: any) {
     console.error('Payment error:', e);
-    if (e?.message === 'OVERPAYMENT') {
-      return NextResponse.json({
-        error: `Payment exceeds outstanding balance.`,
-        outstandingBalance: e.outstandingBalance,
-        requestedAmount: e.requestedAmount,
-      }, { status: 400 });
-    }
-    if (e?.message === 'NO_REPAYMENT_SCHEDULE') {
-      return NextResponse.json({ error: 'Loan repayment schedule is missing; payment cannot be posted.' }, { status: 409 });
-    }
     // Prisma P2002 = unique constraint violation — this is the idempotency
     // path. If the caller raced themselves on the same reference, return the
     // already-processed response.
@@ -343,6 +372,6 @@ export async function POST(
         { status: 200 },
       );
     }
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

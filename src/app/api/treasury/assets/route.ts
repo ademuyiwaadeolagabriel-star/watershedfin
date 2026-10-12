@@ -3,6 +3,7 @@ import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { computeMaturity } from '@/lib/treasury';
 
+import { safeError } from '@/lib/security/errors';
 export async function GET() {
   try {
     const assets = await db.treasuryBankAsset.findMany({
@@ -11,7 +12,7 @@ export async function GET() {
     return NextResponse.json({ assets });
   } catch (e: any) {
     console.error('Treasury assets GET error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -57,6 +58,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ asset }, { status: 201 });
   } catch (e: any) {
     console.error('Treasury asset POST error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

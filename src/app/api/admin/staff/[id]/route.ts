@@ -4,17 +4,16 @@ import bcrypt from 'bcryptjs';
 import { PERMISSION_FLAGS } from '@/lib/constants';
 import { requireRole, getAuthFromRequest } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 /**
  * GET /api/admin/staff/[id]
  * Returns the admin record (without secrets) with branch + all permission
  * flags + loan counts (assigned, processed, approved).
  */
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRole(req, ['super', 'md', 'hoc', 'hr']);
-  if (auth instanceof NextResponse) return auth;
   try {
     const { id } = await params;
     const admin = await db.admin.findUnique({
@@ -68,7 +67,7 @@ export async function GET(
     });
   } catch (e: any) {
     console.error('Admin staff detail API error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -149,6 +148,6 @@ export async function PATCH(
     return NextResponse.json({ admin: updated });
   } catch (e: any) {
     console.error('Staff update error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

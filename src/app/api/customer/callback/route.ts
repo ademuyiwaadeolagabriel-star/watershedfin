@@ -3,6 +3,7 @@ import { requireCustomerAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { createNotification } from '@/lib/notifications';
 
+import { safeError } from '@/lib/security/errors';
 // ============================================================================
 // /api/customer/callback
 // POST { userId, preferredTime, reason } — customer requests a callback
@@ -19,7 +20,8 @@ export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
     const userId = authPayload_v51.id; // v53 - derived from JWT
-    const adminId = url.searchParams.get('adminId');
+    // v5 — adminId from JWT, not query string
+    const adminId = authPayload_v51.id;
     const status = url.searchParams.get('status');
 
     if (!userId && !adminId) {
@@ -65,7 +67,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ callbacks: enriched });
   } catch (e: any) {
     console.error('Callback GET error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -164,6 +166,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (e: any) {
     console.error('Callback POST error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireRole, requireMakerChecker, completeMakerCheckerExecution } from '@/lib/auth';
+import { requireRole, requireMakerChecker } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { postJournal } from '@/lib/accounting';
 
+import { safeError } from '@/lib/security/errors';
 // POST: record vendor bill payment
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   // v51 — auth gate: route-level role check (maker/checker enforced via requireMakerChecker where applicable).
@@ -13,12 +14,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Only enforced when the caller passes `?stage=propose|review|authorize|execute`.
   // Without a stage query param the route falls back to its existing behavior.
   const url_v53 = new URL(req.url);
-  let mc_v53: any;
-  const targetId_v53 = new URL(req.url).pathname.split('/').filter(Boolean).at(-2) || undefined;
-  {
-    mc_v53 = await requireMakerChecker(req, {
+  if (url_v53.searchParams.get('stage')) {
+    const mc_v53 = await requireMakerChecker(req, {
       operation: 'bill_pay',
-      targetId: targetId_v53,
       stages: ['propose', 'review', 'authorize', 'execute'],
       enforceSegregation: true,
       makerRoles: ['finance', 'accountant', 'cfo'],
@@ -90,10 +88,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       console.error('Bill payment JE failed (non-fatal):', jeErr);
     }
 
-    if (mc_v53.stage === 'execute' && mc_v53.proposalId) await completeMakerCheckerExecution(mc_v53.proposalId, mc_v53.actorId);
     return NextResponse.json({ payment, billId: id, newStatus, newTotalPaid, journalEntryId });
   } catch (e: any) {
     console.error('Bill pay error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

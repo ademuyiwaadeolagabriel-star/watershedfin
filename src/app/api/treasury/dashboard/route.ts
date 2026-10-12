@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { refreshAccrual } from '@/lib/treasury';
 import { requireRole } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 export async function GET(req: NextRequest) {
   // v51 — auth gate.
   const authResult_v51 = await requireRole(req, ['super', 'md', 'cfo', 'hoc', 'cro', 'treasury']);
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest) {
 
     // Bank assets
     const assets = await db.treasuryBankAsset.findMany({ where: { status: 'active' } });
-    const totalAssetsValue = assets.reduce((s, a) => s + Number(a.purchasePrice ?? 0) + Number(a.accruedIncome ?? 0), 0);
+    const totalAssetsValue = assets.reduce((s, a) => s + a.purchasePrice + a.accruedIncome, 0);
 
     return NextResponse.json({
       totalInvested,
@@ -41,6 +42,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (e: any) {
     console.error('Treasury dashboard GET error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

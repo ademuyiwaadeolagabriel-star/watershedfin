@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { requireRole } from '@/lib/auth';
 import { PERMISSION_FLAGS } from '@/lib/constants';
 
+import { safeError } from '@/lib/security/errors';
 /**
  * POST /api/admin/staff
  * Authorization: Bearer <admin-jwt (role=super)>
@@ -174,6 +175,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ admins });
   } catch (e: any) {
     console.error('[STAFF LIST] Error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

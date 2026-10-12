@@ -3,6 +3,7 @@ import { requireRole } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { hasPermission, ROLE_TO_MCC } from '@/lib/constants';
 
+import { safeError } from '@/lib/security/errors';
 // ============================================================================
 // POST /api/loans/[id]/snapshot
 // Authorization: Bearer <admin-jwt>
@@ -161,6 +162,6 @@ export async function POST(
     });
   } catch (e: any) {
     console.error('Snapshot write error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireRole, getAuthFromRequest } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 /**
  * PATCH /api/admin/kyc-fields/[id]
  * Update an existing KYC field (label, type, options, required, sortOrder, enabled, etc.)
@@ -67,7 +68,7 @@ export async function PATCH(
     return NextResponse.json({ field: updated });
   } catch (e: any) {
     console.error('KYC field update error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
@@ -115,6 +116,6 @@ export async function DELETE(
     return NextResponse.json({ ok: true, hard });
   } catch (e: any) {
     console.error('KYC field delete error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

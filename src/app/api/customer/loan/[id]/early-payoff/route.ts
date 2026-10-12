@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { calculateLoanSchedule, calculateEarlyPayoff, applyPaymentsToSchedule } from '@/lib/loan-calc';
 import { requireCustomerAuth } from '@/lib/auth';
 
+import { safeError } from '@/lib/security/errors';
 // v50 — Customer identity now derived from the JWT, NOT from query string.
 // This eliminates the IDOR risk where Customer A could request the early
 // payoff details for Customer B's loan by passing userId=A while authenticated
@@ -72,6 +73,6 @@ export async function GET(
       originalMaturityDate: new Date(startDate.setMonth(startDate.getMonth() + tenorMonths)),
     });
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }

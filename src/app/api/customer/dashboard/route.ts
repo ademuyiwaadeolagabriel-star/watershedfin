@@ -3,6 +3,7 @@ import { requireCustomerAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { calculateLoanSchedule, applyPaymentsToSchedule, computeLoanProgress } from '@/lib/loan-calc';
 
+import { safeError } from '@/lib/security/errors';
 // GET /api/customer/dashboard?userId=
 // Returns comprehensive dashboard data for a borrower
 export async function GET(req: NextRequest) {
@@ -407,7 +408,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (e: any) {
     console.error('Customer dashboard error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return safeError('An unexpected error occurred.', 500);;
   }
 }
 
