@@ -4,6 +4,59 @@ import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import { notifyWelcome } from '@/lib/notification-service';
 import { createNotification } from '@/lib/notifications';
+import crypto from 'crypto';
+import { get, put } from '@vercel/blob';
+import { mkdir, readFile, writeFile } from 'fs/promises';
+import { join } from 'path';
+
+type StagedOnboardingFile = {
+  docType: string;
+  storagePath: string;
+  originalName: string;
+  size: number;
+  contentType: string;
+  uploadedAt: string;
+};
+
+async function promoteStagedDocument(file: StagedOnboardingFile, userId: string): Promise<string> {
+  if (!file.storagePath.startsWith('onboarding-staging/')) {
+    throw new Error('Invalid staged KYC storage path.');
+  }
+
+  const ext = file.storagePath.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
+  const filename = `${crypto.randomUUID()}-${file.docType}.${ext}`;
+  const proxyPath = `/api/customer/kyc-file/${userId}/${filename}`;
+
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    const source = await get(`kyc-private/${file.storagePath}`, { access: 'private' });
+    if (!source || source.statusCode !== 200) {
+      throw new Error(`Staged document not found: ${file.docType}`);
+    }
+
+    const reader = source.stream.getReader();
+    const chunks: Uint8Array[] = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) chunks.push(value);
+    }
+
+    await put(`kyc-private/${userId}/${filename}`, Buffer.concat(chunks), {
+      access: 'private',
+      addRandomSuffix: false,
+      contentType: file.contentType,
+    });
+  } else {
+    const sourcePath = join('/tmp', 'uploads', 'kyc-private', ...file.storagePath.split('/'));
+    const bytes = await readFile(sourcePath);
+    const destinationDir = join('/tmp', 'uploads', 'kyc-private', userId);
+    await mkdir(destinationDir, { recursive: true });
+    await writeFile(join(destinationDir, filename), bytes);
+  }
+
+  return proxyPath;
+}
+
 
 import { safeError } from '@/lib/security/errors';
 // ---------------------------------------------------------------------------
@@ -138,32 +191,60 @@ export async function POST(req: NextRequest) {
     //   - proofOfAddress (utility bill)
     // For business customers with rcBnNumber (a registered business), the
     // CAC certificate is also required.
-    const requiredDocs: string[] = [];
-    if (!documents?.passportPhoto) requiredDocs.push('passportPhoto (selfie)');
-    if (!documents?.idCardFront && !documents?.meansOfId) requiredDocs.push('idCardFront or meansOfId (acceptable ID)');
-    if (!documents?.proofOfAddress) requiredDocs.push('proofOfAddress (utility bill)');
-    if (business?.rcBnNumber && !documents?.cacCertificate) {
-      requiredDocs.push('cacCertificate (required for registered businesses)');
-    }
-    if (requiredDocs.length > 0) {
-      return NextResponse.json(
-        {
-          error: 'KYC document completeness check failed. The following documents are required but were not provided:',
-          missingDocuments: requiredDocs,
-        },
-        { status: 400 },
-      );
+    // A new customer must present a valid capability; do not trust client-supplied paths.
+    const uploadCapabilityToken = String(body.uploadCapabilityToken || '').trim();
+    if (!uploadCapabilityToken) {
+      return NextResponse.json({ error: 'Please upload the required KYC documents again before submitting.' }, { status: 400 });
     }
 
-    // ── v52 — P0-G6: CAC CONSENT IS MANDATORY + FEE AMOUNT CROSS-CHECK ─
-    // The audit's #4 finding was that consent was optional AND that
-    // `consent.feeAmount` was caller-supplied — the customer could lie
-    // "I agreed to ₦1" and the server would store it. Now:
-    //   1. consent is REQUIRED (server rejects onboarding without it)
-    //   2. consent.feeKey is REQUIRED (must match a current SystemSetting fee key)
-    //   3. consent.feeAmount is IGNORED from the body — the server looks
-    //      up the actual configured fee from SystemSetting and uses that.
-    //      The caller's value is recorded only for audit comparison.
+    const tokenHash = crypto.createHash('sha256').update(uploadCapabilityToken).digest('hex');
+    const uploadCapability = await db.onboardingUploadCapability.findUnique({
+      where: { capabilityToken: tokenHash },
+    });
+
+    if (!uploadCapability || uploadCapability.consumedAt || uploadCapability.expiresAt <= new Date()) {
+      return NextResponse.json({ error: 'The document upload session has expired. Please upload the documents again.' }, { status: 401 });
+    }
+
+    const expectedOnboardingKey = crypto
+      .createHash('sha256')
+      .update(`${personal.email || ''}|${personal.phone || ''}|${personal.bvn || ''}`)
+      .digest('hex');
+
+    if (uploadCapability.onboardingKey !== expectedOnboardingKey) {
+      return NextResponse.json({ error: 'The uploaded documents do not match the submitted customer details. Please re-upload them.' }, { status: 403 });
+    }
+
+    let stagedFiles: StagedOnboardingFile[];
+    try {
+      stagedFiles = JSON.parse(uploadCapability.uploadedFiles || '[]') as StagedOnboardingFile[];
+    } catch {
+      return NextResponse.json({ error: 'The uploaded-document session is invalid. Please re-upload the documents.' }, { status: 400 });
+    }
+
+    const stagedByType: Record<string, StagedOnboardingFile> = {};
+    for (const file of stagedFiles) {
+      if (file && typeof file.docType === 'string' && typeof file.storagePath === 'string') {
+        stagedByType[file.docType] = file;
+      }
+    }
+
+    const requiredDocs: string[] = [];
+    if (!stagedByType.passport) requiredDocs.push('passportPhoto (selfie)');
+    if (!stagedByType.id_front && !stagedByType.means_of_id) {
+      requiredDocs.push('idCardFront or meansOfId (acceptable ID)');
+    }
+    if (!stagedByType.proof_of_address) requiredDocs.push('proofOfAddress (utility bill)');
+    if (business?.rcBnNumber && !stagedByType.cac_certificate) {
+      requiredDocs.push('cacCertificate (required for registered businesses)');
+    }
+
+    if (requiredDocs.length > 0) {
+      return NextResponse.json({
+        error: 'KYC document completeness check failed.',
+        missingDocuments: requiredDocs,
+      }, { status: 400 });
+    }
     if (!consent || !consent.feeKey) {
       return NextResponse.json(
         {
@@ -437,6 +518,23 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // Resolve private staged uploads to user-scoped paths before persisting the Business record.
+    const finalDocuments = {
+      passportPhoto: stagedByType.passport
+        ? await promoteStagedDocument(stagedByType.passport, user.id)
+        : null,
+      idCardFront: stagedByType.id_front
+        ? await promoteStagedDocument(stagedByType.id_front, user.id)
+        : stagedByType.means_of_id
+          ? await promoteStagedDocument(stagedByType.means_of_id, user.id)
+          : null,
+      proofOfAddress: stagedByType.proof_of_address
+        ? await promoteStagedDocument(stagedByType.proof_of_address, user.id)
+        : null,
+      cacCertificate: stagedByType.cac_certificate
+        ? await promoteStagedDocument(stagedByType.cac_certificate, user.id)
+        : null,
+    };
     // ----- create business -----
     let yearsInOperation: number | undefined;
     if (business.businessDateEstablished) {
@@ -459,10 +557,10 @@ export async function POST(req: NextRequest) {
         yearsInOperation,
         kycStatus: 'DRAFT',
         // v43: Persist KYC document paths uploaded during onboarding (removed id_back + shop_photo)
-        selfie: documents?.passportPhoto || null,
-        docFront: documents?.idCardFront || documents?.meansOfId || null,
-        proofOfAddress: documents?.proofOfAddress || null,
-        docCac: documents?.cacCertificate || null,
+        selfie: finalDocuments.passportPhoto,
+        docFront: finalDocuments.idCardFront,
+        proofOfAddress: finalDocuments.proofOfAddress,
+        docCac: finalDocuments.cacCertificate,
       },
     });
 
@@ -549,6 +647,21 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    const capabilityConsumed = await tx.onboardingUploadCapability.updateMany({
+      where: {
+        id: uploadCapability.id,
+        consumedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      data: {
+        consumedAt: new Date(),
+        consumedByUserId: user.id,
+      },
+    });
+
+    if (capabilityConsumed.count !== 1) {
+      throw new Error('Upload capability was already consumed.');
+    }
     return { user, businessRow, loanRow, appraisalRow };
     }); // end db.$transaction
 

@@ -292,7 +292,7 @@ export function SearchResultsView() {
                   <ResultCard
                     key={loan.id}
                     onClick={() =>
-                      setView('loan-detail', { id: loan.id })
+                      setView('loan-detail', { loanId: loan.id })
                     }
                     title={loan.applicationRef || 'No ref'}
                     subtitle={`${loan.user?.firstName || ''} ${

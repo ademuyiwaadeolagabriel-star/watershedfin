@@ -248,6 +248,7 @@ export function OnboardingView() {
   const [consentAccepted, setConsentAccepted] = useState(false);
   // v41: file upload state — tracks which doc is currently uploading
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
+  const [uploadCapability, setUploadCapability] = useState<{ token: string; key: string } | null>(null);
 
   // ----- load supporting data on mount -----
   useEffect(() => {
@@ -332,10 +333,10 @@ export function OnboardingView() {
     setTouched((t) => ({ ...t, [key]: true }));
   };
 
-  // ----- v41: KYC document upload handler -----
-  // Uploads a file to /api/customer/kyc-upload and stores the returned path
-  // in the form state. The path is also persisted to the Business record by
-  // the API so CS staff can view it in the KYC queue.
+  // Pre-registration files use an expiring, document-scoped capability.
+  const currentUploadIdentityKey = () =>
+    `${form.email || ''}|${form.phone || ''}|${form.bvn || ''}`;
+
   const uploadDoc = async (
     docType: 'passport' | 'id_front' | 'proof_of_address' | 'cac_certificate' | 'means_of_id',
     fieldKey: keyof FormState,
@@ -343,41 +344,53 @@ export function OnboardingView() {
   ) => {
     if (!file) return;
     setUploadingDoc(docType);
+    setSubmitError('');
+
     try {
-      // We need a userId to upload. For self_onboard, we don't have one yet
-      // (user is created on submit). So we upload to a temp path and store
-      // the filename in form state; the actual path persistence happens
-      // after submit when we know the userId.
-      //
-      // For staff onboarding, the admin may have a draft userId. We try
-      // uploading with userId='pending' and the API will store the file
-      // but skip the Business update. After submit, the onboarding API
-      // will update the Business record with the paths.
+      const identityKey = currentUploadIdentityKey();
+      let token = uploadCapability?.key === identityKey ? uploadCapability.token : '';
+
+      if (!token) {
+        const capabilityResponse = await fetch('/api/onboarding/upload-capability', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: form.email || undefined,
+            phone: form.phone || undefined,
+            bvn: form.bvn || undefined,
+          }),
+        });
+        const capabilityData = await capabilityResponse.json().catch(() => ({}));
+        if (!capabilityResponse.ok || !capabilityData.capabilityToken) {
+          throw new Error(capabilityData.error || 'Could not start a secure upload session.');
+        }
+
+        token = capabilityData.capabilityToken;
+        setUploadCapability({ token, key: identityKey });
+      }
+
       const formData = new FormData();
       formData.append('docType', docType);
       formData.append('file', file);
-      // userId will be set by the API after user creation; for now pass 'pending'
-      formData.append('userId', 'pending');
 
-      const res = await fetch('/api/customer/kyc-upload', {
+      const response = await fetch('/api/onboarding/upload', {
         method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
+      const data = await response.json().catch(() => ({}));
 
-      if (res.ok) {
-        const data = await res.json();
-        setField(fieldKey, data.path);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        setSubmitError(`Upload failed for ${docType}: ${err.error || 'Unknown error'}`);
+      if (!response.ok) {
+        throw new Error(data.error || `Upload failed for ${docType}.`);
       }
-    } catch (e: any) {
-      setSubmitError(`Upload error: ${e.message}`);
+
+      setField(fieldKey, data.path);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Secure document upload failed.');
     } finally {
       setUploadingDoc(null);
     }
   };
-
   // ----- duplicate detection -----
   const runDuplicateCheck = async (q: string) => {
     if (!q || q.length < 4) {
@@ -527,6 +540,10 @@ export function OnboardingView() {
   };
 
   const doSubmit = async () => {
+    if (!uploadCapability || uploadCapability.key !== currentUploadIdentityKey()) {
+      setSubmitError('Your identity details changed after upload. Please upload the required documents again.');
+      return;
+    }
 
     setSubmitting(true);
     setSubmitError('');
@@ -537,6 +554,7 @@ export function OnboardingView() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           channel,
+          uploadCapabilityToken: uploadCapability?.key === currentUploadIdentityKey() ? uploadCapability.token : undefined,
           personal: {
             title: form.title,
             firstName: form.firstName,
