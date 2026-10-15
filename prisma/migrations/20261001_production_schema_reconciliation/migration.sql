@@ -237,7 +237,7 @@ ALTER COLUMN "totalPaid" SET DATA TYPE DECIMAL(18,2) USING ROUND("totalPaid"::nu
 ALTER TABLE "VendorPayment" ALTER COLUMN "amount" SET DATA TYPE DECIMAL(18,2) USING ROUND("amount"::numeric, 2);
 
 -- CreateTable
-CREATE TABLE "CustomerAcceptanceEvidence" (
+CREATE TABLE IF NOT EXISTS "CustomerAcceptanceEvidence" (
     "id" TEXT NOT NULL,
     "loanApplicantId" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
@@ -254,7 +254,7 @@ CREATE TABLE "CustomerAcceptanceEvidence" (
 );
 
 -- CreateTable
-CREATE TABLE "OfferAcceptanceOtp" (
+CREATE TABLE IF NOT EXISTS "OfferAcceptanceOtp" (
     "id" TEXT NOT NULL,
     "loanApplicantId" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
@@ -271,7 +271,7 @@ CREATE TABLE "OfferAcceptanceOtp" (
 );
 
 -- CreateTable
-CREATE TABLE "PendingMutation" (
+CREATE TABLE IF NOT EXISTS "PendingMutation" (
     "id" TEXT NOT NULL,
     "operation" TEXT NOT NULL,
     "targetId" TEXT,
@@ -292,41 +292,41 @@ CREATE TABLE "PendingMutation" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "CustomerAcceptanceEvidence_loanApplicantId_key" ON "CustomerAcceptanceEvidence"("loanApplicantId");
+CREATE UNIQUE INDEX IF NOT EXISTS "CustomerAcceptanceEvidence_loanApplicantId_key" ON "CustomerAcceptanceEvidence"("loanApplicantId");
 
 -- CreateIndex
-CREATE INDEX "CustomerAcceptanceEvidence_userId_idx" ON "CustomerAcceptanceEvidence"("userId");
+CREATE INDEX IF NOT EXISTS "CustomerAcceptanceEvidence_userId_idx" ON "CustomerAcceptanceEvidence"("userId");
 
 -- CreateIndex
-CREATE INDEX "CustomerAcceptanceEvidence_loanApplicantId_idx" ON "CustomerAcceptanceEvidence"("loanApplicantId");
+CREATE INDEX IF NOT EXISTS "CustomerAcceptanceEvidence_loanApplicantId_idx" ON "CustomerAcceptanceEvidence"("loanApplicantId");
 
 -- CreateIndex
-CREATE INDEX "OfferAcceptanceOtp_loanApplicantId_termsHash_idx" ON "OfferAcceptanceOtp"("loanApplicantId", "termsHash");
+CREATE INDEX IF NOT EXISTS "OfferAcceptanceOtp_loanApplicantId_termsHash_idx" ON "OfferAcceptanceOtp"("loanApplicantId", "termsHash");
 
 -- CreateIndex
-CREATE INDEX "OfferAcceptanceOtp_userId_idx" ON "OfferAcceptanceOtp"("userId");
+CREATE INDEX IF NOT EXISTS "OfferAcceptanceOtp_userId_idx" ON "OfferAcceptanceOtp"("userId");
 
 -- CreateIndex
-CREATE INDEX "OfferAcceptanceOtp_expiresAt_idx" ON "OfferAcceptanceOtp"("expiresAt");
+CREATE INDEX IF NOT EXISTS "OfferAcceptanceOtp_expiresAt_idx" ON "OfferAcceptanceOtp"("expiresAt");
 
 -- CreateIndex
-CREATE INDEX "PendingMutation_operation_status_idx" ON "PendingMutation"("operation", "status");
+CREATE INDEX IF NOT EXISTS "PendingMutation_operation_status_idx" ON "PendingMutation"("operation", "status");
 
 -- CreateIndex
-CREATE INDEX "PendingMutation_makerId_idx" ON "PendingMutation"("makerId");
+CREATE INDEX IF NOT EXISTS "PendingMutation_makerId_idx" ON "PendingMutation"("makerId");
 
 -- CreateIndex
-CREATE INDEX "PendingMutation_targetId_idx" ON "PendingMutation"("targetId");
+CREATE INDEX IF NOT EXISTS "PendingMutation_targetId_idx" ON "PendingMutation"("targetId");
 
 -- CreateIndex
-CREATE INDEX "MccDecision_supersedesDecisionId_idx" ON "MccDecision"("supersedesDecisionId");
+CREATE INDEX IF NOT EXISTS "MccDecision_supersedesDecisionId_idx" ON "MccDecision"("supersedesDecisionId");
 
 -- AddForeignKey
-ALTER TABLE "CustomerAcceptanceEvidence" ADD CONSTRAINT "CustomerAcceptanceEvidence_loanApplicantId_fkey" FOREIGN KEY ("loanApplicantId") REFERENCES "LoanApplicants"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $migration$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'CustomerAcceptanceEvidence_loanApplicantId_fkey' AND conrelid = '"CustomerAcceptanceEvidence"'::regclass) THEN ALTER TABLE "CustomerAcceptanceEvidence" ADD CONSTRAINT "CustomerAcceptanceEvidence_loanApplicantId_fkey" FOREIGN KEY ("loanApplicantId") REFERENCES "LoanApplicants"("id") ON DELETE CASCADE ON UPDATE CASCADE; END IF; END $migration$;
 
 -- AddForeignKey
-ALTER TABLE "OfferAcceptanceOtp" ADD CONSTRAINT "OfferAcceptanceOtp_loanApplicantId_fkey" FOREIGN KEY ("loanApplicantId") REFERENCES "LoanApplicants"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $migration$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'OfferAcceptanceOtp_loanApplicantId_fkey' AND conrelid = '"OfferAcceptanceOtp"'::regclass) THEN ALTER TABLE "OfferAcceptanceOtp" ADD CONSTRAINT "OfferAcceptanceOtp_loanApplicantId_fkey" FOREIGN KEY ("loanApplicantId") REFERENCES "LoanApplicants"("id") ON DELETE CASCADE ON UPDATE CASCADE; END IF; END $migration$;
 
 -- RenameIndex
-ALTER INDEX "BranchTarget_branchId_metricKey_periodType_periodStart_status_k" RENAME TO "BranchTarget_branchId_metricKey_periodType_periodStart_stat_key";
+DO $migration$ BEGIN IF to_regclass('"BranchTarget_branchId_metricKey_periodType_periodStart_status_k"') IS NOT NULL AND to_regclass('"BranchTarget_branchId_metricKey_periodType_periodStart_stat_key"') IS NULL THEN ALTER INDEX "BranchTarget_branchId_metricKey_periodType_periodStart_status_k" RENAME TO "BranchTarget_branchId_metricKey_periodType_periodStart_stat_key"; END IF; END $migration$;
 COMMIT;
